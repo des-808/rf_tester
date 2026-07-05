@@ -161,7 +161,6 @@ void LED_Blink(uint32_t delay)
   * @retval int
   */
  extern void ST7796_FillScreen(uint16_t color);
- extern void ST7796_ClearBuffer(uint16_t color);
  extern PCF8574_HandleTypeDef pcf_handle;
  extern Buttons_HandleTypeDef btn_s;
  I2C_Scanner_HandleTypeDef i2c_scanner;
@@ -233,7 +232,7 @@ int main(void)
 
   ST7796_Init();
 
-  Sprite_create_XY(&main_screen_sprite, 320, 440,0,21); // например, 440px высота
+  Sprite_create_XY(&main_screen_sprite, 320, 460,0,20); // например, 440px высота
   ST7796_SetRotation(0);
   /* ST7796_TestRotation(main_screen_sprite);
   HAL_Delay(4000);
@@ -252,18 +251,20 @@ int main(void)
 Sprite_create_XY(&status_bar_sprite, 320, 20,0,0); // например, 40px высота
   
   // Используем Segoe Print 12 по умолчанию
-  lcd_set_font(&font_segoe_struct);
+  //lcd_set_font(&font_segoe_struct);
   // Или Arial 9:
-   //lsd_set_font(&font_arial_9);
-  //ST7796_ClearBuffer(RGB565(0,0,0));
-  //ST7796_SetRotation(0);
- //Sprite_set_rotation(3);
+   lcd_set_font(&font_arial_9_struct);
+
+  //ST7796_SetRotation(2);
+  SetMode_Landscape(&status_bar_sprite);
+  SetMode_Landscape(&main_screen_sprite);
+  
+
    lcd_print_to_buffer_ex(22, 32, RGB565_RED, "Привет!  МОЯ ЗАЙКА !!!",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(52, 60, RGB565_WHITE, "Как у Тебя Дела??",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(78, 88, RGB565_YELLOW, "Я соскучился..",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!",RGB565_BLACK,&main_screen_sprite,false);
+   lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!",RGB565_BLACK,&main_screen_sprite,true);
    //lcd_set_font(&font_arial_9_struct);// переключаем шрифт
-
    //ST7796_SetRotation(1);
    lcd_print_to_buffer_ex(122, 144, RGB565_BROWN, "И да..",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(70, 170, RGB565_GREEN, "Доброе утро!!!!!",RGB565_BLACK,&main_screen_sprite,false);
@@ -271,18 +272,15 @@ Sprite_create_XY(&status_bar_sprite, 320, 20,0,0); // например, 40px в�
     lcd_set_font(&font_segoe_struct);
    lcd_print_to_buffer_ex(2, 206, RGB565(0, 255, 0), "Привет, STM32!",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(2, 232, RGB565(255, 0, 0), "Текст на русском",RGB565_BLACK,&main_screen_sprite,false);
-   ST7796_SetRotation(0);
+   //ST7796_SetRotation(3);
    lcd_print_to_buffer_ex(2, 258, RGB565(0, 255, 255), "Ку Ку Ёпта!!",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(2, 284, RGB565(0,0,  255), "Как говорится: ",RGB565_BLACK,&main_screen_sprite,false);
    //ST7796_SetRotation(3);
    lcd_print_to_buffer_ex(70, 310, RGB565(200,200,200), "ГОВНО",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(150, 310, RGB565(255,255,  255), "СЛУЧАЕТСЯ!!!!!",RGB565_BLACK,&main_screen_sprite,true); 
-   ST7796_SetRotation(2);
-   Sprite_rotate(&status_bar_sprite);
+   //ST7796_SetRotation(3);
+   //Sprite_rotate(&status_bar_sprite);
   drawStatusBar(&status_bar_sprite);
-
-
-
 
 
   // После MX_I2C1_Init()

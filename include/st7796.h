@@ -17,6 +17,7 @@ typedef struct {
 #define ST7796_WIDTH  320
 #define ST7796_HEIGHT 480
 
+
 // Команды
 #define ST7796_NOP         0x00
 #define ST7796_SWRESET     0x01
@@ -87,8 +88,11 @@ const uint8_t* iconMirrorVertical(const unsigned char* bitmap, int w, int h);
 void drawStatusBar(Sprite_t *sprite);
 // ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
 void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer);
-void ST7796_SetRotation(int r);
-void Sprite_rotate(Sprite_t* s);
+void ST7796_SetRotation(uint8_t r);
+//void Sprite_rotate(Sprite_t* s);
+
+void SetMode_Portrait(Sprite_t * sprite);
+void SetMode_Landscape(Sprite_t * sprite);
 /*
 #define RGB565_BLACK        0x0000
 #define RGB565_WHITE        0xFFFF

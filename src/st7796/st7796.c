@@ -141,7 +141,7 @@ void Sprite_push(const Sprite_t* s, int16_t x, int16_t y) {
     if (!s || !s->data || s->w == 0 || s->h == 0) return;
 
     // Просто окно (0, 0, s->w, s->h)
-    ST7796_SetAddressWindow(0, 0, s->w, s->h);
+    ST7796_SetAddressWindow(s->x, s->y, s->w, s->h);
     LCD_CS_LOW;
     LCD_DC_DATA;
 
@@ -424,70 +424,71 @@ void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, 
     LCD_CS_HIGH;
 }
 
-void ST7796_SetRotation(int r){
-    switch(r){
-        case(0):   
-            // Обычный портрет (0°):
-            screen_rotation = 0;
+
+uint16_t Display_Width = ST7796_WIDTH;
+uint16_t Display_Height = ST7796_HEIGHT;
+
+void ST7796_SetRotation(uint8_t rotation) {
+    uint8_t madctl_param = 0;
+    screen_rotation = rotation % 4;
+
+    switch (screen_rotation) {
+        case 0: // Книжный (Стандартный)
+            madctl_param = 0x48; // MX=0, MY=1, MV=0, ML=0, BGR=1
+            Display_Width  = 320;
+            Display_Height = 480;
             break;
-        case(1): 
-            // Поворот на 90° (пейзаж):
-            screen_rotation = 1;
+            
+        case 1: // Альбомный (Разворот по часовой)
+            madctl_param = 0x28; // MX=0, MY=0, MV=1, ML=0, BGR=1
+            Display_Width  = 480;
+            Display_Height = 320;
             break;
-        case(2):
-            // Поворот на 180°:
-            screen_rotation = 2;
+            
+        case 2: // Книжный (Перевернутый на 180)
+            madctl_param = 0x88; // MX=1, MY=0, MV=0, ML=0, BGR=1
+            Display_Width  = 320;
+            Display_Height = 480;
             break;
-        case(3):
-            // Поворот на 270°:
-            screen_rotation = 3;
+            
+        case 3: // Альбомный (Разворот против часовой)
+            madctl_param = 0xE8; // MX=1, MY=1, MV=1, ML=0, BGR=1
+            Display_Width  = 480;
+            Display_Height = 320;
             break;
-        default:screen_rotation = 0;
-    }
-}
-
-// ✅ Поворот буфера спрайта (создаёт новый буфер, старый освобождает)
-void Sprite_rotate(Sprite_t* s) {
-    uint8_t r = screen_rotation;
-    if (!s || !s->data || s->w == 0 || s->h == 0) return;
-    if (r == 0) return;
-
-    uint16_t w = s->w;
-    uint16_t h = s->h;
-    uint16_t* new_data = NULL;
-
-    if (r == 2) { // 180°
-        new_data = malloc(w * h * 2);
-        if (!new_data) return;
-        for (uint32_t i = 0; i < w * h; ++i) {
-            new_data[i] = s->data[w * h - 1 - i];
-        }
-    } else if (r == 1 || r == 3) { // 90° / 270°
-        uint16_t new_w = h;
-        uint16_t new_h = w;
-        new_data = malloc(new_w * new_h * 2);
-        if (!new_data) return;
-
-        for (uint16_t y = 0; y < h; ++y) {
-            for (uint16_t x = 0; x < w; ++x) {
-                uint16_t px, py;
-                if (r == 1) { // 90°
-                    px = y;
-                    py = h - 1 - x;
-                } else { // r == 3 → 270°
-                    px = w - 1 - y;
-                    py = x;
-                }
-                new_data[py * new_w + px] = s->data[y * w + x];
-            }
-        }
-
-        s->w = new_w;
-        s->h = new_h;
-    } else {
-        return; // Ошибка
     }
 
-    free(s->data);
-    s->data = new_data;
+    // 1. Предписываем контроллеру новый порядок обхода памяти
+    ST7796_WriteCmd(ST7796_MADCTL);
+    ST7796_WriteDataByte(madctl_param);
+
+    // 2. Сбрасываем внутреннее окно адресации чипа на полные новые габариты
+    ST7796_SetAddressWindow(0, 0, Display_Width - 1, Display_Height - 1);
 }
+
+void SetMode_Portrait(Sprite_t * sprite) {
+    ST7796_SetRotation(0); // Экран в 320x480
+
+    // Настраиваем статус-бар (сверху экрана)
+    //sprite->x = 0;
+    //sprite->y = 0;
+    uint16_t tmp_w = sprite->w;
+    uint16_t tmp_h = sprite->h;
+    sprite->w = tmp_w;
+    sprite->h = tmp_h;
+
+}
+
+// Функция инициализации геометрии под Альбомный режим
+void SetMode_Landscape(Sprite_t * sprite) {
+    ST7796_SetRotation(1); // Экран в 480x320
+
+    // Настраиваем статус-бар (сверху экрана, но теперь он шире)
+    uint16_t tmp_w = sprite->w;
+    uint16_t tmp_h = sprite->h;
+    sprite->w = tmp_h;
+    sprite->h = tmp_w;
+}
+
+
+
