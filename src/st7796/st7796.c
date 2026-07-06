@@ -15,6 +15,9 @@ bool ntpSyncEnabled = true;
 bool buzzerOnOff = true;
 bool bluetoothMode = true;
 
+uint16_t Display_Width = ST7796_WIDTH;   // Изначально 320
+uint16_t Display_Height = ST7796_HEIGHT; // Изначально 480
+
 // Буфер для DMA (остаётся — нужен для передачи)
 uint8_t dma_buffer[320 * 2] __attribute__((section(".ram_d1"), aligned(32)));
 
@@ -64,57 +67,56 @@ static HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len) {
     return HAL_OK;
 }
 
-void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+/* void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
     uint16_t xe = x + w - 1, ye = y + h - 1;
     ST7796_WriteCmd(ST7796_CASET);
     uint8_t data[] = {x >> 8, x & 0xFF, xe >> 8, xe & 0xFF};
     ST7796_WriteData(data, 4);
     ST7796_WriteCmd(ST7796_PASET);
-    data[0] = y >> 8; data[1] = y & 0xFF;
-    data[2] = ye >> 8; data[3] = ye & 0xFF;
+    data[0] = y >> 8; 
+    data[1] = y & 0xFF;
+    data[2] = ye >> 8; 
+    data[3] = ye & 0xFF;
     ST7796_WriteData(data, 4);
     ST7796_WriteCmd(ST7796_RAMWR);
+} */
+
+/**
+ * @brief Установка окна адресации дисплея
+ * @note  Параметры x2 и y2 ДОЛЖНЫ быть конечными координатами (Старт + Размер - 1), 
+ *        а не шириной и высотой.
+ */
+void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+    // Защита от выхода за физические границы текущего режима экрана
+    if (w >= Display_Width)  w = Display_Width - 1;
+    if (h >= Display_Height) h = Display_Height - 1;
+
+    ST7796_WriteCmd(ST7796_CASET); // Column Address Set (0x2A)
+    ST7796_WriteDataByte(x >> 8);
+    ST7796_WriteDataByte(x & 0xFF);
+    ST7796_WriteDataByte(w >> 8);
+    ST7796_WriteDataByte(w & 0xFF);
+
+    ST7796_WriteCmd(ST7796_PASET); // Row Address Set (0x2B)
+    ST7796_WriteDataByte(y >> 8);
+    ST7796_WriteDataByte(y & 0xFF);
+    ST7796_WriteDataByte(h >> 8);
+    ST7796_WriteDataByte(h & 0xFF);
+
+    ST7796_WriteCmd(ST7796_RAMWR); // Memory Write (0x2C)
 }
 
-// ✅ Спрайтовая функция — поворот координат здесь!
-void ST7796_SetAddressWindowRotated(int16_t x, int16_t y, uint16_t w, uint16_t h) {
-    if (screen_rotation == 0) {
-        ST7796_SetAddressWindow(x, y, w, h);
-        return;
-    }
-
-    int16_t px = x, py = y;
-    uint16_t pw = w, ph = h;
-
-    switch (screen_rotation) {
-        case 1: {
-            int tmp = px; px = py; py = 319 - tmp - pw + 1;
-            int tmp2 = pw; pw = ph; ph = tmp2;
-            break;
-        }
-        case 2:
-            px = 319 - px - pw + 1;
-            py = 479 - py - ph + 1;
-            break;
-        case 3: {
-            int tmp = px; px = 479 - py - ph + 1; py = tmp;
-            int tmp2 = pw; pw = ph; ph = tmp2;
-            break;
-        }
-        default: break;
-    }
-
-    ST7796_SetAddressWindow(px, py, pw, ph);
-}
 
 // ✅ Создание спрайта — выделяем буфер
-bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y) {
+bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y, SpriteAnchor_t anchor) {
     if (!s || w == 0 || h == 0) return false;
     s->x=x;
     s->y=y;
-    s->w = w; s->h = h;
+    s->w = w; 
+    s->h = h;
     s->is_allocated = true;
     s->data = (uint16_t*)malloc(w * h * 2);
+    s->anchor = anchor;
     return s->data != NULL;
 }
 
@@ -136,8 +138,7 @@ void Sprite_fill(Sprite_t* s, uint16_t color) {
 }
 
 // ✅ Отправка спрайта на экран — здесь учитываем поворот!
-void Sprite_push(const Sprite_t* s, int16_t x, int16_t y) {
-    //(void)x; (void)y; // игнорируем — дисплей не знает про поворот
+/* void Sprite_push(const Sprite_t* s, int16_t x, int16_t y) {
     if (!s || !s->data || s->w == 0 || s->h == 0) return;
 
     // Просто окно (0, 0, s->w, s->h)
@@ -157,49 +158,39 @@ void Sprite_push(const Sprite_t* s, int16_t x, int16_t y) {
     }
 
     LCD_CS_HIGH;
-}
+} */
 
-
-// ✅ Тест поворота — теперь используем спрайты
-void ST7796_TestRotation(Sprite_t test_sprite) {
-    //Sprite_t test_sprite;
-    //if (!Sprite_create(&test_sprite, 320, 480)) return;
-
-    Sprite_fill(&test_sprite, RGB565_BLACK);
-
-    uint16_t cx = 160, cy = 240, r = 50;
-    uint16_t colors[4] = {0xF800, 0x07E0, 0x001F, 0xFFFF};
-
-    for (int dy = -r; dy <= r; dy++) {
-        for (int dx = -r; dx <= r; dx++) {
-            if (dx*dx + dy*dy <= r*r) {
-                int16_t rx = dx, ry = dy;
-                switch (screen_rotation) {
-                    case 1: rx = dy; ry = -dx; break;
-                    case 2: rx = -dx; ry = -dy; break;
-                    case 3: rx = -dy; ry = dx; break;
-                }
-                int quadrant = (ry < 0) ? 0 : 2;
-                if (rx >= 0) quadrant += 1;
-
-                int16_t px = cx + dx, py = cy + dy;
-                if (px >= 0 && px < 320 && py >= 0 && py < 480) {
-                    test_sprite.data[py * 320 + px] = colors[quadrant];
-                }
-            }
-        }
+/**
+ * @brief Вывод готового спрайта на экран
+ */
+void ST7796_PushSprite(Sprite_t* s) {
+    // Проверка на выход за границы текущего разрешения экрана
+    if ((s->x + s->w) > Display_Width || (s->y + s->h) > Display_Height) {
+        return; // Защита от разрушения памяти дисплея
     }
 
-    char text[8];
-    snprintf(text, sizeof(text), "ROT: %d", screen_rotation);
-    int16_t text_width = lcd_get_str_width(text);
-    int16_t text_x = (320 - text_width) / 2;
+    // Передаем правильные конечные координаты: (Старт + Размер - 1)
+    ST7796_SetAddressWindow(s->x, s->y, s->x + s->w - 1, s->y + s->h - 1);
 
-    lcd_set_font(&font_segoe_struct);
-    lcd_print_to_buffer(text_x, 310, RGB565_GREEN, text, RGB565_BLACK, &test_sprite);
-    Sprite_push(&test_sprite, 0, 0);
-    Sprite_destroy(&test_sprite);
+    uint32_t total_pixels = (uint32_t)s->w * s->h;
+    
+    LCD_CS_LOW;
+    LCD_DC_DATA;
+
+    uint32_t total = s->w * s->h;
+    uint32_t sent = 0;
+    while (sent < total) {
+        uint32_t chunk = (total - sent > 320) ? 320 : (total - sent);
+        memcpy(dma_buffer, &s->data[sent], chunk * 2);
+        SCB_CleanDCache_by_Addr((uint32_t*)dma_buffer, (chunk * 2 + 31) & ~31);
+        __DSB();
+        if (ST7796_TransmitDMA(dma_buffer, chunk * 2) != HAL_OK) break;
+        sent += chunk;
+    }
+
+    LCD_CS_HIGH;
 }
+
 
 void ST7796_DrawPixel(int16_t x, int16_t y, uint16_t color) {
     if (x < 0 || x >= 320 || y < 0 || y >= 480) return;
@@ -210,9 +201,10 @@ void ST7796_DrawPixel(int16_t x, int16_t y, uint16_t color) {
 
 void ST7796_FillScreen(uint16_t color) {
     Sprite_t s;
-    if (!Sprite_create_XY(&s, 320, 480,0,0)) return;
+    if (!Sprite_create_XY(&s, 320, 480,0,0,ANCHOR_FILL_REMAINING)) return;
     Sprite_fill(&s, color);
-    Sprite_push(&s, 0, 0);
+    //Sprite_push(&s, 0, 0);
+    ST7796_PushSprite(&s);
     Sprite_destroy(&s);
 }
 
@@ -384,7 +376,8 @@ void drawStatusBar(Sprite_t *sprite) {
     const uint8_t* icon_bt_mode = iconMirrorHorizontal(icon_rs485ToBt_bits, 10, 8);
     ST7796_DrawBitmap(curX - 86, 4, icon_bt_mode, 10, 8, bluetoothMode ? 0x07E0 : 0x0000, 0x0000, sprite->data);
     // 2. Отправить буфер статус-бара на экран — ИСПРАВЛЕНО: ST7796_UpdateSprite → Sprite_push
-    Sprite_push(sprite, sprite->x, sprite->y);
+    //Sprite_push(sprite, sprite->x, sprite->y);
+    ST7796_PushSprite(sprite);
 }
 
 // ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
@@ -425,8 +418,7 @@ void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, 
 }
 
 
-uint16_t Display_Width = ST7796_WIDTH;
-uint16_t Display_Height = ST7796_HEIGHT;
+
 
 void ST7796_SetRotation(uint8_t rotation) {
     uint8_t madctl_param = 0;
@@ -435,26 +427,26 @@ void ST7796_SetRotation(uint8_t rotation) {
     switch (screen_rotation) {
         case 0: // Книжный (Стандартный)
             madctl_param = 0x48; // MX=0, MY=1, MV=0, ML=0, BGR=1
-            Display_Width  = 320;
-            Display_Height = 480;
+            Display_Width  = ST7796_WIDTH;
+            Display_Height = ST7796_HEIGHT;
             break;
             
         case 1: // Альбомный (Разворот по часовой)
             madctl_param = 0x28; // MX=0, MY=0, MV=1, ML=0, BGR=1
-            Display_Width  = 480;
-            Display_Height = 320;
+            Display_Width  = ST7796_HEIGHT;
+            Display_Height = ST7796_WIDTH;
             break;
             
         case 2: // Книжный (Перевернутый на 180)
             madctl_param = 0x88; // MX=1, MY=0, MV=0, ML=0, BGR=1
-            Display_Width  = 320;
-            Display_Height = 480;
+            Display_Width  = ST7796_WIDTH;
+            Display_Height = ST7796_HEIGHT;
             break;
             
         case 3: // Альбомный (Разворот против часовой)
             madctl_param = 0xE8; // MX=1, MY=1, MV=1, ML=0, BGR=1
-            Display_Width  = 480;
-            Display_Height = 320;
+            Display_Width  = ST7796_HEIGHT;
+            Display_Height = ST7796_WIDTH;
             break;
     }
 
@@ -466,29 +458,69 @@ void ST7796_SetRotation(uint8_t rotation) {
     ST7796_SetAddressWindow(0, 0, Display_Width - 1, Display_Height - 1);
 }
 
-void SetMode_Portrait(Sprite_t * sprite) {
-    ST7796_SetRotation(0); // Экран в 320x480
 
-    // Настраиваем статус-бар (сверху экрана)
-    //sprite->x = 0;
-    //sprite->y = 0;
-    uint16_t tmp_w = sprite->w;
-    uint16_t tmp_h = sprite->h;
-    sprite->w = tmp_w;
-    sprite->h = tmp_h;
+// Глобальный флаг текущего режима (0 - Portrait, 1 - Landscape)
+uint8_t current_layout_mode = 0; 
 
+/**
+ * @brief Универсальный автоматический перевод спрайта из Portrait в Landscape
+ * @note  Вызывается ДЛЯ КАЖДОГО спрайта при смене режима устройства
+ */
+void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation) {
+    // Если мы уже в этом режиме, ничего не делаем
+    if ((target_rotation == 1 && current_layout_mode == 1) || 
+        (target_rotation == 0 && current_layout_mode == 0)) {
+        return;
+    }
+
+    if (target_rotation == 1) { // ПЕРЕХОД ИЗ PORTRAIT В LANDSCAPE (320x480 -> 480x320)
+        // 1. Автоматический пересчет координат X и Y
+        sprite->x = (int16_t)((float)sprite->x * 1.5f);
+        sprite->y = (int16_t)((float)sprite->y * 0.666f);
+
+        // 2. Автоматический пересчет размеров W и H
+        sprite->w = (uint16_t)((float)sprite->w * 1.5f);
+        sprite->h = (uint16_t)((float)sprite->h * 0.666f);
+    } 
+    else if (target_rotation == 0) { // ПЕРЕХОД ИЗ LANDSCAPE В PORTRAIT (480x320 -> 320x480)
+        // Обратный пересчет
+        sprite->x = (int16_t)((float)sprite->x / 1.5f);
+        sprite->y = (int16_t)((float)sprite->y / 0.666f);
+
+        sprite->w = (uint16_t)((float)sprite->w / 1.5f);
+        sprite->h = (uint16_t)((float)sprite->h / 0.666f);
+    }
 }
 
-// Функция инициализации геометрии под Альбомный режим
-void SetMode_Landscape(Sprite_t * sprite) {
-    ST7796_SetRotation(1); // Экран в 480x320
 
-    // Настраиваем статус-бар (сверху экрана, но теперь он шире)
-    uint16_t tmp_w = sprite->w;
-    uint16_t tmp_h = sprite->h;
-    sprite->w = tmp_h;
-    sprite->h = tmp_w;
+void Sprite_UpdatePosition(Sprite_t* sprite) {
+    switch (sprite->anchor) {
+        case ANCHOR_TOP_LEFT:
+            // Координаты остаются фиксированными (0,0), размеры не меняются.
+            // Если статус-бар всегда должен быть во всю ширину экрана, раскомментируйте строку ниже:
+            sprite->w = Display_Width; 
+            break;
+
+        case ANCHOR_BOTTOM_LEFT:
+            // Прижимаем к самому низу экрана с сохранением его фиксированной высоты
+            sprite->x = 0;
+            sprite->y = Display_Height - sprite->h;
+            sprite->w = Display_Width; // растягиваем по ширине
+            break;
+
+        case ANCHOR_CENTER:
+            // Центрируем спрайт на экране (размеры остаются оригинальными)
+            sprite->x = (Display_Width - sprite->w) / 2;
+            sprite->y = (Display_Height - sprite->h) / 2;
+            break;
+
+        case ANCHOR_FILL_REMAINING:
+            // Спрайт занимает всё оставшееся пространство от своей начальной точки Y до низа экрана
+            sprite->x = 0;
+            sprite->w = Display_Width;
+            sprite->h = Display_Height - sprite->y; // Высота динамически подстроится под экран
+            break;
+    }
 }
-
 
 

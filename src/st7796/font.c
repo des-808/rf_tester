@@ -276,7 +276,8 @@ void lcd_print_to_buffer(int16_t x, int16_t y, uint16_t color, const char *str, 
             SCB_CleanDCache_by_Addr((uint32_t*)&sprite->data[y * sprite->w + start_x], (width * current_font->char_height * 2 + 31) & ~31);
             __DSB();
             //Sprite_push(sprite, 0, 0);
-            Sprite_push(sprite, sprite->x, sprite->y);
+            //Sprite_push(sprite, sprite->x, sprite->y);
+            ST7796_PushSprite(sprite);
         }
 }
 
@@ -374,7 +375,8 @@ void lcd_print_to_buffer_ex(int16_t x, int16_t y, uint16_t color, const char *st
         if (width > 0) {
             SCB_CleanDCache_by_Addr((uint32_t*)&sprite->data[y * sprite->w + start_x], (width * current_font->char_height * 2 + 31) & ~31);
             __DSB();
-            Sprite_push(sprite, sprite->x, sprite->y);
+            //Sprite_push(sprite, sprite->x, sprite->y);
+            ST7796_PushSprite(sprite);
         }
     }
 }

@@ -4,11 +4,20 @@
 #include "main.h"
 #include <stdbool.h> // 👈 добавить
 
+// Типы привязки спрайта к экрану
+typedef enum {
+    ANCHOR_TOP_LEFT,      // Прижат к верхнему левому углу (Статус-бар, меню)
+    ANCHOR_BOTTOM_LEFT,   // Прижат к нижнему левому углу (Нижняя панель, кнопки)
+    ANCHOR_CENTER,        // Строго по центру экрана (Всплывающие окна, прицелы)
+    ANCHOR_FILL_REMAINING // Особый тип: растягивается на всё оставшееся место (Основной экран)
+} SpriteAnchor_t;
+
 typedef struct {
     uint16_t *data;   // Указатель на буфер спрайта (w * h uint16_t)
     uint16_t x, y;    // Координаты на экране (верхний левый угол)
     uint16_t w, h;    // Размеры спрайта
     bool is_allocated;
+    SpriteAnchor_t anchor; // Добавляем поле привязки
 } Sprite_t;
 
 #include "font.h"
@@ -16,7 +25,6 @@ typedef struct {
 // --- Константы дисплея ---
 #define ST7796_WIDTH  320
 #define ST7796_HEIGHT 480
-
 
 // Команды
 #define ST7796_NOP         0x00
@@ -61,20 +69,15 @@ void* heap_caps_malloc(size_t size, uint32_t caps);
 //static void ST7796_WriteDataByte(uint8_t data);
 //static HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len);
 void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
-// ✅ Спрайтовая функция — поворот координат здесь!
-void ST7796_SetAddressWindowRotated(int16_t x, int16_t y, uint16_t w, uint16_t h);
 // ✅ Создание спрайта — выделяем буфер
-bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y);
+bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y, SpriteAnchor_t anchor);
 // ✅ Уничтожение спрайта
 void Sprite_destroy(Sprite_t* s);
 // ✅ Очистка спрайта
 void Sprite_fill(Sprite_t* s, uint16_t color);
 // ✅ Отправка спрайта на экран — здесь учитываем поворот!
-void Sprite_push(const Sprite_t* s, int16_t x, int16_t y);
- // ✅ Рисуем текст в буфер — НЕ учитываем поворот!
-//void lcd_print_to_buffer_sprite(int16_t x, int16_t y, uint16_t fg, const char* str, uint16_t bg, const Sprite_t* sprite);
-// ✅ Тест поворота — теперь используем спрайты
-void ST7796_TestRotation(Sprite_t test_sprite);
+//void Sprite_push(const Sprite_t* s, int16_t x, int16_t y);
+void ST7796_PushSprite(Sprite_t* sprite);
 void ST7796_DrawPixel(int16_t x, int16_t y, uint16_t color);
 void ST7796_FillScreen(uint16_t color);
 void ST7796_Init(void);
@@ -89,10 +92,9 @@ void drawStatusBar(Sprite_t *sprite);
 // ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
 void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer);
 void ST7796_SetRotation(uint8_t r);
-//void Sprite_rotate(Sprite_t* s);
 
-void SetMode_Portrait(Sprite_t * sprite);
-void SetMode_Landscape(Sprite_t * sprite);
+void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation);
+void Sprite_UpdatePosition(Sprite_t* sprite);
 /*
 #define RGB565_BLACK        0x0000
 #define RGB565_WHITE        0xFFFF

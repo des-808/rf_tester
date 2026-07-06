@@ -55,6 +55,8 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
+
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -82,6 +84,28 @@ Sprite_t main_screen_sprite;
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// Массив указателей на ВСЕ ваши спрайты
+Sprite_t* my_sprites[] = {
+    &status_bar_sprite,
+    &main_screen_sprite
+    // Сюда можно безопасно дописывать новые спрайты, например центрированные всплывающие окна
+};
+#define TOTAL_SPRITES (sizeof(my_sprites) / sizeof(my_sprites[0]))
+
+/**
+ * @brief Глобальная функция смены ориентации устройства
+ * @param rotation: 0 - Книжная, 1 - Альбомная
+ */
+void UI_ChangeRotation(uint8_t rotation) {
+    // 1. Поворачиваем физический чип дисплея (обновляет Display_Width и Display_Height)
+    ST7796_SetRotation(rotation);
+
+    // 2. В цикле пересчитываем позиции всех спрайтов по правилам их привязок
+    for (uint8_t i = 0; i < TOTAL_SPRITES; i++) {
+        Sprite_UpdatePosition(my_sprites[i]);
+    }
+}
+
 PCF8574_HandleTypeDef pcf_handle;
 
 static void MPU_Config(void)
@@ -232,7 +256,9 @@ int main(void)
 
   ST7796_Init();
 
-  Sprite_create_XY(&main_screen_sprite, 320, 460,0,20); // например, 440px высота
+  Sprite_create_XY(&status_bar_sprite, 320, 30,0,0,ANCHOR_TOP_LEFT); // например, 40px высота
+  Sprite_create_XY(&main_screen_sprite, 320, 450,0,30,ANCHOR_FILL_REMAINING); // например, 440px высота
+
   ST7796_SetRotation(0);
   /* ST7796_TestRotation(main_screen_sprite);
   HAL_Delay(4000);
@@ -247,23 +273,18 @@ int main(void)
   HAL_Delay(4000);
   ST7796_SetRotation(0); */
   //Sprite_destroy(&main_screen_sprite);
-//Sprite_create_XY(&status_bar_sprite, 320, 20,0,0); // например, 40px высота
-Sprite_create_XY(&status_bar_sprite, 320, 20,0,0); // например, 40px высота
   
   // Используем Segoe Print 12 по умолчанию
   //lcd_set_font(&font_segoe_struct);
   // Или Arial 9:
    lcd_set_font(&font_arial_9_struct);
-
-  //ST7796_SetRotation(2);
-  SetMode_Landscape(&status_bar_sprite);
-  SetMode_Landscape(&main_screen_sprite);
-  
+   uint8_t rotation = 0;
+  UI_ChangeRotation(rotation);
 
    lcd_print_to_buffer_ex(22, 32, RGB565_RED, "Привет!  МОЯ ЗАЙКА !!!",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(52, 60, RGB565_WHITE, "Как у Тебя Дела??",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(78, 88, RGB565_YELLOW, "Я соскучился..",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!",RGB565_BLACK,&main_screen_sprite,true);
+   lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!",RGB565_BLACK,&main_screen_sprite,false);
    //lcd_set_font(&font_arial_9_struct);// переключаем шрифт
    //ST7796_SetRotation(1);
    lcd_print_to_buffer_ex(122, 144, RGB565_BROWN, "И да..",RGB565_BLACK,&main_screen_sprite,false);
