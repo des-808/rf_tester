@@ -25,11 +25,45 @@ uint8_t dma_buffer[320 * 2] __attribute__((section(".ram_d1"), aligned(32)));
 // static Sprite_t main_screen; // → теперь создаются динамически в init_ui()
 
 // ✅ DMA-совместимый allocator для STM32 (аналог heap_caps_malloc)
-void* heap_caps_malloc(size_t size, uint32_t caps) {
+/* void* heap_caps_malloc(size_t size, uint32_t caps) {
     (void)caps; // игнорируем caps — STM32 не поддерживает MALLOC_CAP_DMA
     void* ptr = malloc(size);
     if (!ptr) return NULL;
     return ptr;
+} */
+void* heap_caps_malloc(size_t size, uint32_t caps) {
+    (void)caps;
+    
+    // Нам нужно выравнивание по 32 байтам.
+    // Выделяем запас памяти: 32 байта на сдвиг + 4 байта под хранение оригинального указателя
+    size_t total_size = size + 32 + sizeof(void*);
+    
+    void* original_ptr = malloc(total_size);
+    if (!original_ptr) return NULL;
+
+    // Рассчитываем выровненный адрес, оставляя место под оригинальный указатель
+    uintptr_t raw_address = (uintptr_t)original_ptr + sizeof(void*);
+    uintptr_t aligned_address = (raw_address + 31) & ~31;
+
+    // Сохраняем оригинальный указатель прямо перед выровненным адресом
+    void** store_original_ptr = (void**)(aligned_address - sizeof(void*));
+    *store_original_ptr = original_ptr;
+
+    return (void*)aligned_address;
+}
+
+/**
+ * @brief Освобождение памяти, выделенной через heap_caps_malloc
+ */
+void heap_caps_free(void* ptr) {
+    if (!ptr) return;
+
+    // Достаем оригинальный указатель, который мы спрятали перед выровненным адресом
+    void** store_original_ptr = (void**)((uintptr_t)ptr - sizeof(void*));
+    void* original_ptr = *store_original_ptr;
+
+    // Освобождаем именно тот блок, который выдал malloc изначально
+    free(original_ptr);
 }
 
 static void ST7796_WriteCmd(uint8_t cmd);
@@ -108,7 +142,7 @@ void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 
 
 // ✅ Создание спрайта — выделяем буфер
-bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y, SpriteAnchor_t anchor) {
+/* bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y, SpriteAnchor_t anchor) {
     if (!s || w == 0 || h == 0) return false;
     s->x=x;
     s->y=y;
@@ -118,6 +152,28 @@ bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y
     s->data = (uint16_t*)malloc(w * h * 2);
     s->anchor = anchor;
     return s->data != NULL;
+}
+ */
+bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h, uint16_t x, uint16_t y, SpriteAnchor_t anchor) {
+    if (!s || w == 0 || h == 0) return false;
+    
+    s->x = x;
+    s->y = y;
+    s->w = w; 
+    s->h = h;
+    s->is_allocated = true;
+    s->anchor = anchor;
+    
+    // Выделяем память: ширина * высота * 2 байта (RGB565)
+    s->data = (uint16_t*)heap_caps_malloc(w * h * 2, 0);
+    
+    if (s->data != NULL) {
+        s->is_allocated = true;
+        return true;
+    }
+    
+    s->is_allocated = false;
+    return false;
 }
 
 // ✅ Уничтожение спрайта
@@ -163,7 +219,7 @@ void Sprite_fill(Sprite_t* s, uint16_t color) {
 /**
  * @brief Вывод готового спрайта на экран
  */
-void ST7796_PushSprite(Sprite_t* s) {
+/* void ST7796_PushSprite(Sprite_t* s) {
     // Проверка на выход за границы текущего разрешения экрана
     if ((s->x + s->w) > Display_Width || (s->y + s->h) > Display_Height) {
         return; // Защита от разрушения памяти дисплея
@@ -186,6 +242,44 @@ void ST7796_PushSprite(Sprite_t* s) {
         __DSB();
         if (ST7796_TransmitDMA(dma_buffer, chunk * 2) != HAL_OK) break;
         sent += chunk;
+    }
+
+    LCD_CS_HIGH;
+} */
+void ST7796_PushSprite(Sprite_t* s) {
+    if ((s->x + s->w) > Display_Width || (s->y + s->h) > Display_Height) {
+        return; 
+    }
+
+    ST7796_SetAddressWindow(s->x, s->y, s->x + s->w - 1, s->y + s->h - 1);
+
+    uint32_t total_bytes = (uint32_t)s->w * s->h * 2; // Полный размер буфера в байтах
+    
+    LCD_CS_LOW;
+    LCD_DC_DATA;
+
+    // 1. Очищаем D-Cache один раз для всего массива спрайта целиком
+    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (total_bytes + 31) & ~31);
+    __DSB();
+
+    // 2. Отправляем ВЕСЬ массив в DMA одной транзакцией без деления на кусочки по 320
+    // В STM32H7 счетчик данных DMA поддерживает передачу до 65535 или даже больше (в зависимости от регистра),
+    // но если HAL_SPI_Transmit_DMA принимает размер в байтах/словах, то H7 может отправить до 65535 элементов за раз.
+    // Если размер спрайта больше 65535, HAL разобьет его, либо отправляем частями:
+    
+    uint32_t sent_bytes = 0;
+    while (sent_bytes < total_bytes) {
+        // HAL_SPI_Transmit_DMA обычно принимает размер в штуках элементов (uint16_t в режиме 16-бит)
+        // или в байтах (в режиме 8-бит). Проверьте настройку вашего SPI!
+        // Предположим, передача идет порциями по 32768 байт максимум за вызов:
+        uint32_t chunk_bytes = (total_bytes - sent_bytes > 60000) ? 60000 : (total_bytes - sent_bytes);
+        
+        if (ST7796_TransmitDMA((uint8_t*)s->data + sent_bytes, chunk_bytes) != HAL_OK) break;
+        
+        // Ожидаем окончания отправки блока
+        while (HAL_SPI_GetState(&hspi4) != HAL_SPI_STATE_READY);
+        
+        sent_bytes += chunk_bytes;
     }
 
     LCD_CS_HIGH;
@@ -466,7 +560,7 @@ uint8_t current_layout_mode = 0;
  * @brief Универсальный автоматический перевод спрайта из Portrait в Landscape
  * @note  Вызывается ДЛЯ КАЖДОГО спрайта при смене режима устройства
  */
-void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation) {
+/* void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation) {
     // Если мы уже в этом режиме, ничего не делаем
     if ((target_rotation == 1 && current_layout_mode == 1) || 
         (target_rotation == 0 && current_layout_mode == 0)) {
@@ -490,10 +584,10 @@ void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation) {
         sprite->w = (uint16_t)((float)sprite->w / 1.5f);
         sprite->h = (uint16_t)((float)sprite->h / 0.666f);
     }
-}
+} */
 
 
-void Sprite_UpdatePosition(Sprite_t* sprite) {
+/* void Sprite_UpdatePosition(Sprite_t* sprite) {
     switch (sprite->anchor) {
         case ANCHOR_TOP_LEFT:
             // Координаты остаются фиксированными (0,0), размеры не меняются.
@@ -521,6 +615,49 @@ void Sprite_UpdatePosition(Sprite_t* sprite) {
             sprite->h = Display_Height - sprite->y; // Высота динамически подстроится под экран
             break;
     }
-}
+} */
+void Sprite_UpdatePosition(Sprite_t* sprite) {
+    uint16_t old_w = sprite->w;
+    uint16_t old_h = sprite->h;
 
+    // 1. Рассчитываем новую геометрию в зависимости от привязки
+    switch (sprite->anchor) {
+        case ANCHOR_TOP_LEFT:
+            sprite->w = Display_Width; 
+            break;
+        case ANCHOR_BOTTOM_LEFT:
+            sprite->x = 0;
+            sprite->y = Display_Height - sprite->h;
+            sprite->w = Display_Width;
+            break;
+        case ANCHOR_CENTER:
+            sprite->x = (Display_Width - sprite->w) / 2;
+            sprite->y = (Display_Height - sprite->h) / 2;
+            break;
+        case ANCHOR_FILL_REMAINING:
+            sprite->x = 0;
+            sprite->w = Display_Width;
+            sprite->h = Display_Height - sprite->y;
+            break;
+    }
+
+    // 2. Если размеры ИЗМЕНИЛИСЬ, нужно безопасно перевыделить буфер в ОЗУ
+    if (sprite->w != old_w || sprite->h != old_h) {
+        // Освобождаем старый буфер, чтобы избежать утечки памяти
+        if (sprite->is_allocated && sprite->data != NULL) {
+            heap_caps_free(sprite->data);
+            sprite->data = NULL;
+        }
+
+        // Выделяем новый буфер под новые размеры W и H
+        sprite->data = (uint16_t*)heap_caps_malloc(sprite->w * sprite->h * 2, 0);
+        
+        if (sprite->data == NULL) {
+            sprite->is_allocated = false;
+            // Здесь можно зажечь отладочный светодиод — это значит, что в куче STM32 закончилось место!
+            while(1); 
+        }
+        sprite->is_allocated = true;
+    }
+}
 

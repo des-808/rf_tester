@@ -100,9 +100,40 @@ void UI_ChangeRotation(uint8_t rotation) {
     // 1. Поворачиваем физический чип дисплея (обновляет Display_Width и Display_Height)
     ST7796_SetRotation(rotation);
 
-    // 2. В цикле пересчитываем позиции всех спрайтов по правилам их привязок
+    // 2. В цикле пересчитываем позиции ВСЕХ спрайтов.
+    // Внутри этой функции старая память освобождается, а новая выделяется под новые W и H!
     for (uint8_t i = 0; i < TOTAL_SPRITES; i++) {
         Sprite_UpdatePosition(my_sprites[i]);
+    }
+
+    // 3. ОЧИЩАЕМ динамические буферы напрямую через структуры спрайтов
+    // Безопасно очищаем статус-бар, если память успешно выделилась
+    if (status_bar_sprite.is_allocated && status_bar_sprite.data != NULL) {
+        uint32_t sb_size = (uint32_t)status_bar_sprite.w * status_bar_sprite.h;
+        for (uint32_t i = 0; i < sb_size; i++) {
+            status_bar_sprite.data[i] = RGB565_BLACK; 
+        }
+    }
+
+    // Безопасно очищаем основной экран
+    if (main_screen_sprite.is_allocated && main_screen_sprite.data != NULL) {
+        uint32_t ms_size = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
+        for (uint32_t i = 0; i < ms_size; i++) {
+            main_screen_sprite.data[i] = RGB565_BLACK;
+        }
+    }
+
+    // 4. Пишем новый текст под новую ориентацию в динамический буфер
+    // Флаг update_after_print ставим в false, чтобы не вызывать PushSprite раньше времени
+    if (main_screen_sprite.is_allocated) {
+        lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!", RGB565_BLACK, &main_screen_sprite, false);
+    }
+
+    // 5. И только теперь выталкиваем обновленные, перевыделенные и заполненные спрайты на экран
+    for (uint8_t i = 0; i < TOTAL_SPRITES; i++) {
+        if (my_sprites[i]->is_allocated && my_sprites[i]->data != NULL) {
+            ST7796_PushSprite(my_sprites[i]);
+        }
     }
 }
 
@@ -255,11 +286,13 @@ int main(void)
   
 
   ST7796_Init();
-
   Sprite_create_XY(&status_bar_sprite, 320, 30,0,0,ANCHOR_TOP_LEFT); // например, 40px высота
-  Sprite_create_XY(&main_screen_sprite, 320, 450,0,30,ANCHOR_FILL_REMAINING); // например, 440px высота
-
-  ST7796_SetRotation(0);
+  Buzzer_Short();HAL_Delay(1000);
+  Sprite_create_XY(&main_screen_sprite, 320, 449,0,30,ANCHOR_FILL_REMAINING); // например, 440px высота
+  Buzzer_Short();HAL_Delay(1000);
+//Sprite_fill(&status_bar_sprite,RGB565_BLACK);
+//Sprite_fill(&main_screen_sprite,RGB565_BLACK);
+  //ST7796_SetRotation(0);
   /* ST7796_TestRotation(main_screen_sprite);
   HAL_Delay(4000);
   ST7796_SetRotation(1);
@@ -286,23 +319,32 @@ int main(void)
    lcd_print_to_buffer_ex(78, 88, RGB565_YELLOW, "Я соскучился..",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!",RGB565_BLACK,&main_screen_sprite,false);
    //lcd_set_font(&font_arial_9_struct);// переключаем шрифт
-   //ST7796_SetRotation(1);
    lcd_print_to_buffer_ex(122, 144, RGB565_BROWN, "И да..",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(70, 170, RGB565_GREEN, "Доброе утро!!!!!",RGB565_BLACK,&main_screen_sprite,false);
    
-    lcd_set_font(&font_segoe_struct);
+   lcd_set_font(&font_segoe_struct);
    lcd_print_to_buffer_ex(2, 206, RGB565(0, 255, 0), "Привет, STM32!",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(2, 232, RGB565(255, 0, 0), "Текст на русском",RGB565_BLACK,&main_screen_sprite,false);
-   //ST7796_SetRotation(3);
    lcd_print_to_buffer_ex(2, 258, RGB565(0, 255, 255), "Ку Ку Ёпта!!",RGB565_BLACK,&main_screen_sprite,false);
    lcd_print_to_buffer_ex(2, 284, RGB565(0,0,  255), "Как говорится: ",RGB565_BLACK,&main_screen_sprite,false);
-   //ST7796_SetRotation(3);
    lcd_print_to_buffer_ex(70, 310, RGB565(200,200,200), "ГОВНО",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(150, 310, RGB565(255,255,  255), "СЛУЧАЕТСЯ!!!!!",RGB565_BLACK,&main_screen_sprite,true); 
-   //ST7796_SetRotation(3);
-   //Sprite_rotate(&status_bar_sprite);
+   lcd_print_to_buffer_ex(150, 310, RGB565(255,255,  255), "СЛУЧАЕТСЯ!!!!!",RGB565_BLACK,&main_screen_sprite,true);
+
   drawStatusBar(&status_bar_sprite);
 
+  HAL_Delay(3000);
+  rotation = 1;
+  UI_ChangeRotation(rotation);
+
+  HAL_Delay(3000);
+  rotation = 2;
+  UI_ChangeRotation(rotation);
+  HAL_Delay(3000);
+  rotation = 3;
+  UI_ChangeRotation(rotation);
+  HAL_Delay(3000);
+  rotation = 0;
+  UI_ChangeRotation(rotation);
 
   // После MX_I2C1_Init()
 /* I2C_Scanner_Init(&i2c_scanner, &hi2c1);

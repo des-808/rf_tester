@@ -286,18 +286,11 @@ void lcd_print_to_buffer_ex(int16_t x, int16_t y, uint16_t color, const char *st
     if (!current_font || !sprite || !sprite->data) return;
 
     int16_t start_x = x;
-    const char *original_str = str;
-
-   /*  // ✅ 1. Рассчитать ширину строки и очистить фон
-    int16_t width = lcd_get_str_width(original_str);
-    int16_t font_height = current_font->char_height;
-
-    // ✅ Очистить прямоугольник под строку (включая spacing)
-    if (width > 0) {
-        ST7796_FillBufferRect(sprite->data,x, y,width+10, font_height, bg_color);
-    } */
-   //int16_t font_height = current_font->char_height;
-   //lcd_clear_line(x,y, font_height, RGB565_BROWN, sprite);
+// 1. Расчет локальных координат внутри спрайта
+    int16_t local_start_x = x - sprite->x;
+    int16_t local_y = y - sprite->y;
+    int16_t local_x = local_start_x; 
+    const char * original_str = str;
 
     // ✅ 2. Печатаем строку
     while (*str) {
@@ -370,13 +363,40 @@ void lcd_print_to_buffer_ex(int16_t x, int16_t y, uint16_t color, const char *st
     }
 
     // 🔥 Добавляем ОДИН вызов ST7796_UpdateSprite по требованию
-    if (update_after_print) {
-        int16_t width = lcd_get_str_width(original_str);
+    /* if (update_after_print) {
+        // Переводим начальную абсолютную координату X и Y строки 
+        // в относительные координаты внутри массива спрайта
+        int16_t rel_start_x = start_x - sprite->x;
+        int16_t rel_start_y = y - sprite->y;
+
+        // Если строка печатается с самого начала или частично за пределами спрайта,
+        // делаем безопасную отсечку для предотвращения отрицательных индексов
+        if (rel_start_x < 0) rel_start_x = 0;
+        if (rel_start_y < 0) rel_start_y = 0;
+
+         int16_t width = lcd_get_str_width(original_str);
         if (width > 0) {
             SCB_CleanDCache_by_Addr((uint32_t*)&sprite->data[y * sprite->w + start_x], (width * current_font->char_height * 2 + 31) & ~31);
             __DSB();
             //Sprite_push(sprite, sprite->x, sprite->y);
             ST7796_PushSprite(sprite);
+        } 
+
+    } */
+   if (update_after_print) {
+        int16_t str_width = lcd_get_str_width(original_str);
+        // Проверка границ, чтобы избежать HardFault при отрисовке за пределами
+        if (str_width > 0 && local_y >= 0 && local_y < sprite->h) {
+            int16_t clean_x = (local_start_x < 0) ? 0 : local_start_x;
+            if (clean_x < sprite->w) {
+                // Использование локальных координат для расчета адреса
+                uint16_t* cache_ptr = &sprite->data[(uint32_t)local_y * sprite->w + clean_x];
+                uint32_t bytes_to_clean = (uint32_t)str_width * current_font->char_height * 2;
+                uint32_t aligned_size = (bytes_to_clean + 31) & ~31;
+                SCB_CleanDCache_by_Addr((uint32_t*)cache_ptr, aligned_size);
+                __DSB();
+                ST7796_PushSprite(sprite);
+            }
         }
     }
 }
