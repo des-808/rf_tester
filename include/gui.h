@@ -45,6 +45,9 @@ typedef struct UIElement {
     struct UIElement* children[8];
     uint8_t children_count;
 
+    // КРИТИЧЕСКИ ВАЖНО: Добавляем указатель на функцию отрисовки содержимого!
+    void (*render_callback)(Sprite_t* s); 
+
     // Специфичные настройки контейнеров
     union {
         GridDefinition_t grid;
@@ -60,5 +63,14 @@ typedef struct UIElement {
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation);
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
 void UI_DrawTree(UIElement_t* element);
+
+
+void Draw_StatusBar_Content(Sprite_t* s);
+void Draw_Digits_Content(Sprite_t* s);
+void Draw_Graph_Content(Sprite_t* s);
+
+void Draw_Digits_Content(Sprite_t* s);
+void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y);
+
 
 #endif // GUI_H

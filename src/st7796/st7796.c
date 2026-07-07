@@ -414,7 +414,7 @@ const uint8_t* iconMirrorVertical(const unsigned char* bitmap, int w, int h) {
 }
 
 // Глобальные переменные (как у тебя в ESP32)
-extern int batteryLevel;
+/*extern int batteryLevel;
 extern bool bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, bluetoothMode;
 extern uint8_t currentHour, currentMinute;
 
@@ -432,7 +432,7 @@ uint8_t currentHour = 22;
 uint8_t currentMinute = 43;
 uint8_t battery_Level = 17;
 
-void drawStatusBar(Sprite_t *sprite) {
+ void drawStatusBar(Sprite_t *sprite) {
     lcd_set_font(&font_segoe_struct);
     // 1. Очистка буфера статус-бара — ИСПРАВЛЕНО: ST7796_FillBufferRect → Sprite_fill
     //Sprite_fill(sprite, RGB565_BLACK);
@@ -477,7 +477,7 @@ void drawStatusBar(Sprite_t *sprite) {
     // 2. Отправить буфер статус-бара на экран — ИСПРАВЛЕНО: ST7796_UpdateSprite → Sprite_push
     //Sprite_push(sprite, sprite->x, sprite->y);
     ST7796_PushSprite(sprite);
-}
+} */
 
 // ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
 void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer) {
@@ -621,7 +621,7 @@ uint8_t current_layout_mode = 0;
             break;
     }
 } */
-void Sprite_UpdatePosition(Sprite_t* sprite) {
+/* void Sprite_UpdatePosition(Sprite_t* sprite) {
     switch (sprite->anchor) {
         case ANCHOR_TOP_LEFT:
             sprite->x = 0; sprite->y = 0;
@@ -671,5 +671,5 @@ void Sprite_UpdatePosition(Sprite_t* sprite) {
         while(1); // Зависание сработает, только если вы запросили больше ~300 КБ суммарно
     }
     sprite->is_allocated = true;
-}
+} */
 

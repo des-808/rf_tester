@@ -77,48 +77,16 @@ uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 DMA_HandleTypeDef hdma_spi4_tx;
 
 
-extern void drawStatusBar(Sprite_t *sprite);
+//extern void drawStatusBar(Sprite_t *sprite);
 
-Sprite_t status_bar_sprite;
-Sprite_t main_screen_sprite;
+extern Sprite_t status_bar_sprite;
+extern Sprite_t main_screen_sprite;
+extern Sprite_t graph_sprite; // если нужен доступ к графику из main.c
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// Массив указателей на ВСЕ ваши спрайты
-Sprite_t* my_sprites[] = {
-    &status_bar_sprite,
-    &main_screen_sprite
-    // Сюда можно безопасно дописывать новые спрайты, например центрированные всплывающие окна
-};
-#define TOTAL_SPRITES (sizeof(my_sprites) / sizeof(my_sprites[0]))
 
-/**
- * @brief Глобальная функция смены ориентации устройства
- * @param rotation: 0 - Книжная, 1 - Альбомная
- */
-void UI_ChangeRotation(uint8_t rotation) {
-    // 1. Поворачиваем физический чип дисплея
-    ST7796_SetRotation(rotation);
-
-    // 2. Сбрасываем пул памяти
-    heap_caps_reset_pool();
-
-    // 3. Пересчитываем геометрию и нарезаем адреса в пуле под новые W и H
-    for (uint8_t i = 0; i < TOTAL_SPRITES; i++) {
-        Sprite_UpdatePosition(my_sprites[i]);
-    }
-
-    // 4. ВЫЗЫВАЕМ ОТРИСОВКУ: Наполняем только что выделенную память правильной графикой
-    UI_RenderActiveScreen();
-
-    // 5. Выталкиваем готовый и чистый кадр на физический экран дисплея
-    for (uint8_t i = 0; i < TOTAL_SPRITES; i++) {
-        if (my_sprites[i]->is_allocated && my_sprites[i]->data != NULL) {
-            ST7796_PushSprite(my_sprites[i]);
-        }
-    }
-}
 
 PCF8574_HandleTypeDef pcf_handle;
 
@@ -192,6 +160,10 @@ void LED_Blink(uint32_t delay)
 	HAL_Delay(500-1);
 }
 
+char button_status_msg[20] = "No btn"; // Глобальная строка для UI
+char touch_status_msg[64] = "No touch"; // Строка для UI
+uint16_t last_touch_x = 0;              // Координата X для логики меню
+uint16_t last_touch_y = 0;              // Координата Y для логики меню
 /* USER CODE END 0 */
 
 /**
@@ -269,9 +241,9 @@ int main(void)
   
 
   ST7796_Init();
-  Sprite_create_XY(&status_bar_sprite, 320, 30,0,0,ANCHOR_TOP_LEFT); // например, 40px высота
+  //Sprite_create_XY(&status_bar_sprite, 320, 30,0,0,ANCHOR_TOP_LEFT); // например, 40px высота
   //Buzzer_Short();HAL_Delay(1000);
-  Sprite_create_XY(&main_screen_sprite, 320, 449,0,30,ANCHOR_FILL_REMAINING); // например, 440px высота
+  //Sprite_create_XY(&main_screen_sprite, 320, 449,0,30,ANCHOR_FILL_REMAINING); // например, 440px высота
   //Buzzer_Short();HAL_Delay(1000);
 //Sprite_fill(&status_bar_sprite,RGB565_BLACK);
 //Sprite_fill(&main_screen_sprite,RGB565_BLACK);
@@ -345,97 +317,66 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
-    if (PCF8574_HasChanges(&pcf_handle)) {
-    Buttons_Update(&btn_s);
-
-    //uint8_t btn = Buttons_GetJustPressed(&btn_s);
-    uint8_t btn = PCF8574_Read8(&pcf_handle);
-    char msg[20];
-        snprintf(msg, sizeof(msg), "Btn%d", btn);
-        lcd_print_to_buffer_ex(22, 132, RGB565_GREEN, msg, RGB565_BLACK, &main_screen_sprite, true);
-     if (btn != 0xFF) {
-        char msg[20];
-        snprintf(msg, sizeof(msg), "Btn%d", btn);
-        lcd_print_to_buffer_ex(22, 132, RGB565_GREEN, msg, RGB565_BLACK, &main_screen_sprite, true);
-    }
-    else {
-        lcd_print_to_buffer_ex(22, 132, RGB565_BLUE, "No btn", RGB565_BLACK, &main_screen_sprite, true);
-    } 
-
-    PCF8574_AcknowledgeChanges(&pcf_handle);
-
+      /* USER CODE END WHILE */
+      if (PCF8574_HasChanges(&pcf_handle)) {
+          Buttons_Update(&btn_s);
+          uint8_t btn = PCF8574_Read8(&pcf_handle);
+          if (btn != 0xFF) {
+              // Пишем в глобальный буфер, а не на экран напрямую!
+              snprintf(button_status_msg, sizeof(button_status_msg), "Btn 0x%02X", btn);
+             Buzzer_Short();
+          }
+          else {
+              snprintf(button_status_msg, sizeof(button_status_msg), "No btn");
+          } 
+          PCF8574_AcknowledgeChanges(&pcf_handle);
+      // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
+      // Функция UI_DrawTree сама вызовет колбэки, очистит буферы, 
+      // вставит актуальный текст кнопки и вытолкнет чистую графику по DMA SPI.
+      extern UIElement_t root_grid; // Объявляем корень дерева
+      UI_DrawTree(&root_grid);
+      }
+      
+      // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
+      // Функция UI_DrawTree сама вызовет колбэки, очистит буферы, 
+      // вставит актуальный текст кнопки и вытолкнет чистую графику по DMA SPI.
+      //extern UIElement_t root_grid; // Объявляем корень дерева
+      //UI_DrawTree(&root_grid);
+  
     // Отладка: мигнуть LED
     //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-    // Звук 2400 Hz
-/* Buzzer_SetFrequency(1400);
-Buzzer_On(1400);
-HAL_Delay(1500);
-
-Buzzer_SetFrequency(1200); // ← здесь должно быть "чистое" изменение, без щелчка
-HAL_Delay(500);
-
-Buzzer_SetFrequency(600);
-HAL_Delay(500);
-
-Buzzer_Off(); */
-
-
-//Buzzer_Short();HAL_Delay(1500);
-//Buzzer_Long();HAL_Delay(1500);
-//Buzzer_Beep2();HAL_Delay(1500);
-//Buzzer_Beep3();HAL_Delay(1500);
-//Buzzer_Alarm();HAL_Delay(1500);
-Buzzer_Confirm();//HAL_Delay(2500);
-
-//Buzzer_Error();
-
-
-
-
-}
-
+      //Buzzer_Short();HAL_Delay(1500);
+      //Buzzer_Long();HAL_Delay(1500);
+      //Buzzer_Beep2();HAL_Delay(1500);
+      //Buzzer_Beep3();HAL_Delay(1500);
+      //Buzzer_Alarm();HAL_Delay(1500);
+      //Buzzer_Confirm();//HAL_Delay(2500);
+      //Buzzer_Error();
 //ScanButtons();
 
-if (ft6336u.has_touch ) {
-    //uint8_t n = FT6336U_GetTouchNum(&ft6336u);
-    char msg[64];
-    for (int i = 0; i < 1; i++) {//for (int i = 0; i < n; i++) {
-        uint16_t x, y;
-        //FT6336U_GetTouchPoint(&ft6336u, i, &x, &y);
-        FT6336U_GetTouchPoint(&ft6336u, i, &x, &y);//только для 1 touch
-        // Обработка: например, x < 100 → кнопка "Back"
-        // Формируем строку
-        snprintf(msg, sizeof(msg), "Touch %d: ( %d, %d )", i, x, y);
-        // Выводим на экран — позиция 0, 160+20*i (чтобы не перекрывать)
-        lcd_print_to_buffer_ex(20, 40 + 20 * i, RGB565_CYAN, msg, RGB565_BLACK, &main_screen_sprite, true);
+if (ft6336u.has_touch) {
+        uint16_t raw_x, raw_y;
+        FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем 1 точку
+
+        // КРИТИЧЕСКИ ВАЖНО: Пересчитываем координаты под текущий поворот экрана!
+        Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
+
+        // Формируем красивую строку для вывода на экран
+        snprintf(touch_status_msg, sizeof(touch_status_msg), "Touch: (%d, %d)", last_touch_x, last_touch_y);
+
+        // --- ЛОГИКА НАЖАТИЯ НА КНОПКИ (Пример) ---
+        // Теперь вы можете использовать last_touch_x и last_touch_y для обработки меню:
+        // if (last_touch_x > 400 && last_touch_y < 40) { ... нажали на кнопку Настроек ... }
+
+        ft6336u.has_touch = false;  // сброс флага тача
+        Buzzer_Short();             // Пищим при успешном нажатии
+        // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
+      // Функция UI_DrawTree сама вызовет колбэки, очистит буферы, 
+      // вставит актуальный текст кнопки и вытолкнет чистую графику по DMA SPI.
+      extern UIElement_t root_grid; // Объявляем корень дерева
+      UI_DrawTree(&root_grid);
     }
 
-    ft6336u.has_touch = false;  // сброс
-    //Buzzer_Confirm();
-    Buzzer_Short();
-}
-
-/* // Тест: 10 попыток считать данные напрямую
-    char msg[40];
-    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET); // LED on
-
-    for (int i = 0; i < 10; i++) {
-        uint8_t data = 0;
-        HAL_StatusTypeDef status = HAL_I2C_Master_Receive(&hi2c1, 0x70, &data, 1, 100);
-        if (status == HAL_OK) {
-            snprintf(msg, sizeof(msg), "Read %d: 0x%02X OK   ", i, data);
-        } else {
-            snprintf(msg, sizeof(msg), "Read %d: FAIL %d   ", i, (int)status);
-        }
-
-        // Выводим на экран (каждое новое состояние заменяет предыдущее)
-        lcd_print_to_buffer_ex(0, 20 + i * 12, RGB565_GREEN, msg, RGB565_BLACK, &main_screen_sprite, true);
-        HAL_Delay(100); // небольшая задержка, чтобы успеть увидеть
-    }
-
-    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET); // LED off
-    HAL_Delay(2000); // пауза перед следующим циклом */
 ////////////////////////
     // Другая логика (не блокирующая)
     HAL_Delay(1); // только для watchdog, если нужен
