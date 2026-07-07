@@ -1,3 +1,6 @@
+#ifndef GUI_H
+#define GUI_H
+
 #include <stdint.h>
 #include "st7796.h"
 
@@ -52,3 +55,10 @@ typedef struct UIElement {
     uint8_t grid_row;
     uint8_t grid_col;
 } UIElement_t;
+
+
+void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation);
+void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
+void UI_DrawTree(UIElement_t* element);
+
+#endif // GUI_H

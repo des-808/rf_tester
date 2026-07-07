@@ -30,6 +30,7 @@
 #include "gpio.h"
 #include "flash.h"
 #include "ft6336u.h"
+#include "gui.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -293,7 +294,7 @@ int main(void)
   //lcd_set_font(&font_segoe_struct);
   // Или Arial 9:
    lcd_set_font(&font_arial_9_struct);
-   uint8_t rotation = 0;
+   /* uint8_t rotation = 0;
   UI_ChangeRotation(rotation);
 
    lcd_print_to_buffer_ex(22, 32, RGB565_RED, "Привет!  МОЯ ЗАЙКА !!!",RGB565_BLACK,&main_screen_sprite,false);
@@ -318,6 +319,8 @@ int main(void)
   rotation = 1;
   UI_ChangeRotation(rotation);
 
+ 
+
   HAL_Delay(3000);
   rotation = 2;
   UI_ChangeRotation(rotation);
@@ -326,7 +329,7 @@ int main(void)
   UI_ChangeRotation(rotation);
   HAL_Delay(3000);
   rotation = 0;
-  UI_ChangeRotation(rotation);
+  UI_ChangeRotation(rotation); */
 
   // После MX_I2C1_Init()
 /* I2C_Scanner_Init(&i2c_scanner, &hi2c1);
@@ -335,7 +338,7 @@ I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 //lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
-
+ GUI_ShowAdvancedMeasurementScreen(1);
   /* USER CODE END 2 */ 
 
   /* Infinite loop */

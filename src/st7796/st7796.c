@@ -334,7 +334,7 @@ void ST7796_Init(void) {
     ST7796_WriteCmd(ST7796_DISPON);
     HAL_Delay(10);
 
-    ST7796_FillScreen(RGB565_BLACK);
+    ST7796_FillScreen(RGB565_DARK_GRAY);
 }
 
 
