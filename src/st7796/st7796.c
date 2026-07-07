@@ -31,39 +31,44 @@ uint8_t dma_buffer[320 * 2] __attribute__((section(".ram_d1"), aligned(32)));
     if (!ptr) return NULL;
     return ptr;
 } */
+// Создаем один большой массив памяти строго в AXI SRAM. 
+// Максимальный размер: статус-бар (480*30) + экран (480*290) = 153 600 слов (307 200 байт)
+// Выравниваем сам массив по границе 32 байт для D-Cache
+__attribute__((aligned(32))) uint16_t global_sprite_pool[155000];
+uint32_t pool_offset = 0;
+
 void* heap_caps_malloc(size_t size, uint32_t caps) {
     (void)caps;
     
-    // Нам нужно выравнивание по 32 байтам.
-    // Выделяем запас памяти: 32 байта на сдвиг + 4 байта под хранение оригинального указателя
-    size_t total_size = size + 32 + sizeof(void*);
+    // Округляем запрашиваемый размер до кратного 32 байтам для безопасности D-Cache
+    size_t size_in_words = (size + 1) / 2;
+    size_in_words = (size_in_words + 15) & ~15; // Выравнивание по 32 байта (16 слов uint16_t)
+
+    // Проверяем, есть ли еще место в пуле
+    if (pool_offset + size_in_words > 155000) {
+        return NULL; // Память кончилась
+    }
+
+    // Берем указатель на текущее свободное место
+    void* ptr = (void*)&global_sprite_pool[pool_offset];
     
-    void* original_ptr = malloc(total_size);
-    if (!original_ptr) return NULL;
+    // Сдвигаем указатель пула для следующего спрайта
+    pool_offset += size_in_words;
 
-    // Рассчитываем выровненный адрес, оставляя место под оригинальный указатель
-    uintptr_t raw_address = (uintptr_t)original_ptr + sizeof(void*);
-    uintptr_t aligned_address = (raw_address + 31) & ~31;
+    return ptr;
+}
 
-    // Сохраняем оригинальный указатель прямо перед выровненным адресом
-    void** store_original_ptr = (void**)(aligned_address - sizeof(void*));
-    *store_original_ptr = original_ptr;
-
-    return (void*)aligned_address;
+void heap_caps_free(void* ptr) {
+    // При статическом пуле нам не нужно освобождать отдельные куски, 
+    // так как мы перевыделим весь пул заново при смене ориентации!
+    (void)ptr;
 }
 
 /**
- * @brief Освобождение памяти, выделенной через heap_caps_malloc
+ * @brief Полный сброс памяти пула (Вызывается при повороте экрана перед пересчетом)
  */
-void heap_caps_free(void* ptr) {
-    if (!ptr) return;
-
-    // Достаем оригинальный указатель, который мы спрятали перед выровненным адресом
-    void** store_original_ptr = (void**)((uintptr_t)ptr - sizeof(void*));
-    void* original_ptr = *store_original_ptr;
-
-    // Освобождаем именно тот блок, который выдал malloc изначально
-    free(original_ptr);
+void heap_caps_reset_pool(void) {
+    pool_offset = 0; 
 }
 
 static void ST7796_WriteCmd(uint8_t cmd);
@@ -617,47 +622,54 @@ uint8_t current_layout_mode = 0;
     }
 } */
 void Sprite_UpdatePosition(Sprite_t* sprite) {
-    uint16_t old_w = sprite->w;
-    uint16_t old_h = sprite->h;
-
-    // 1. Рассчитываем новую геометрию в зависимости от привязки
     switch (sprite->anchor) {
         case ANCHOR_TOP_LEFT:
+            sprite->x = 0; sprite->y = 0;
             sprite->w = Display_Width; 
+            // Высоту h вы задали при создании (например, 30)
             break;
+
         case ANCHOR_BOTTOM_LEFT:
             sprite->x = 0;
-            sprite->y = Display_Height - sprite->h;
             sprite->w = Display_Width;
+            sprite->y = Display_Height - sprite->h; // прижали к низу
             break;
+
+        case ANCHOR_GRAPH:
+            // График занимает левую часть экрана под статус-баром
+            sprite->x = 0;
+            sprite->y = 30; // Смещение под статус-бар
+            sprite->w = (Display_Width * 60) / 100; // 60% ширины экрана
+            sprite->h = Display_Height - 30;        // Вся оставшаяся высота
+            break;
+
+        case ANCHOR_SIDE_PANEL:
+            // Панель параметров занимает правую часть экрана
+            sprite->w = Display_Width - ((Display_Width * 60) / 100); // Оставшиеся 40% ширины
+            sprite->x = Display_Width - sprite->w;                    // Впритык к правому краю
+            sprite->y = 30;                                           // Смещение под статус-бар
+            sprite->h = Display_Height - 30;
+            break;
+
         case ANCHOR_CENTER:
             sprite->x = (Display_Width - sprite->w) / 2;
             sprite->y = (Display_Height - sprite->h) / 2;
             break;
+
         case ANCHOR_FILL_REMAINING:
-            sprite->x = 0;
+            sprite->x = 0; sprite->y = 30;
             sprite->w = Display_Width;
             sprite->h = Display_Height - sprite->y;
             break;
     }
 
-    // 2. Если размеры ИЗМЕНИЛИСЬ, нужно безопасно перевыделить буфер в ОЗУ
-    if (sprite->w != old_w || sprite->h != old_h) {
-        // Освобождаем старый буфер, чтобы избежать утечки памяти
-        if (sprite->is_allocated && sprite->data != NULL) {
-            heap_caps_free(sprite->data);
-            sprite->data = NULL;
-        }
-
-        // Выделяем новый буфер под новые размеры W и H
-        sprite->data = (uint16_t*)heap_caps_malloc(sprite->w * sprite->h * 2, 0);
-        
-        if (sprite->data == NULL) {
-            sprite->is_allocated = false;
-            // Здесь можно зажечь отладочный светодиод — это значит, что в куче STM32 закончилось место!
-            while(1); 
-        }
-        sprite->is_allocated = true;
+    // Нарезаем память из статического пула под получившиеся размеры
+    sprite->data = (uint16_t*)heap_caps_malloc(sprite->w * sprite->h * 2, 0);
+    
+    if (sprite->data == NULL) {
+        sprite->is_allocated = false;
+        while(1); // Зависание сработает, только если вы запросили больше ~300 КБ суммарно
     }
+    sprite->is_allocated = true;
 }
 

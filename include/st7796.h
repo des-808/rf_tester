@@ -9,7 +9,9 @@ typedef enum {
     ANCHOR_TOP_LEFT,      // Прижат к верхнему левому углу (Статус-бар, меню)
     ANCHOR_BOTTOM_LEFT,   // Прижат к нижнему левому углу (Нижняя панель, кнопки)
     ANCHOR_CENTER,        // Строго по центру экрана (Всплывающие окна, прицелы)
-    ANCHOR_FILL_REMAINING // Особый тип: растягивается на всё оставшееся место (Основной экран)
+    ANCHOR_FILL_REMAINING, // Особый тип: растягивается на всё оставшееся место (Основной экран)
+    ANCHOR_GRAPH,          // Спрайт графика (займет левую половину)
+    ANCHOR_SIDE_PANEL      // Спрайт параметров (займет правую половину)
 } SpriteAnchor_t;
 
 typedef struct {
@@ -64,6 +66,8 @@ typedef struct {
 
 // ✅ DMA-совместимый allocator для STM32 (аналог heap_caps_malloc)
 void* heap_caps_malloc(size_t size, uint32_t caps);
+void heap_caps_reset_pool(void);
+void heap_caps_free(void* ptr);
 //static void ST7796_WriteCmd(uint8_t cmd);
 //static void ST7796_WriteData(const uint8_t *data, size_t len);
 //static void ST7796_WriteDataByte(uint8_t data);

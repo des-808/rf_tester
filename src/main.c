@@ -97,39 +97,21 @@ Sprite_t* my_sprites[] = {
  * @param rotation: 0 - Книжная, 1 - Альбомная
  */
 void UI_ChangeRotation(uint8_t rotation) {
-    // 1. Поворачиваем физический чип дисплея (обновляет Display_Width и Display_Height)
+    // 1. Поворачиваем физический чип дисплея
     ST7796_SetRotation(rotation);
 
-    // 2. В цикле пересчитываем позиции ВСЕХ спрайтов.
-    // Внутри этой функции старая память освобождается, а новая выделяется под новые W и H!
+    // 2. Сбрасываем пул памяти
+    heap_caps_reset_pool();
+
+    // 3. Пересчитываем геометрию и нарезаем адреса в пуле под новые W и H
     for (uint8_t i = 0; i < TOTAL_SPRITES; i++) {
         Sprite_UpdatePosition(my_sprites[i]);
     }
 
-    // 3. ОЧИЩАЕМ динамические буферы напрямую через структуры спрайтов
-    // Безопасно очищаем статус-бар, если память успешно выделилась
-    if (status_bar_sprite.is_allocated && status_bar_sprite.data != NULL) {
-        uint32_t sb_size = (uint32_t)status_bar_sprite.w * status_bar_sprite.h;
-        for (uint32_t i = 0; i < sb_size; i++) {
-            status_bar_sprite.data[i] = RGB565_BLACK; 
-        }
-    }
+    // 4. ВЫЗЫВАЕМ ОТРИСОВКУ: Наполняем только что выделенную память правильной графикой
+    UI_RenderActiveScreen();
 
-    // Безопасно очищаем основной экран
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data != NULL) {
-        uint32_t ms_size = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
-        for (uint32_t i = 0; i < ms_size; i++) {
-            main_screen_sprite.data[i] = RGB565_BLACK;
-        }
-    }
-
-    // 4. Пишем новый текст под новую ориентацию в динамический буфер
-    // Флаг update_after_print ставим в false, чтобы не вызывать PushSprite раньше времени
-    if (main_screen_sprite.is_allocated) {
-        lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!", RGB565_BLACK, &main_screen_sprite, false);
-    }
-
-    // 5. И только теперь выталкиваем обновленные, перевыделенные и заполненные спрайты на экран
+    // 5. Выталкиваем готовый и чистый кадр на физический экран дисплея
     for (uint8_t i = 0; i < TOTAL_SPRITES; i++) {
         if (my_sprites[i]->is_allocated && my_sprites[i]->data != NULL) {
             ST7796_PushSprite(my_sprites[i]);
@@ -287,9 +269,9 @@ int main(void)
 
   ST7796_Init();
   Sprite_create_XY(&status_bar_sprite, 320, 30,0,0,ANCHOR_TOP_LEFT); // например, 40px высота
-  Buzzer_Short();HAL_Delay(1000);
+  //Buzzer_Short();HAL_Delay(1000);
   Sprite_create_XY(&main_screen_sprite, 320, 449,0,30,ANCHOR_FILL_REMAINING); // например, 440px высота
-  Buzzer_Short();HAL_Delay(1000);
+  //Buzzer_Short();HAL_Delay(1000);
 //Sprite_fill(&status_bar_sprite,RGB565_BLACK);
 //Sprite_fill(&main_screen_sprite,RGB565_BLACK);
   //ST7796_SetRotation(0);
