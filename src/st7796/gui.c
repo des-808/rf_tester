@@ -19,19 +19,21 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ST7796_SetRotation(rotation);
     heap_caps_reset_pool();
 
-    // 2. Настраиваем корневую сетку (Разделение по горизонтали: 10% и 90%)
+    // 2. Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
     root_grid.type = UI_TYPE_GRID;
     root_grid.children_count = 0;
     root_grid.layout.grid.rows_count = 2;
     root_grid.layout.grid.cols_count = 1;
-    root_grid.layout.grid.row_definitions[0] = 7; // 10% под статус-бар
-    root_grid.layout.grid.row_definitions[1] = 93; // 90% под рабочую зону
+    
+    // ИСПРАВЛЕНО: Явно указываем индексы массива!
+    root_grid.layout.grid.row_definitions[0] = 10; // 10% под статус-бар
+    root_grid.layout.grid.row_definitions[1] = 90; // 90% под рабочую зону
     root_grid.layout.grid.col_definitions[0] = 100;
 
     // 3. Подключаем Статус-бар в ячейку (строка 0, колонка 0)
     status_bar_node.type = UI_TYPE_SPRITE;
     status_bar_node.sprite = &status_bar_sprite;
-    status_bar_node.render_callback = Draw_StatusBar_Content; // <--- ПРИВЯЗАЛИ КОЛБЭК
+    status_bar_node.render_callback = Draw_StatusBar_Callback;
     status_bar_node.grid_row = 0;
     status_bar_node.grid_col = 0;
     root_grid.children[root_grid.children_count++] = &status_bar_node;
@@ -44,15 +46,17 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.grid_col = 0;
     main_work_grid.layout.grid.rows_count = 1;
     main_work_grid.layout.grid.cols_count = 2;
-    main_work_grid.layout.grid.row_definitions[0] = 100;
-    main_work_grid.layout.grid.col_definitions[0] = 70; // 70% ширины под График КСВ
-    main_work_grid.layout.grid.col_definitions[1] = 30; // 30% ширины под цифры SWR/FREQ
+    
+    // ИСПРАВЛЕНО: Явно указываем индексы массива!
+    main_work_grid.layout.grid.row_definitions[0] = 100; // Вся высота рабочей зоны
+    main_work_grid.layout.grid.col_definitions[0] = 70;  // 70% ширины под График
+    main_work_grid.layout.grid.col_definitions[1] = 30;  // 30% ширины под цифры
     root_grid.children[root_grid.children_count++] = &main_work_grid;
 
     // 5. Сажаем спрайт Графика во вложенную сетку (0, 0) — левая часть
     graph_node.type = UI_TYPE_SPRITE;
     graph_node.sprite = &graph_sprite;
-    graph_node.render_callback = Draw_Graph_Content; // <--- ПРИВЯЗАЛИ КОЛБЭК
+    graph_node.render_callback = Draw_Graph_Content; // Ваша функция рисования сетки
     graph_node.grid_row = 0;
     graph_node.grid_col = 0;
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
@@ -60,22 +64,17 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // 6. Сажаем спрайт Цифр во вложенную сетку (0, 1) — правая часть
     digits_node.type = UI_TYPE_SPRITE;
     digits_node.sprite = &main_screen_sprite;
-    digits_node.render_callback = Draw_Digits_Content; // <--- ПРИВЯЗАЛИ КОЛБЭК
+    digits_node.render_callback = Draw_Digits_Content; // Ваша функция рисования кнопок/тача
     digits_node.grid_row = 0;
     digits_node.grid_col = 1;
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
 
-    // ====================================================================
-    // ЗАПУСК КОНТЕЙНЕРОВ: Расчет размеров и нарезка памяти для всех окон!
-    // Внешние габариты берутся из текущих Display_Width и Display_Height
-    // ====================================================================
+    // 7. ЗАПУСК КОНТЕЙНЕРОВ: Расчет размеров по всему дереву
     extern uint16_t Display_Width;
     extern uint16_t Display_Height;
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
-    // ====================================================================
-    // ЗАПУСКОТРИСОВКИ: Полный рекурсивный вывод дерева интерфейса на экран
-    // ====================================================================
+    // 8. ЗАПУСК ОТРИСОВКИ: Вывод на экран
     UI_DrawTree(&root_grid);
 }
 
@@ -144,7 +143,8 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
 
         // Рекурсивно распределяем детей по рассчитанным ячейкам
         for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
-            UIElement_t* child = element->children[i];
+            //UIElement_t* child = element->children[i];
+            UIElement_t* child = (UIElement_t*)element->children[i];
             
             int16_t cell_x = element->x;
             int16_t cell_y = element->y;
@@ -188,22 +188,12 @@ void UI_DrawTree(UIElement_t* element) {
         return;
     }
 
-    for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+    /* for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
         UI_DrawTree(element->children[i]);
+    } */
+    for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+        UI_DrawTree((UIElement_t*)element->children[i]); // Явное приведение к указателю
     }
-}
-
-
-
-// Функция для отрисовки контента внутри статус-бара
-void Draw_StatusBar_Content(Sprite_t* s) {
-    /* // Заливаем темно-серым фоном (RGB565 = 0x31A6)
-    uint32_t size = (uint32_t)s->w * s->h;
-    for(uint32_t i = 0; i < size; i++) s->data[i] = 0x31A6;
-
-    lcd_print_to_buffer_ex(10, 7, RGB565_WHITE, "RF-TESTER H7", 0x31A6, s, false);
-    lcd_print_to_buffer_ex(s->w - 70, 7, RGB565_GREEN, "BAT: 85%", 0x31A6, s, false); */
-    Draw_StatusBar_Callback(s);
 }
 
 extern int batteryLevel;
@@ -226,6 +216,7 @@ uint8_t battery_Level = 17;
 static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8_t* bitmap, uint16_t bmp_w, uint16_t bmp_h, uint16_t color);
 /**
  * @brief Полностью инвариантный render_callback для статус-бара
+ * // Функция для отрисовки контента внутри статус-бара
  */
 void Draw_StatusBar_Callback(Sprite_t *sprite) {
     if (!sprite || !sprite->is_allocated || !sprite->data) return;
@@ -319,29 +310,61 @@ static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8
 
 // Функция для отрисовки сетки графика
 void Draw_Graph_Content(Sprite_t* s) {
-    lcd_print_to_buffer_ex(10, 10, RGB565_YELLOW, "SWR GRAPH", RGB565_BLACK, s, false);
-    // Сюда позже добавим сетку Брезенхема
+    if (!s || !s->data) return;
+
+    // Заливаем фон графика черным
+    uint32_t size = (uint32_t)s->w * s->h;
+    memset(s->data, 0, size * 2);
+
+    // Выводим текст заголовка
+    lcd_print_to_buffer(10, 10, RGB565_YELLOW, "SWR GRAPH", RGB565_BLACK, s);
+
+    // Рисуем рамку вокруг графика с отступом 5 пикселей от краев спрайта.
+    // Верхняя линия
+    for (uint16_t x = 5; x < s->w - 5; x++) s->data[25 * s->w + x] = 0x7BEF; // Серый цвет
+    // Нижня линия
+    for (uint16_t x = 5; x < s->w - 5; x++) s->data[(s->h - 5) * s->w + x] = 0x7BEF;
+    // Левая линия
+    for (uint16_t y = 25; y < s->h - 5; y++) s->data[y * s->w + 5] = 0x7BEF;
+    // Правая линия
+    for (uint16_t y = 25; y < s->h - 5; y++) s->data[y * s->w + (s->w - 5)] = 0x7BEF;
 }
 
 
 // Подключаем глобальные переменные строк из main.c
-extern char button_status_msg[];
-extern char touch_status_msg[];
+extern char button_status_msg[32];
+extern char touch_status_msg[32];
 // Функция для отрисовки контента внутри правого экрана (Цифры/Тач)
 void Draw_Digits_Content(Sprite_t* s) {
     if (!s || !s->data) return;
 
-    // 1. Заголовок режима (Сверху по центру)
-    int16_t title_x = (s->w - lcd_get_str_width("Welcome Mode")) / 2;
-    lcd_print_to_buffer(title_x, 15, RGB565_BLUE, "Welcome Mode", RGB565_BLACK, s);
+    //extern char button_status_msg[32];
+    //extern char touch_status_msg[32];
 
-    // 2. Статус ФИЗИЧЕСКИХ КНОПОК (Чуть выше центра)
-    int16_t btn_x = (s->w - lcd_get_str_width(button_status_msg)) / 2;
-    lcd_print_to_buffer(btn_x, (s->h / 2) - 20, RGB565_GREEN, button_status_msg, RGB565_BLACK, s);
+    // КРИТИЧЕСКИ ВАЖНО ДЛЯ H7: Сбрасываем кэш данных для этих двух строк,
+    // чтобы графический движок гарантированно увидел новые символы из main.c
+    /* SCB_CleanDCache_by_Addr((uint32_t*)button_status_msg, 32);
+    SCB_CleanDCache_by_Addr((uint32_t*)touch_status_msg, 32);
+    __DSB(); */
 
-    // 3. Статус ТАЧСКРИНА (Чуть ниже центра, красивым голубым цветом RGB565_CYAN)
-    int16_t touch_x = (s->w - lcd_get_str_width(touch_status_msg)) / 2;
-    lcd_print_to_buffer(touch_x, (s->h / 2) + 10, RGB565_CYAN, touch_status_msg, RGB565_BLACK, s);
+    // Заливаем фон правого окна черным, чтобы старый текст не накладывался на новый
+    uint32_t size = (uint32_t)s->w * s->h;
+    memset(s->data, 0, size * 2);
+
+    // Выводим заголовок
+    lcd_print_to_buffer(10, 10, RGB565_BLUE, "Welcome Mode", RGB565_BLACK, s);
+    
+    // Выводим статус физических кнопок
+    int btn_w = lcd_get_str_width(button_status_msg);
+    int16_t btn_x = (s->w - btn_w) / 2;
+    if (btn_x < 0) btn_x = 10; // Защита от вылета влево
+    lcd_print_to_buffer(btn_x, 50, RGB565_GREEN, button_status_msg, RGB565_BLACK, s);
+
+    // Выводим статус тачскрина
+    int tch_w = lcd_get_str_width(touch_status_msg);
+    int16_t tch_x = (s->w - tch_w) / 2;
+    if (tch_x < 0) tch_x = 10;
+    lcd_print_to_buffer(tch_x, 90, RGB565_CYAN, touch_status_msg, RGB565_BLACK, s);
 }
 
 extern uint8_t screen_rotation; // Берем текущий поворот из st7796.c

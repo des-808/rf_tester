@@ -439,6 +439,10 @@ int16_t lcd_get_str_width(const char *str) {
             int char_width = get_real_char_width(relative_idx);
             width += char_width + current_font->spacing;
         } else {
+            // Защита: если это реальный конец строки (\0), то width увеличивать не нужно, выходим!
+            if (*str == '\0') {
+                break;
+            }
             width += 1 + current_font->spacing;
             str++;
         }

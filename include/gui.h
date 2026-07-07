@@ -65,7 +65,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
 void UI_DrawTree(UIElement_t* element);
 
 
-void Draw_StatusBar_Content(Sprite_t* s);
+void Draw_StatusBar_Callback(Sprite_t* s);
 void Draw_Digits_Content(Sprite_t* s);
 void Draw_Graph_Content(Sprite_t* s);
 

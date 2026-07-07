@@ -160,10 +160,13 @@ void LED_Blink(uint32_t delay)
 	HAL_Delay(500-1);
 }
 
-char button_status_msg[20] = "No btn"; // Глобальная строка для UI
-char touch_status_msg[64] = "No touch"; // Строка для UI
+char button_status_msg[32] = "No btn"; // Глобальная строка для UI
+char touch_status_msg[32] = "No touch"; // Строка для UI
 uint16_t last_touch_x = 0;              // Координата X для логики меню
 uint16_t last_touch_y = 0;              // Координата Y для логики меню
+
+// Глобальный флаг: true — отрисовать экран, false — ждать изменений
+bool ui_needs_refresh = true; 
 /* USER CODE END 0 */
 
 /**
@@ -174,6 +177,7 @@ uint16_t last_touch_y = 0;              // Координата Y для лог�
  extern PCF8574_HandleTypeDef pcf_handle;
  extern Buttons_HandleTypeDef btn_s;
  I2C_Scanner_HandleTypeDef i2c_scanner;
+ extern UIElement_t root_grid;
 uint8_t lastButtonState[8] = {0};
  void ScanButtons(void);
  void INIT_FT6336U(void);
@@ -330,11 +334,8 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
               snprintf(button_status_msg, sizeof(button_status_msg), "No btn");
           } 
           PCF8574_AcknowledgeChanges(&pcf_handle);
-      // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
-      // Функция UI_DrawTree сама вызовет колбэки, очистит буферы, 
-      // вставит актуальный текст кнопки и вытолкнет чистую графику по DMA SPI.
-      extern UIElement_t root_grid; // Объявляем корень дерева
-      UI_DrawTree(&root_grid);
+          button_status_msg[31] = '\0'; // Гарантированный конец строки Си
+      ui_needs_refresh = true; // Запрос перерисовки
       }
       
       // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
@@ -363,23 +364,25 @@ if (ft6336u.has_touch) {
 
         // Формируем красивую строку для вывода на экран
         snprintf(touch_status_msg, sizeof(touch_status_msg), "Touch: (%d, %d)", last_touch_x, last_touch_y);
-
+        touch_status_msg[31] = '\0'; // Гарантированный конец строки Си
         // --- ЛОГИКА НАЖАТИЯ НА КНОПКИ (Пример) ---
         // Теперь вы можете использовать last_touch_x и last_touch_y для обработки меню:
         // if (last_touch_x > 400 && last_touch_y < 40) { ... нажали на кнопку Настроек ... }
 
         ft6336u.has_touch = false;  // сброс флага тача
         Buzzer_Short();             // Пищим при успешном нажатии
-        // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
-      // Функция UI_DrawTree сама вызовет колбэки, очистит буферы, 
-      // вставит актуальный текст кнопки и вытолкнет чистую графику по DMA SPI.
-      extern UIElement_t root_grid; // Объявляем корень дерева
-      UI_DrawTree(&root_grid);
+        ui_needs_refresh = true; // Запрос перерисовки
+    }
+    // 3. УМНАЯ ОТРИСОВКА ЭКРАНА
+    if (ui_needs_refresh) {
+         
+        UI_DrawTree(&root_grid); // Отрисовка только при изменениях
+        ui_needs_refresh = false; // Сброс флага
     }
 
 ////////////////////////
     // Другая логика (не блокирующая)
-    HAL_Delay(1); // только для watchdog, если нужен
+    HAL_Delay(5); // только для watchdog, если нужен
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
