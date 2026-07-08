@@ -85,9 +85,12 @@ extern Sprite_t graph_sprite; // если нужен доступ к графи�
 
 
 
-extern UIElement_t* ui_btn_row;
-extern UIElement_t* ui_touch_row;
-extern UIElement_t* ui_swr_row; 
+extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
+extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
+extern UIElement_t* ui_swr_row;   // Указатель на элемент КСВ из gui.c
+
+uint16_t last_touch_x = 0;              // Координата X для логики меню
+uint16_t last_touch_y = 0;              // Координата Y для логики меню
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -166,10 +169,6 @@ void LED_Blink(uint32_t delay)
 	HAL_Delay(500-1);
 }
 
-//char button_status_msg[32] = "No btn"; // Глобальная строка для UI
-//char touch_status_msg[32] = "No touch"; // Строка для UI
-uint16_t last_touch_x = 0;              // Координата X для логики меню
-uint16_t last_touch_y = 0;              // Координата Y для логики меню
 
 // Глобальный флаг: true — отрисовать экран, false — ждать изменений
 bool ui_needs_refresh = true; 
@@ -276,42 +275,7 @@ int main(void)
   //lcd_set_font(&font_segoe_struct);
   // Или Arial 9:
    lcd_set_font(&font_arial_9_struct);
-   /* uint8_t rotation = 0;
-  UI_ChangeRotation(rotation);
-
-   lcd_print_to_buffer_ex(22, 32, RGB565_RED, "Привет!  МОЯ ЗАЙКА !!!",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(52, 60, RGB565_WHITE, "Как у Тебя Дела??",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(78, 88, RGB565_YELLOW, "Я соскучился..",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(82, 116, RGB565_BLUE, "Люблю тебя!!!!",RGB565_BLACK,&main_screen_sprite,false);
-   //lcd_set_font(&font_arial_9_struct);// переключаем шрифт
-   lcd_print_to_buffer_ex(122, 144, RGB565_BROWN, "И да..",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(70, 170, RGB565_GREEN, "Доброе утро!!!!!",RGB565_BLACK,&main_screen_sprite,false);
-   
-   lcd_set_font(&font_segoe_struct);
-   lcd_print_to_buffer_ex(2, 206, RGB565(0, 255, 0), "Привет, STM32!",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(2, 232, RGB565(255, 0, 0), "Текст на русском",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(2, 258, RGB565(0, 255, 255), "Ку Ку Ёпта!!",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(2, 284, RGB565(0,0,  255), "Как говорится: ",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(70, 310, RGB565(200,200,200), "ГОВНО",RGB565_BLACK,&main_screen_sprite,false);
-   lcd_print_to_buffer_ex(150, 310, RGB565(255,255,  255), "СЛУЧАЕТСЯ!!!!!",RGB565_BLACK,&main_screen_sprite,true);
-
-  drawStatusBar(&status_bar_sprite);
-
-  HAL_Delay(3000);
-  rotation = 1;
-  UI_ChangeRotation(rotation);
-
- 
-
-  HAL_Delay(3000);
-  rotation = 2;
-  UI_ChangeRotation(rotation);
-  HAL_Delay(3000);
-  rotation = 3;
-  UI_ChangeRotation(rotation);
-  HAL_Delay(3000);
-  rotation = 0;
-  UI_ChangeRotation(rotation); */
+   //uint8_t rotation = 0;
 
   // После MX_I2C1_Init()
 /* I2C_Scanner_Init(&i2c_scanner, &hi2c1);
@@ -332,10 +296,6 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
           Buttons_Update(&btn_s);
           uint8_t btn = PCF8574_Read8(&pcf_handle);
           if (btn != 0xFF) {
-              // Пишем в глобальный буфер, а не на экран напрямую!
-              //snprintf(button_status_msg, sizeof(button_status_msg), "Btn 0x%02X", btn);
-              // Движок сам поймет, что изменилась только строка кнопки, 
-              // локально сотрет её старое положение и впишет новое значение!
               UI_SetText(ui_btn_row, "Btn 0x%02X", btn); 
              Buzzer_Short();
           }
@@ -344,24 +304,7 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
               UI_SetText(ui_btn_row, "No btn");
           } 
           PCF8574_AcknowledgeChanges(&pcf_handle);
-          //button_status_msg[31] = '\0'; // Гарантированный конец строки Си
-          //ui_needs_refresh = true; // Запрос перерисовки
-          // ПОМЕЧАЕМ НА ОБНОВЛЕНИЕ ТОЛЬКО ПРАВЫЙ СПРАЙТ ЦИФР! 
-          // Статус-бар и График при этом вообще не будут перерисовываться и слаться по SPI!
-          //GUI_InvalidateSprite(&main_screen_sprite);
-
-          // Вычисляем, где в спрайтеdigits_node выводится этот текст. 
-          // Координата Y у нас была 50. Высота шрифта, например, 16. Ширина окна, например, 144.
-          // Помечаем грязным ТОЛЬКО маленький прямоугольник шириной 144 и высотой 16 пикселей на высоте 50!
-          //GUI_InvalidateRect(&main_screen_sprite, 0, 50, main_screen_sprite.w, 16); 
-
       }
-      
-      // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
-      // Функция UI_DrawTree сама вызовет колбэки, очистит буферы, 
-      // вставит актуальный текст кнопки и вытолкнет чистую графику по DMA SPI.
-      //extern UIElement_t root_grid; // Объявляем корень дерева
-      //UI_DrawTree(&root_grid);
   
     // Отладка: мигнуть LED
     //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -378,13 +321,9 @@ if (ft6336u.has_touch) {
         uint16_t raw_x, raw_y;
         FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем 1 точку
 
-        // КРИТИЧЕСКИ ВАЖНО: Пересчитываем координаты под текущий поворот экрана!
+        // Пересчет координат под текущий поворот экрана
         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-
-        // Формируем красивую строку для вывода на экран
-        //snprintf(touch_status_msg, sizeof(touch_status_msg), "Touch: (%d, %d)", last_touch_x, last_touch_y);
-        //touch_status_msg[31] = '\0'; // Гарантированный конец строки Си
-        // ... (считывание и конвертация координат) ...
+        // Передаем координаты в текстовый блок тача
         UI_SetText(ui_touch_row, "Touch: (%d, %d)", last_touch_x, last_touch_y);
         // --- ЛОГИКА НАЖАТИЯ НА КНОПКИ (Пример) ---
         // Теперь вы можете использовать last_touch_x и last_touch_y для обработки меню:
@@ -392,17 +331,9 @@ if (ft6336u.has_touch) {
 
         ft6336u.has_touch = false;  // сброс флага тача
         Buzzer_Short();             // Пищим при успешном нажатии
-        //ui_needs_refresh = true; // Запрос перерисовки
-        // ПОМЕЧАЕМ НА ОБНОВЛЕНИЕ ТОЛЬКО ПРАВЫЙ СПРАЙТ ЦИФР! 
-          // Статус-бар и График при этом вообще не будут перерисовываться и слаться по SPI!
-          //GUI_InvalidateSprite(&main_screen_sprite);
     }
-    // 3. УМНАЯ ОТРИСОВКА ЭКРАНА
-    //if (ui_needs_refresh) {
-         
+    // 3. УМНАЯ ОТРИСОВКА ЭКРАНА{
         UI_DrawTree(&root_grid); // Отрисовка только при изменениях
-        //ui_needs_refresh = false; // Сброс флага
-    //}
 
 ////////////////////////
     // Другая логика (не блокирующая)

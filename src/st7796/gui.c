@@ -346,12 +346,19 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
 void UI_DrawTree(UIElement_t* element) {
     if (!element) return;
 
+    // ШАГ 1: Отрисовка физического окна (Спрайт или контейнер со спрайтом)
     if (element->sprite != NULL) {
         Sprite_t* s = element->sprite;
         
+        // ВОЗВРАЩАЕМ ОПТИМИЗАЦИЮ: шлем данные, только если спрайт "загрязнен"
         if (s->is_allocated && s->data != NULL && s->needs_render) {
             
-            // Если у элемента принудительно задан ручной колбэк — выполняем его (для графиков)
+            // Если координаты грязной зоны схлопнулись — раскрываем на весь размер (защита)
+            if (s->dirty_x2 == 0 && s->dirty_y2 == 0) {
+                s->dirty_x1 = 0; s->dirty_y1 = 0;
+                s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
+            }
+
             if (element->render_callback != NULL) {
                 element->render_callback(element);
             } else {
@@ -370,23 +377,51 @@ void UI_DrawTree(UIElement_t* element) {
                     case UI_TYPE_RADIO_BUTTON:
                         UI_RenderToggle(element);
                         break;
-                    // ИСПРАВЛЕНО: случай с UI_TYPE_SPRITE отсюда полностью удален
+
+                    // КРИТИЧЕСКИЙ ФИКС: Если это контейнеры, и они затребовали рендер,
+                    // принудительно заставляем всех их детей (текстовые блоки) перерисовать себя в ОЗУ!
+                    case UI_TYPE_STACK_PANEL:
+                    case UI_TYPE_GRID:
+                        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+                            UIElement_t* child = (UIElement_t*)element->children[i];
+                            // Если у ребенка тип TEXT_BLOCK — вызываем его отрисовку
+                            if (child->type == UI_TYPE_TEXT_BLOCK) {
+                                Draw_GeneralText_Callback(child);
+                            } else if (child->render_callback != NULL) {
+                                child->render_callback(child);
+                            }
+                        }
+                        break;
+
                     default: break;
                 }
             }
 
-            // Особый случай для контейнеров: если внутри них лежат другие компоненты —
-            // заставляем их отрисоваться в этот же буфер ОЗУ
-            if (element->type == UI_TYPE_STACK_PANEL || element->type == UI_TYPE_GRID) {
-                for (uint8_t i = 0; i < element->children_count && i < 16; i++) {
-                    UI_DrawTree((UIElement_t*)element->children[i]);
+            // Если это StackPanel — принудительно просим всех детей (текстовые строки)
+            // нарисовать свои буквы в этот же открытый буфер ОЗУ
+            if (element->type == UI_TYPE_STACK_PANEL) {
+                for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+                    UIElement_t* child = (UIElement_t*)element->children[i];
+                    if (child->render_callback != NULL) {
+                        child->render_callback(child);
+                    }
                 }
             }
 
-            // Выталкиваем грязную зону
+            // ОТПРАВКА: Шлем в контроллер ST7796 строго грязный прямоугольник
             ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
-            s->dirty_x1 = 0; s->dirty_y1 = 0; s->dirty_x2 = 0; s->dirty_y2 = 0;
+            
+            // КРИТИЧЕСКИЙ СБРОС: Сбрасываем координаты строго ПОСЛЕ отправки всего узла!
+            s->dirty_x1 = 0; s->dirty_y1 = 0;
+            s->dirty_x2 = 0; s->dirty_y2 = 0;
             s->needs_render = false; 
+        }
+    }
+
+    // ШАГ 2: Безусловный рекурсивный обход детей для Grid и StackPanel
+    if (element->type == UI_TYPE_GRID || element->type == UI_TYPE_STACK_PANEL) {
+        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+            UI_DrawTree((UIElement_t*)element->children[i]);
         }
     }
 }
@@ -751,26 +786,24 @@ void Draw_GeneralText_Callback(UIElement_t* el) {
     int16_t local_x = el->x - s->x;
     int16_t local_y = el->y - s->y;
 
-    // 2. Очищаем ТОЛЬКО пространство этой конкретной строки (Dirty Rect) цветом фона
-    // Чтобы старые буквы не накладывались на новые при изменении текста
+    // 2. Очищаем пространство этой конкретной строки цветом фона (Dirty Rect)
     for (int16_t y = local_y; y < local_y + el->h; y++) {
         for (int16_t x = local_x; x < local_x + el->w; x++) {
             s->data[y * s->w + x] = RGB565_BLACK; 
         }
     }
 
-    // 3. Активируем нужный шрифт
+    // 3. Активируем шрифт
     lcd_set_font(&font_arial_9_struct);
-
+    
     // Получаем метрики строки и шрифта
-    int str_w = lcd_get_str_width(el->text_content);
+    int str_w = lcd_get_str_width(el->text_content); // Текст берется из САМОГО элемента!
     uint16_t font_h = current_font->char_height;
 
-    // Базовые стартовые значения координат
     int16_t text_x = local_x; 
     int16_t text_y = local_y; 
 
-    // 4. МАТЕМАТИКА ВЫРАВНИВАНИЯ ПО ГОРИЗОНТАЛИ (X)
+    // 4. МАТЕМАТИКА ГОРИЗОНТАЛЬНОГО ВЫРАВНИВАНИЯ (X)
     switch (el->horizontal_alignment) {
         case HORIZONTAL_ALIGN_LEFT:
             text_x = local_x + 5; // Отступ 5 пикселей слева
@@ -783,29 +816,24 @@ void Draw_GeneralText_Callback(UIElement_t* el) {
             break;
     }
 
-    // 5. МАТЕМАТИКА ВЫРАВНИВАНИЯ ПО ВЕРТИКАЛИ (Y)
+    // 5. МАТЕМАТИКА ВЕРТИКАЛЬНОГО ВЫРАВНИВАНИЯ (Y)
     switch (el->vertical_alignment) {
         case VERTICAL_ALIGN_TOP:
-            // Прижимаем к верхнему краю ячейки с небольшим отступом (например, 2 пикселя)
             text_y = local_y + 2;
             break;
-
         case VERTICAL_ALIGN_CENTER:
-            // Классическое центрирование по высоте ячейки
             text_y = local_y + (el->h - font_h) / 2;
             break;
-
         case VERTICAL_ALIGN_BOTTOM:
-            // Прижимаем к нижнему краю ячейки с отступом в 2 пикселя
             text_y = local_y + el->h - font_h - 2;
             break;
     }
 
-    // 6. СТРОГАЯ ЗАЩИТА: если текст шире или выше ячейки, не даем ему улететь за левую/верхнюю границу
+    // 6. Защита от вылета текста за левую/верхнюю границу
     if (text_x < local_x) text_x = local_x;
     if (text_y < local_y) text_y = local_y;
 
-    // 5. Печатаем живой текст, сохраненный внутри этого элемента интерфейса
+    // 7. Печатаем текст. Цвет делаем зеленым для динамики, белым для статики (по вашему желанию)
     lcd_print_to_buffer(text_x, text_y, RGB565_GREEN, el->text_content, RGB565_BLACK, s);
 }
 
