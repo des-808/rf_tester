@@ -31,10 +31,6 @@ UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
 UIElement_t* ui_touch_row = NULL;
 
-
- 
-
-
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // 1. Поворачиваем железо дисплея и полностью очищаем старый пул памяти
     ST7796_SetRotation(rotation);
@@ -99,9 +95,9 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el->type = UI_TYPE_TEXT_BLOCK;
     el->sprite = &main_screen_sprite;
     el->render_callback = NULL; // Ручной колбэк не нужен, отработает автоматика TextBlock!
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     el->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    strcpy(el->text_content, "--ИЗМЕРЕНИЯ--");
+    strcpy(el->text_content, "-ИЗМЕРЕНИЯ-");
     digits_node.children[digits_node.children_count++] = el;
 
     // --- Строка 2: Динамическое значение КСВ ---
@@ -119,9 +115,9 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el->type = UI_TYPE_TEXT_BLOCK;
     el->sprite = &main_screen_sprite;
     el->render_callback = NULL;
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     el->vertical_alignment = VERTICAL_ALIGN_TOP;
-    strcpy(el->text_content, "------------");
+    strcpy(el->text_content, "-----------");
     digits_node.children[digits_node.children_count++] = el;
 
     // --- Строка 4: Пояснение "АППАРАТУРА" ---
@@ -129,7 +125,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el->type = UI_TYPE_TEXT_BLOCK;
     el->sprite = &main_screen_sprite;
     el->render_callback = NULL;
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     el->vertical_alignment = VERTICAL_ALIGN_CENTER;
     strcpy(el->text_content, "АППАРАТУРА");
     digits_node.children[digits_node.children_count++] = el;
@@ -139,7 +135,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_btn_row->type = UI_TYPE_TEXT_BLOCK;
     ui_btn_row->sprite = &main_screen_sprite;
     ui_btn_row->render_callback = NULL;
-    ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     ui_btn_row->vertical_alignment = VERTICAL_ALIGN_CENTER;
     strcpy(ui_btn_row->text_content, "No btn");
     digits_node.children[digits_node.children_count++] = ui_btn_row;
@@ -159,7 +155,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el->type = UI_TYPE_TEXT_BLOCK;
     el->sprite = &main_screen_sprite;
     el->render_callback = NULL;
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     el->vertical_alignment = VERTICAL_ALIGN_CENTER;
     strcpy(el->text_content, "v1.0.0 Stable");
     digits_node.children[digits_node.children_count++] = el;

@@ -184,7 +184,6 @@ bool ui_needs_refresh = true;
  I2C_Scanner_HandleTypeDef i2c_scanner;
  extern UIElement_t root_grid;
 uint8_t lastButtonState[8] = {0};
- void ScanButtons(void);
  void INIT_FT6336U(void);
 int main(void)
 {
@@ -239,52 +238,24 @@ int main(void)
   Buttons_Init(&btn_s, &pcf_handle);
   //FT6336U_Init(&ft6336u, &hi2c1, 0x38);  // адрес 0x38
   INIT_FT6336U();
-
   //HAL_SD_GetCardCID(&hmmc1, &pCID);
   //HAL_SD_GetCardCSD(&hmmc1, &pCSD);
 	//HAL_SD_GetCardInfo(&hmmc1, &pCardInfo);
 	HAL_Delay(150);
   /* USER CODE BEGIN 2 */
-
-  
-  
-
   ST7796_Init();
-  //Sprite_create_XY(&status_bar_sprite, 320, 30,0,0,ANCHOR_TOP_LEFT); // например, 40px высота
-  //Buzzer_Short();HAL_Delay(1000);
-  //Sprite_create_XY(&main_screen_sprite, 320, 449,0,30,ANCHOR_FILL_REMAINING); // например, 440px высота
-  //Buzzer_Short();HAL_Delay(1000);
-//Sprite_fill(&status_bar_sprite,RGB565_BLACK);
-//Sprite_fill(&main_screen_sprite,RGB565_BLACK);
-  //ST7796_SetRotation(0);
-  /* ST7796_TestRotation(main_screen_sprite);
-  HAL_Delay(4000);
-  ST7796_SetRotation(1);
-  ST7796_TestRotation(main_screen_sprite);
-  HAL_Delay(4000);
-  ST7796_SetRotation(2);
-  ST7796_TestRotation(main_screen_sprite);
-  HAL_Delay(4000);
-  ST7796_SetRotation(3);
-  ST7796_TestRotation(main_screen_sprite);
-  HAL_Delay(4000);
-  ST7796_SetRotation(0); */
-  //Sprite_destroy(&main_screen_sprite);
-  
   // Используем Segoe Print 12 по умолчанию
   //lcd_set_font(&font_segoe_struct);
   // Или Arial 9:
    lcd_set_font(&font_arial_9_struct);
-   //uint8_t rotation = 0;
 
-  // После MX_I2C1_Init()
 /* I2C_Scanner_Init(&i2c_scanner, &hi2c1);
 // Запуск сканирования
 I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 //lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
- GUI_ShowAdvancedMeasurementScreen(1);
+ GUI_ShowAdvancedMeasurementScreen(0);
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
@@ -315,7 +286,6 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
       //Buzzer_Alarm();HAL_Delay(1500);
       //Buzzer_Confirm();//HAL_Delay(2500);
       //Buzzer_Error();
-//ScanButtons();
 
 if (ft6336u.has_touch) {
         uint16_t raw_x, raw_y;
@@ -324,7 +294,7 @@ if (ft6336u.has_touch) {
         // Пересчет координат под текущий поворот экрана
         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
         // Передаем координаты в текстовый блок тача
-        UI_SetText(ui_touch_row, "Touch: (%d, %d)", last_touch_x, last_touch_y);
+        UI_SetText(ui_touch_row, "Touch:(%d,%d)", last_touch_x, last_touch_y);
         // --- ЛОГИКА НАЖАТИЯ НА КНОПКИ (Пример) ---
         // Теперь вы можете использовать last_touch_x и last_touch_y для обработки меню:
         // if (last_touch_x > 400 && last_touch_y < 40) { ... нажали на кнопку Настроек ... }
@@ -361,23 +331,7 @@ void INIT_FT6336U(void){
     }
 }
 
-void ScanButtons(void) {
-    uint8_t data = PCF8574_Read8(&pcf_handle);
-     char msg[40];
-snprintf(msg, sizeof(msg), "Read 0x%02X OK   ", data);
-lcd_print_to_buffer_ex(0, 30 * 12, RGB565_GREEN, msg, RGB565_BLACK, &main_screen_sprite, true);
-    for (int i = 0; i < 8; i++) {
-        uint8_t current = (data >> i) & 0x01;   // 0 = нажата (активный низ)
-        bool pressed = (current == 0);
 
-        if (pressed && !lastButtonState[i]) {
-            // Нажатие!
-            // ... ваш код (например, toggle LED)
-        }
-
-        lastButtonState[i] = pressed;
-    }
-}
 
 /**
   * @brief System Clock Configuration
