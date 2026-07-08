@@ -20,6 +20,12 @@ typedef struct {
     uint16_t w, h;    // Размеры спрайта
     bool is_allocated;
     SpriteAnchor_t anchor; // Добавляем поле привязки
+    // Новая логика: координаты локальной «грязной» зоны внутри спрайта
+    bool needs_render;      // true — если в спрайте есть хоть какие-то изменения
+    int16_t dirty_x1;       // Левая граница изменений
+    int16_t dirty_y1;       // Верхняя граница изменений
+    int16_t dirty_x2;       // Правая граница изменений
+    int16_t dirty_y2;       // Нижняя граница изменений
 } Sprite_t;
 
 #include "font.h"
@@ -96,6 +102,10 @@ void drawStatusBar(Sprite_t *sprite);
 // ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
 void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer);
 void ST7796_SetRotation(uint8_t r);
+
+void Draw_Line_To_Sprite(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
+
+void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2);
 
 //void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation);
 //void Sprite_UpdatePosition(Sprite_t* sprite);

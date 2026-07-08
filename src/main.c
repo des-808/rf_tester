@@ -82,6 +82,12 @@ DMA_HandleTypeDef hdma_spi4_tx;
 extern Sprite_t status_bar_sprite;
 extern Sprite_t main_screen_sprite;
 extern Sprite_t graph_sprite; // если нужен доступ к графику из main.c
+
+
+
+extern UIElement_t* ui_btn_row;
+extern UIElement_t* ui_touch_row;
+extern UIElement_t* ui_swr_row; 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -327,15 +333,28 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
           uint8_t btn = PCF8574_Read8(&pcf_handle);
           if (btn != 0xFF) {
               // Пишем в глобальный буфер, а не на экран напрямую!
-              snprintf(button_status_msg, sizeof(button_status_msg), "Btn 0x%02X", btn);
+              //snprintf(button_status_msg, sizeof(button_status_msg), "Btn 0x%02X", btn);
+              // Движок сам поймет, что изменилась только строка кнопки, 
+              // локально сотрет её старое положение и впишет новое значение!
+              UI_SetText(ui_btn_row, "Btn 0x%02X", btn); 
              Buzzer_Short();
           }
           else {
-              snprintf(button_status_msg, sizeof(button_status_msg), "No btn");
+              //snprintf(button_status_msg, sizeof(button_status_msg), "No btn");
+              UI_SetText(ui_btn_row, "No btn");
           } 
           PCF8574_AcknowledgeChanges(&pcf_handle);
-          button_status_msg[31] = '\0'; // Гарантированный конец строки Си
-      ui_needs_refresh = true; // Запрос перерисовки
+          //button_status_msg[31] = '\0'; // Гарантированный конец строки Си
+          //ui_needs_refresh = true; // Запрос перерисовки
+          // ПОМЕЧАЕМ НА ОБНОВЛЕНИЕ ТОЛЬКО ПРАВЫЙ СПРАЙТ ЦИФР! 
+          // Статус-бар и График при этом вообще не будут перерисовываться и слаться по SPI!
+          //GUI_InvalidateSprite(&main_screen_sprite);
+
+          // Вычисляем, где в спрайтеdigits_node выводится этот текст. 
+          // Координата Y у нас была 50. Высота шрифта, например, 16. Ширина окна, например, 144.
+          // Помечаем грязным ТОЛЬКО маленький прямоугольник шириной 144 и высотой 16 пикселей на высоте 50!
+          GUI_InvalidateRect(&main_screen_sprite, 0, 50, main_screen_sprite.w, 16); 
+
       }
       
       // КРИТИЧЕСКИ ВАЖНО: Раз в цикл даем команду движку перерисовать всё дерево UI.
@@ -363,26 +382,31 @@ if (ft6336u.has_touch) {
         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
 
         // Формируем красивую строку для вывода на экран
-        snprintf(touch_status_msg, sizeof(touch_status_msg), "Touch: (%d, %d)", last_touch_x, last_touch_y);
-        touch_status_msg[31] = '\0'; // Гарантированный конец строки Си
+        //snprintf(touch_status_msg, sizeof(touch_status_msg), "Touch: (%d, %d)", last_touch_x, last_touch_y);
+        //touch_status_msg[31] = '\0'; // Гарантированный конец строки Си
+        // ... (считывание и конвертация координат) ...
+        UI_SetText(ui_touch_row, "Touch: (%d, %d)", last_touch_x, last_touch_y);
         // --- ЛОГИКА НАЖАТИЯ НА КНОПКИ (Пример) ---
         // Теперь вы можете использовать last_touch_x и last_touch_y для обработки меню:
         // if (last_touch_x > 400 && last_touch_y < 40) { ... нажали на кнопку Настроек ... }
 
         ft6336u.has_touch = false;  // сброс флага тача
         Buzzer_Short();             // Пищим при успешном нажатии
-        ui_needs_refresh = true; // Запрос перерисовки
+        //ui_needs_refresh = true; // Запрос перерисовки
+        // ПОМЕЧАЕМ НА ОБНОВЛЕНИЕ ТОЛЬКО ПРАВЫЙ СПРАЙТ ЦИФР! 
+          // Статус-бар и График при этом вообще не будут перерисовываться и слаться по SPI!
+          GUI_InvalidateSprite(&main_screen_sprite);
     }
     // 3. УМНАЯ ОТРИСОВКА ЭКРАНА
-    if (ui_needs_refresh) {
+    //if (ui_needs_refresh) {
          
         UI_DrawTree(&root_grid); // Отрисовка только при изменениях
-        ui_needs_refresh = false; // Сброс флага
-    }
+        //ui_needs_refresh = false; // Сброс флага
+    //}
 
 ////////////////////////
     // Другая логика (не блокирующая)
-    HAL_Delay(5); // только для watchdog, если нужен
+    HAL_Delay(10); // только для watchdog, если нужен
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

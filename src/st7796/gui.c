@@ -1,4 +1,6 @@
 #include "gui.h"
+#include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
 
@@ -13,6 +15,12 @@ UIElement_t digits_node;
 Sprite_t status_bar_sprite;
 Sprite_t graph_sprite;
 Sprite_t main_screen_sprite;
+
+// Нам нужны указатели только на динамические данные. 
+// Пояснения (статичный текст) нам сохранять в переменные не нужно!
+UIElement_t* ui_btn_row;
+UIElement_t* ui_touch_row;
+UIElement_t* ui_swr_row; // Допустим, добавим вывод КСВ цифрами
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // 1. Поворачиваем железо и очищаем старый пул памяти
@@ -62,12 +70,36 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
 
     // 6. Сажаем спрайт Цифр во вложенную сетку (0, 1) — правая часть
-    digits_node.type = UI_TYPE_SPRITE;
+    /* digits_node.type = UI_TYPE_SPRITE;
     digits_node.sprite = &main_screen_sprite;
     digits_node.render_callback = Draw_Digits_Content; // Ваша функция рисования кнопок/тача
     digits_node.grid_row = 0;
     digits_node.grid_col = 1;
+    main_work_grid.children[main_work_grid.children_count++] = &digits_node */;
+
+    // 2. Настраиваем правую панель как STACK_PANEL (Вертикальный список)
+    digits_node.type = UI_TYPE_STACK_PANEL;
+    digits_node.sprite = &main_screen_sprite; // Физический спрайт для отрисовки
+    digits_node.layout.stack.orientation = ORIENTATION_VERTICAL;
+    digits_node.layout.stack.spacing = 5; // Зазор 5 пикселей между строками
+    digits_node.grid_row = 0; 
+    digits_node.grid_col = 1; // Сажаем в правую колонку Grid
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
+
+    // 3. НАБИРАЕМ ТЕКСТ ПОТОКОМ (Максимально удобно!)
+    GUI_Panel_AddString(&digits_node, "--- ИЗМЕРЕНИЯ ---"); // Статичное пояснение №1
+    
+    // Динамическая строка КСВ (сохраняем указатель)
+    ui_swr_row = GUI_Panel_AddString(&digits_node, "SWR: 1.00"); 
+    
+    GUI_Panel_AddString(&digits_node, "-----------------"); // Статичный разделитель
+    GUI_Panel_AddString(&digits_node, "--- АППАРАТУРА --"); // Статичное пояснение №2
+    
+    // Динамические строки кнопок и тача (сохраняем указатели)
+    ui_btn_row   = GUI_Panel_AddString(&digits_node, "No btn");
+    ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
+    
+    GUI_Panel_AddString(&digits_node, "v1.0.0 Stable");     // Статичная строка версии
 
     // 7. ЗАПУСК КОНТЕЙНЕРОВ: Расчет размеров по всему дереву
     extern uint16_t Display_Width;
@@ -75,6 +107,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
     // 8. ЗАПУСК ОТРИСОВКИ: Вывод на экран
+    GUI_InvalidateAll(&root_grid);
     UI_DrawTree(&root_grid);
 }
 
@@ -161,38 +194,32 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     }
 }
 
-
-/**
- * @brief Рекурсивный обход дерева интерфейса для очистки и вывода на физический экран
- */
-
 void UI_DrawTree(UIElement_t* element) {
     if (!element) return;
 
     if (element->type == UI_TYPE_SPRITE && element->sprite != NULL) {
         Sprite_t* s = element->sprite;
-        if (s->is_allocated && s->data != NULL) {
+        
+        if (s->is_allocated && s->data != NULL && s->needs_render) {
             
-            // 1. Быстрая очистка буфера (Заливка черным)
-            uint32_t total_pixels = (uint32_t)s->w * s->h;
-            memset(s->data, 0, total_pixels * 2);
-            
-            // 2. ВЫЗЫВАЕМ ОТРИСОВКУ: Если для этого окна задано, что в нем рисовать
+            // 1. УДАЛЕНО: memset(s->data, 0, ...) всего спрайта больше НЕ ДЕЛАЕМ!
+
+            // 2. Вызываем колбэк (он обновит пиксели только в грязной зоне)
             if (element->render_callback != NULL) {
                 element->render_callback(s);
             }
 
-            // 3. Выталкиваем готовый буфер на экран ST7796
-            ST7796_PushSprite(s);
+            // 3. УМНАЯ ОТПРАВКА: шлем на экран ТОЛЬКО грязный прямоугольник!
+            ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
+            
+            // 4. Сброс флагов
+            s->needs_render = false; 
         }
         return;
     }
 
-    /* for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
-        UI_DrawTree(element->children[i]);
-    } */
     for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
-        UI_DrawTree((UIElement_t*)element->children[i]); // Явное приведение к указателю
+        UI_DrawTree((UIElement_t*)element->children[i]);
     }
 }
 
@@ -210,9 +237,9 @@ extern const uint8_t icon_buzzer_on_bits[];
 extern const uint8_t icon_buzzer_off_bits[];
 extern const uint8_t icon_rs485ToBt_bits[];
 
-uint8_t currentHour = 22;
-uint8_t currentMinute = 43;
-uint8_t battery_Level = 17;
+uint8_t currentHour = 07;
+uint8_t currentMinute = 05;
+uint8_t battery_Level = 100;
 static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8_t* bitmap, uint16_t bmp_w, uint16_t bmp_h, uint16_t color);
 /**
  * @brief Полностью инвариантный render_callback для статус-бара
@@ -312,13 +339,37 @@ static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8
 void Draw_Graph_Content(Sprite_t* s) {
     if (!s || !s->data) return;
 
-    // Заливаем фон графика черным
-    uint32_t size = (uint32_t)s->w * s->h;
-    memset(s->data, 0, size * 2);
-    
-    lcd_set_font(&font_segoe_struct);
-    // Выводим текст заголовка
-    lcd_print_to_buffer(10, 10, RGB565_YELLOW, "SWR GRAPH", RGB565_BLACK, s);
+    // 1. Устанавливаем шрифт и очищаем буфер графика
+    lcd_set_font(&font_arial_9_struct);
+    memset(s->data, 0, (uint32_t)s->w * s->h * 2);
+
+    // 2. Рисуем сетку графика (горизонтальные линии шкал)
+    // Рисуем 3 горизонтальные линии через каждые 50 пикселей внутри спрайта
+    for (uint16_t y = 40; y < s->h; y += 50) {
+        for (uint16_t x = 10; x < s->w - 10; x++) {
+            s->data[y * s->w + x] = 0x31A6; // Тускло-серый цвет сетки
+        }
+    }
+
+    // 3. РИСУЕМ ЖИВУЮ КРИВУЮ ИЗМЕРЕНИЙ (Пример: синусоида или массив точек КСВ)
+    // Пробегаем по всей ширине окна графика шаг за шагом
+    int16_t prev_x = 10;
+    int16_t prev_y = s->h / 2; // Стартовая точка по центру
+
+    for (int16_t x = 11; x < s->w - 10; x++) {
+        // Имитируем график: вычисляем Y (в реальном коде тут будет значение из массива SWR_Array[x])
+        // Переводим значение КСВ в пиксели высоты спрайта
+        int16_t y = (s->h / 2) + (int16_t)(sinf(x * 0.05f) * 40.0f); 
+
+        // Соединяем прошлую точку с текущей быстрой линией Брезенхема!
+        Draw_Line_To_Sprite(s, prev_x, prev_y, x, y, RGB565_YELLOW);
+
+        prev_x = x;
+        prev_y = y;
+    }
+
+    // Подпись
+    lcd_print_to_buffer(15, 10, RGB565_WHITE, "SWR SCANNER", RGB565_BLACK, s);
 
     // Рисуем рамку вокруг графика с отступом 5 пикселей от краев спрайта.
     // Верхняя линия
@@ -339,34 +390,25 @@ extern char touch_status_msg[32];
 void Draw_Digits_Content(Sprite_t* s) {
     if (!s || !s->data) return;
 
-    //extern char button_status_msg[32];
-    //extern char touch_status_msg[32];
-
-    // КРИТИЧЕСКИ ВАЖНО ДЛЯ H7: Сбрасываем кэш данных для этих двух строк,
-    // чтобы графический движок гарантированно увидел новые символы из main.c
-    /* SCB_CleanDCache_by_Addr((uint32_t*)button_status_msg, 32);
-    SCB_CleanDCache_by_Addr((uint32_t*)touch_status_msg, 32);
-    __DSB(); */
-    //extern Font_t font_segoe_struct;
-    lcd_set_font(&font_segoe_struct);
+    lcd_set_font(&font_arial_9_struct);
     // Заливаем фон правого окна черным, чтобы старый текст не накладывался на новый
     uint32_t size = (uint32_t)s->w * s->h;
     memset(s->data, 0, size * 2);
 
     // Выводим заголовок
-    lcd_print_to_buffer(10, 50, RGB565_BLUE, "Welcome Mode", RGB565_BLACK, s);
+    lcd_print_to_buffer(10, 10, RGB565_BLUE, "Welcome Mode", RGB565_BLACK, s);
     
     // Выводим статус физических кнопок
     int btn_w = lcd_get_str_width(button_status_msg);
     int16_t btn_x = (s->w - btn_w) / 2;
-    if (btn_x < 0) btn_x = 10; // Защита от вылета влево
-    lcd_print_to_buffer(btn_x, 90, RGB565_GREEN, button_status_msg, RGB565_BLACK, s);
+    if (btn_x < 0) btn_x = 5; // Защита от вылета влево
+    lcd_print_to_buffer(btn_x, 50, RGB565_GREEN, button_status_msg, RGB565_BLACK, s);
 
     // Выводим статус тачскрина
     int tch_w = lcd_get_str_width(touch_status_msg);
     int16_t tch_x = (s->w - tch_w) / 2;
-    if (tch_x < 0) tch_x = 10;
-    lcd_print_to_buffer(tch_x, 130, RGB565_CYAN, touch_status_msg, RGB565_BLACK, s);
+    if (tch_x < 0) tch_x = 5;
+    lcd_print_to_buffer(tch_x, 90, RGB565_CYAN, touch_status_msg, RGB565_BLACK, s);
 }
 
 extern uint8_t screen_rotation; // Берем текущий поворот из st7796.c
@@ -396,4 +438,180 @@ void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, 
             break;
     }
 }
+
+/**
+ * @brief Помечает конкретный спрайт для перерисовки на следующем кадре
+ */
+void GUI_InvalidateSprite(Sprite_t* sprite) {
+    if (sprite) {
+        sprite->needs_render = true;
+    }
+}
+
+/**
+ * @brief Помечает ВСЕ зарегистрированные спрайты для полной перерисовки
+ */
+void GUI_InvalidateAll(UIElement_t* element) {
+    if (!element) return;
+
+    if (element->type == UI_TYPE_SPRITE && element->sprite != NULL) {
+        element->sprite->needs_render = true;
+        return;
+    }
+
+    for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+        GUI_InvalidateAll((UIElement_t*)element->children[i]);
+    }
+}
+
+/**
+ * @brief Помечает локальную прямоугольную область внутри спрайта как "грязную" (требующую обновления)
+ */
+void GUI_InvalidateRect(Sprite_t* s, int16_t rx, int16_t ry, uint16_t rw, uint16_t rh) {
+    if (!s || !s->is_allocated) return;
+
+    // Рассчитываем конечные точки локального прямоугольника
+    int16_t x2 = rx + rw - 1;
+    int16_t y2 = ry + rh - 1;
+
+    // Ограничиваем прямоугольник физическими размерами самого спрайта (защита)
+    if (rx < 0) rx = 0;
+    if (ry < 0) ry = 0;
+    if (x2 >= s->w) x2 = s->w - 1;
+    if (y2 >= s->h) y2 = s->h - 1;
+
+    if (!s->needs_render) {
+        // Если спрайт до этого был чистым — это первая грязная зона
+        s->dirty_x1 = rx;
+        s->dirty_y1 = ry;
+        s->dirty_x2 = x2;
+        s->dirty_y2 = y2;
+        s->needs_render = true;
+    } else {
+        // Если спрайт уже имел грязную зону — объединяем их в один общий прямоугольник
+        if (rx < s->dirty_x1) s->dirty_x1 = rx;
+        if (ry < s->dirty_y1) s->dirty_y1 = ry;
+        if (x2 > s->dirty_x2) s->dirty_x2 = x2;
+        if (y2 > s->dirty_y2) s->dirty_y2 = y2;
+    }
+}
+
+
+
+/**
+ * @brief Безопасно обновляет текст элемента UI и автоматически помечает только его область грязной
+ */
+void UI_SetText(UIElement_t* element, const char* format, ...) {
+    if (!element) return;
+
+    char new_text[32];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(new_text, sizeof(new_text), format, args);
+    va_end(args);
+
+    // Если текст не изменился — ничего не делаем, экономим ресурсы!
+    if (strcmp(element->text_content, new_text) == 0) {
+        return;
+    }
+
+    // Сохраняем новый текст в элемент
+    strncpy(element->text_content, new_text, sizeof(element->text_content) - 1);
+    element->text_content[sizeof(element->text_content) - 1] = '\0';
+
+    // Автоматически рассчитываем грязную зону
+    // Элемент знает свои внутренние координаты (x, y), ширину (w) и высоту (h),
+    // полученные от Grid-родителя при MeasureAndArrange!
+    if (element->type == UI_TYPE_SPRITE && element->sprite != NULL) {
+        Sprite_t* s = element->sprite;
+        
+        // Помечаем грязной область СТРОГО в границах этого текстового элемента
+        // Переводим абсолютные экранные координаты элемента в локальные координаты спрайта
+        int16_t local_rx = element->x - s->x;
+        int16_t local_ry = element->y - s->y;
+        
+        GUI_InvalidateRect(s, local_rx, local_ry, element->w, element->h);
+    }
+}
+
+
+
+// Объявляем только ОДИН контейнер для правой панели
+UIElement_t digits_panel; 
+// Пул элементов для строк (выделяем память статически внутри gui.c, чтобы не плодить глобальные имена)
+static UIElement_t panel_rows[MAX_PANEL_ROWS];
+static uint8_t panel_rows_count = 0;
+
+/**
+ * @brief Добавляет текстовую строку в StackPanel и возвращает указатель на неё
+ * @param parent Контейнер StackPanel, куда добавляем строку
+ * @param initial_text Начальный текст или пояснение
+ */
+UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text) {
+    if (panel_rows_count >= MAX_PANEL_ROWS) return NULL;
+
+    // Берем свободный элемент из пула
+    UIElement_t* new_node = &panel_rows[panel_rows_count++];
+    
+    // Настраиваем его как текстовый спрайт, который будет рисовать в буфер родителя
+    new_node->type = UI_TYPE_SPRITE;
+    new_node->sprite = parent->sprite; // наследует физический спрайт панели
+    new_node->render_callback = Draw_GeneralText_Callback; // универсальный колбэк
+    new_node->children_count = 0;
+    
+    // Копируем начальный текст (пояснение)
+    strncpy(new_node->text_content, initial_text, sizeof(new_node->text_content) - 1);
+    new_node->text_content[sizeof(new_node->text_content) - 1] = '\0';
+
+    // Регистрируем его как ребенка в StackPanel
+    parent->children[parent->children_count++] = new_node;
+
+    return new_node;
+}
+
+//void Draw_GeneralText_Callback(void* param){}
+
+/**
+ * @brief Полный сброс динамических строк панели (нужен при смене экрана)
+ */
+void GUI_Panel_ClearStrings(UIElement_t* parent) {
+    parent->children_count = 0;
+    panel_rows_count = 0;
+}
+
+
+
+void Draw_GeneralText_Callback(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+
+    Sprite_t* s = el->sprite;
+    
+    // 1. Вычисляем локальные координаты ячейки внутри физического спрайта
+    int16_t local_x = el->x - s->x;
+    int16_t local_y = el->y - s->y;
+
+    // 2. Очищаем ТОЛЬКО пространство этой конкретной строки (Dirty Rect) цветом фона
+    // Чтобы старые буквы не накладывались на новые при изменении текста
+    for (int16_t y = local_y; y < local_y + el->h; y++) {
+        for (int16_t x = local_x; x < local_x + el->w; x++) {
+            s->data[y * s->w + x] = RGB565_BLACK; 
+        }
+    }
+
+    // 3. Активируем нужный шрифт
+    lcd_set_font(&font_arial_9_struct);
+    
+    // 4. Автоматически инвариантно центрируем строку по горизонтали и вертикали внутри выделенной ячейки
+    int str_w = lcd_get_str_width(el->text_content);
+    int16_t text_x = local_x + (el->w - str_w) / 2;
+    int16_t text_y = local_y + (el->h - current_font->char_height) / 2;
+
+    // Защита от вылета текста за левую границу ячейки
+    if (text_x < local_x) text_x = local_x + 5; 
+
+    // 5. Печатаем живой текст, сохраненный внутри этого элемента интерфейса
+    lcd_print_to_buffer(text_x, text_y, RGB565_GREEN, el->text_content, RGB565_BLACK, s);
+}
+
+
 

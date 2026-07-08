@@ -96,14 +96,16 @@ void lcd_draw_char(int16_t x, int16_t y, char c, uint16_t color,uint16_t bg_colo
 void lcd_draw_char_to_buffer(int16_t x, int16_t y, char c, uint16_t color, uint16_t bg_color,int char_real_width,Sprite_t *sprite) {
     if (!current_font || !sprite || !sprite->data) return;
 
+    int16_t rel_x = x;
+    int16_t rel_y = y;
     // ✅ Сдвигаем координаты в относительные
-    int16_t rel_x = x - sprite->x;
+    /* int16_t rel_x = x - sprite->x;
     int16_t rel_y = y - sprite->y;
 
     // Проверка: выходим ли мы за пределы спрайта
     if (rel_x + char_real_width < 0 || rel_x >= sprite->w || rel_y + current_font->char_height < 0 || rel_y >= sprite->h) {
         return; // полностью вне видимой области
-    }
+    } */
 
     uint8_t idx = (uint8_t)c;
 
@@ -362,27 +364,7 @@ void lcd_print_to_buffer_ex(int16_t x, int16_t y, uint16_t color, const char *st
         }
     }
 
-    // 🔥 Добавляем ОДИН вызов ST7796_UpdateSprite по требованию
-    /* if (update_after_print) {
-        // Переводим начальную абсолютную координату X и Y строки 
-        // в относительные координаты внутри массива спрайта
-        int16_t rel_start_x = start_x - sprite->x;
-        int16_t rel_start_y = y - sprite->y;
-
-        // Если строка печатается с самого начала или частично за пределами спрайта,
-        // делаем безопасную отсечку для предотвращения отрицательных индексов
-        if (rel_start_x < 0) rel_start_x = 0;
-        if (rel_start_y < 0) rel_start_y = 0;
-
-         int16_t width = lcd_get_str_width(original_str);
-        if (width > 0) {
-            SCB_CleanDCache_by_Addr((uint32_t*)&sprite->data[y * sprite->w + start_x], (width * current_font->char_height * 2 + 31) & ~31);
-            __DSB();
-            //Sprite_push(sprite, sprite->x, sprite->y);
-            ST7796_PushSprite(sprite);
-        } 
-
-    } */
+    
    if (update_after_print) {
         int16_t str_width = lcd_get_str_width(original_str);
         // Проверка границ, чтобы избежать HardFault при отрисовке за пределами

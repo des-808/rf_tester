@@ -30,6 +30,8 @@ typedef struct {
     uint16_t spacing;           // Зазор между элементами в пикселях
 } StackPanelDefinition_t;
 
+#define MAX_PANEL_ROWS 12
+
 // Универсальная сущность UI (Элемент)
 typedef struct UIElement {
     UIType_t type;
@@ -42,11 +44,14 @@ typedef struct UIElement {
     Sprite_t* sprite;           
 
     // Указатели на детей (для контейнеров Grid и StackPanel)
-    struct UIElement* children[8];
+    struct UIElement* children[MAX_PANEL_ROWS];
     uint8_t children_count;
 
     // КРИТИЧЕСКИ ВАЖНО: Добавляем указатель на функцию отрисовки содержимого!
     void (*render_callback)(Sprite_t* s); 
+
+    // КРИТИЧЕСКИ ВАЖНО: Собственный текстовый буфер элемента
+    char text_content[32]; 
 
     // Специфичные настройки контейнеров
     union {
@@ -72,5 +77,11 @@ void Draw_Graph_Content(Sprite_t* s);
 void Draw_Digits_Content(Sprite_t* s);
 void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y);
 
+void GUI_InvalidateSprite(Sprite_t* sprite);
+void GUI_InvalidateAll(UIElement_t* element);
+void GUI_InvalidateRect(Sprite_t* s, int16_t rx, int16_t ry, uint16_t rw, uint16_t rh);
+
+UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text);
+void Draw_GeneralText_Callback(UIElement_t* el);
 
 #endif // GUI_H

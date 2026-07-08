@@ -552,118 +552,75 @@ void ST7796_SetRotation(uint8_t rotation) {
 }
 
 
-// Глобальный флаг текущего режима (0 - Portrait, 1 - Landscape)
-uint8_t current_layout_mode = 0; 
+/**
+ * @brief Быстрое рисование линии внутри локального буфера спрайта (Алгоритм Брезенхема)
+ * @param x0, y0 - стартовая точка (локальные координаты внутри спрайта)
+ * @param x1, y1 - конечная точка (локальные координаты внутри спрайта)
+ */
+void Draw_Line_To_Sprite(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
+    if (!s || !s->data || !s->is_allocated) return;
+
+    int16_t dx = abs(x1 - x0);
+    int16_t dy = abs(y1 - y0);
+    int16_t sx = (x0 < x1) ? 1 : -1;
+    int16_t dy_sign = (y0 < y1) ? 1 : -1;
+    int16_t err = dx - dy;
+
+    while (1) {
+        // Проверка границ: рисуем пиксель только если он внутри локального массива спрайта
+        if (x0 >= 0 && x0 < s->w && y0 >= 0 && y0 < s->h) {
+            uint32_t idx = (uint32_t)y0 * s->w + x0;
+            s->data[idx] = color;
+        }
+
+        if (x0 == x1 && y0 == y1) break;
+
+        int16_t e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x0 += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y0 += dy_sign;
+        }
+    }
+}
 
 /**
- * @brief Универсальный автоматический перевод спрайта из Portrait в Landscape
- * @note  Вызывается ДЛЯ КАЖДОГО спрайта при смене режима устройства
+ * @brief Отправляет на экран только выделенную прямоугольную область внутри спрайта
  */
-/* void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation) {
-    // Если мы уже в этом режиме, ничего не делаем
-    if ((target_rotation == 1 && current_layout_mode == 1) || 
-        (target_rotation == 0 && current_layout_mode == 0)) {
-        return;
-    }
+void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2) {
+    // 1. Вычисляем абсолютные координаты на физическом экране дисплея
+    uint16_t screen_x1 = s->x + rx1;
+    uint16_t screen_y1 = s->y + ry1;
+    uint16_t screen_x2 = s->x + rx2;
+    uint16_t screen_y2 = s->y + ry2;
 
-    if (target_rotation == 1) { // ПЕРЕХОД ИЗ PORTRAIT В LANDSCAPE (320x480 -> 480x320)
-        // 1. Автоматический пересчет координат X и Y
-        sprite->x = (int16_t)((float)sprite->x * 1.5f);
-        sprite->y = (int16_t)((float)sprite->y * 0.666f);
+    // 2. Открываем аппаратное окно в контроллере ST7796 СТРОГО под размер грязной зоны
+    ST7796_SetAddressWindow(screen_x1, screen_y1, screen_x2, screen_y2);
 
-        // 2. Автоматический пересчет размеров W и H
-        sprite->w = (uint16_t)((float)sprite->w * 1.5f);
-        sprite->h = (uint16_t)((float)sprite->h * 0.666f);
-    } 
-    else if (target_rotation == 0) { // ПЕРЕХОД ИЗ LANDSCAPE В PORTRAIT (480x320 -> 320x480)
-        // Обратный пересчет
-        sprite->x = (int16_t)((float)sprite->x / 1.5f);
-        sprite->y = (int16_t)((float)sprite->y / 0.666f);
+    LCD_CS_LOW;
+    LCD_DC_DATA;
 
-        sprite->w = (uint16_t)((float)sprite->w / 1.5f);
-        sprite->h = (uint16_t)((float)sprite->h / 0.666f);
-    }
-} */
-
-
-/* void Sprite_UpdatePosition(Sprite_t* sprite) {
-    switch (sprite->anchor) {
-        case ANCHOR_TOP_LEFT:
-            // Координаты остаются фиксированными (0,0), размеры не меняются.
-            // Если статус-бар всегда должен быть во всю ширину экрана, раскомментируйте строку ниже:
-            sprite->w = Display_Width; 
-            break;
-
-        case ANCHOR_BOTTOM_LEFT:
-            // Прижимаем к самому низу экрана с сохранением его фиксированной высоты
-            sprite->x = 0;
-            sprite->y = Display_Height - sprite->h;
-            sprite->w = Display_Width; // растягиваем по ширине
-            break;
-
-        case ANCHOR_CENTER:
-            // Центрируем спрайт на экране (размеры остаются оригинальными)
-            sprite->x = (Display_Width - sprite->w) / 2;
-            sprite->y = (Display_Height - sprite->h) / 2;
-            break;
-
-        case ANCHOR_FILL_REMAINING:
-            // Спрайт занимает всё оставшееся пространство от своей начальной точки Y до низа экрана
-            sprite->x = 0;
-            sprite->w = Display_Width;
-            sprite->h = Display_Height - sprite->y; // Высота динамически подстроится под экран
-            break;
-    }
-} */
-/* void Sprite_UpdatePosition(Sprite_t* sprite) {
-    switch (sprite->anchor) {
-        case ANCHOR_TOP_LEFT:
-            sprite->x = 0; sprite->y = 0;
-            sprite->w = Display_Width; 
-            // Высоту h вы задали при создании (например, 30)
-            break;
-
-        case ANCHOR_BOTTOM_LEFT:
-            sprite->x = 0;
-            sprite->w = Display_Width;
-            sprite->y = Display_Height - sprite->h; // прижали к низу
-            break;
-
-        case ANCHOR_GRAPH:
-            // График занимает левую часть экрана под статус-баром
-            sprite->x = 0;
-            sprite->y = 30; // Смещение под статус-бар
-            sprite->w = (Display_Width * 60) / 100; // 60% ширины экрана
-            sprite->h = Display_Height - 30;        // Вся оставшаяся высота
-            break;
-
-        case ANCHOR_SIDE_PANEL:
-            // Панель параметров занимает правую часть экрана
-            sprite->w = Display_Width - ((Display_Width * 60) / 100); // Оставшиеся 40% ширины
-            sprite->x = Display_Width - sprite->w;                    // Впритык к правому краю
-            sprite->y = 30;                                           // Смещение под статус-бар
-            sprite->h = Display_Height - 30;
-            break;
-
-        case ANCHOR_CENTER:
-            sprite->x = (Display_Width - sprite->w) / 2;
-            sprite->y = (Display_Height - sprite->h) / 2;
-            break;
-
-        case ANCHOR_FILL_REMAINING:
-            sprite->x = 0; sprite->y = 30;
-            sprite->w = Display_Width;
-            sprite->h = Display_Height - sprite->y;
-            break;
-    }
-
-    // Нарезаем память из статического пула под получившиеся размеры
-    sprite->data = (uint16_t*)heap_caps_malloc(sprite->w * sprite->h * 2, 0);
+    // 3. Выгружаем пиксели строка за строкой (так как в памяти спрайта они лежат сплошным массивом)
+    uint16_t rect_w = rx2 - rx1 + 1;
     
-    if (sprite->data == NULL) {
-        sprite->is_allocated = false;
-        while(1); // Зависание сработает, только если вы запросили больше ~300 КБ суммарно
-    }
-    sprite->is_allocated = true;
-} */
+    // Очищаем кэш данных для всего региона спрайта один раз для безопасности DMA
+    uint32_t total_bytes = (uint32_t)s->w * s->h * 2;
+    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (total_bytes + 31) & ~31);
+    __DSB();
 
+    for (int16_t y = ry1; y <= ry2; y++) {
+        // Находим указатель на начало грязной строки в массиве спрайта
+        uint16_t* row_start_ptr = &s->data[y * s->w + rx1];
+        
+        // Отправляем строку длиной rect_w по DMA
+        // Внимание: так как отправка идет построчно, нужно использовать синхронный DMA 
+        // или дожидаться окончания строки, чтобы не затереть SPI
+        ST7796_TransmitDMA((uint8_t*)row_start_ptr, rect_w * 2);
+        while (HAL_SPI_GetState(&hspi4) != HAL_SPI_STATE_READY); 
+    }
+
+    LCD_CS_HIGH;
+}
