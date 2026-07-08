@@ -166,8 +166,8 @@ void LED_Blink(uint32_t delay)
 	HAL_Delay(500-1);
 }
 
-char button_status_msg[32] = "No btn"; // Глобальная строка для UI
-char touch_status_msg[32] = "No touch"; // Строка для UI
+//char button_status_msg[32] = "No btn"; // Глобальная строка для UI
+//char touch_status_msg[32] = "No touch"; // Строка для UI
 uint16_t last_touch_x = 0;              // Координата X для логики меню
 uint16_t last_touch_y = 0;              // Координата Y для логики меню
 
@@ -353,7 +353,7 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
           // Вычисляем, где в спрайтеdigits_node выводится этот текст. 
           // Координата Y у нас была 50. Высота шрифта, например, 16. Ширина окна, например, 144.
           // Помечаем грязным ТОЛЬКО маленький прямоугольник шириной 144 и высотой 16 пикселей на высоте 50!
-          GUI_InvalidateRect(&main_screen_sprite, 0, 50, main_screen_sprite.w, 16); 
+          //GUI_InvalidateRect(&main_screen_sprite, 0, 50, main_screen_sprite.w, 16); 
 
       }
       
@@ -395,7 +395,7 @@ if (ft6336u.has_touch) {
         //ui_needs_refresh = true; // Запрос перерисовки
         // ПОМЕЧАЕМ НА ОБНОВЛЕНИЕ ТОЛЬКО ПРАВЫЙ СПРАЙТ ЦИФР! 
           // Статус-бар и График при этом вообще не будут перерисовываться и слаться по SPI!
-          GUI_InvalidateSprite(&main_screen_sprite);
+          //GUI_InvalidateSprite(&main_screen_sprite);
     }
     // 3. УМНАЯ ОТРИСОВКА ЭКРАНА
     //if (ui_needs_refresh) {
