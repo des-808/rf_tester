@@ -315,7 +315,8 @@ void Draw_Graph_Content(Sprite_t* s) {
     // Заливаем фон графика черным
     uint32_t size = (uint32_t)s->w * s->h;
     memset(s->data, 0, size * 2);
-
+    
+    lcd_set_font(&font_segoe_struct);
     // Выводим текст заголовка
     lcd_print_to_buffer(10, 10, RGB565_YELLOW, "SWR GRAPH", RGB565_BLACK, s);
 
@@ -346,25 +347,26 @@ void Draw_Digits_Content(Sprite_t* s) {
     /* SCB_CleanDCache_by_Addr((uint32_t*)button_status_msg, 32);
     SCB_CleanDCache_by_Addr((uint32_t*)touch_status_msg, 32);
     __DSB(); */
-
+    //extern Font_t font_segoe_struct;
+    lcd_set_font(&font_segoe_struct);
     // Заливаем фон правого окна черным, чтобы старый текст не накладывался на новый
     uint32_t size = (uint32_t)s->w * s->h;
     memset(s->data, 0, size * 2);
 
     // Выводим заголовок
-    lcd_print_to_buffer(10, 10, RGB565_BLUE, "Welcome Mode", RGB565_BLACK, s);
+    lcd_print_to_buffer(10, 50, RGB565_BLUE, "Welcome Mode", RGB565_BLACK, s);
     
     // Выводим статус физических кнопок
     int btn_w = lcd_get_str_width(button_status_msg);
     int16_t btn_x = (s->w - btn_w) / 2;
     if (btn_x < 0) btn_x = 10; // Защита от вылета влево
-    lcd_print_to_buffer(btn_x, 50, RGB565_GREEN, button_status_msg, RGB565_BLACK, s);
+    lcd_print_to_buffer(btn_x, 90, RGB565_GREEN, button_status_msg, RGB565_BLACK, s);
 
     // Выводим статус тачскрина
     int tch_w = lcd_get_str_width(touch_status_msg);
     int16_t tch_x = (s->w - tch_w) / 2;
     if (tch_x < 0) tch_x = 10;
-    lcd_print_to_buffer(tch_x, 90, RGB565_CYAN, touch_status_msg, RGB565_BLACK, s);
+    lcd_print_to_buffer(tch_x, 130, RGB565_CYAN, touch_status_msg, RGB565_BLACK, s);
 }
 
 extern uint8_t screen_rotation; // Берем текущий поворот из st7796.c
