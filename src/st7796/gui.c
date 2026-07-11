@@ -11,6 +11,7 @@ UIElement_t main_work_grid;
 UIElement_t graph_node;
 UIElement_t digits_node;   // Наша правая панель (используется в MeasurementScreen)
 UIElement_t digits_panel;  // Спрайт-контейнер панели (используется в GUI_BuildProInterface)
+UIElement_t ui_bands_listbox; // Сам контейнер ListBox
 
 // Реальные структуры спрайтов LovyanGFX/Си
 Sprite_t status_bar_sprite;
@@ -36,8 +37,12 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ST7796_SetRotation(rotation);
     heap_caps_reset_pool();
     
-    // Сбрасываем счетчик динамического пула элементов перед сборкой нового экрана
-    panel_rows_count = 0; 
+    // Сбрасываем счетчик динамического пула элементов перед сборкой
+    GUI_Panel_ClearStrings(&digits_node);
+    
+    // Принудительно сбрасываем счетчик детей и у самого ListBox,
+    // так как при повторном заходе в функцию пункты меню не должны дублироваться!
+    ui_bands_listbox.children_count = 0;
 
     // 2. Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
     root_grid.type = UI_TYPE_GRID;
@@ -49,15 +54,14 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     root_grid.props.grid.col_definitions[0] = 100;
 
     // 3. Подключаем Статус-бар в ячейку (строка 0, колонка 0)
-    status_bar_node.type = UI_TYPE_TEXT_BLOCK; // ИСПРАВЛЕНО: вместо UI_TYPE_SPRITE
+    status_bar_node.type = UI_TYPE_TEXT_BLOCK;
     status_bar_node.sprite = &status_bar_sprite;
-    status_bar_node.render_callback = Draw_StatusBar_Callback; 
+    status_bar_node.render_callback = Draw_StatusBar_Callback;
     status_bar_node.grid_row = 0;
     status_bar_node.grid_col = 0;
     root_grid.children[root_grid.children_count++] = &status_bar_node;
 
     // 4. Создаем вложенную сетку для разделения Графика и Цифр
-    // Сажаем её в нижнюю ячейку корневой сетки (строка 1, column 0)
     main_work_grid.type = UI_TYPE_GRID;
     main_work_grid.children_count = 0;
     main_work_grid.grid_row = 1;
@@ -70,102 +74,76 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     root_grid.children[root_grid.children_count++] = &main_work_grid;
 
     // 5. Сажаем спрайт Графика во вложенную сетку (0, 0) — левая часть
-    graph_node.type = UI_TYPE_TEXT_BLOCK; // ИСПРАВЛЕНО: вместо UI_TYPE_SPRITE
+    graph_node.type = UI_TYPE_TEXT_BLOCK;
     graph_node.sprite = &graph_sprite;
-    graph_node.render_callback = Draw_Graph_Content; 
+    graph_node.render_callback = Draw_Graph_Content;
     graph_node.grid_row = 0;
     graph_node.grid_col = 0;
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
 
     // 6. Настраиваем правую панель как STACK_PANEL (Вертикальный список)
     digits_node.type = UI_TYPE_STACK_PANEL;
-    digits_node.sprite = &main_screen_sprite; // Физический спрайт для отрисовки
+    digits_node.sprite = &main_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
-    digits_node.props.stack.spacing = 0; // Зазор 0 пикселей между строками
+    digits_node.props.stack.spacing = 2; // Небольшой зазор между элементами панели
     digits_node.grid_row = 0; 
-    digits_node.grid_col = 1; // Сажаем в правую колонку Grid
-    digits_node.children_count = 0; // Сбрасываем детей перед заполнением
+    digits_node.grid_col = 1; 
+    digits_node.children_count = 0; 
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
 
-    // 7. НАБИРАЕМ ТЕКСТ ПОТОКОМ ЧЕРЕЗ СТАНДАРТНЫЙ ПУЛ КОМПОНЕНТОВ (MAX_PANEL_ROWS = 8)
-    UIElement_t* el;
+    // ====================================================================
+    // 7. НАБИРАЕМ КОНТЕНТ ПОТОКОМ (Встраиваем ListBox внутрь StackPanel)
+    // ====================================================================
+    
+    // --- Строка 1 панели: Шапка ---
+    UIElement_t* el = GUI_Panel_AddString(&digits_node, "--ИЗМЕРЕНИЯ--");
+    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->vertical_alignment   = VERTICAL_ALIGN_CENTER;
 
-    // --- Строка 1: Пояснение "ИЗМЕРЕНИЯ" ---
-    el = &panel_rows[panel_rows_count++];
-    el->type = UI_TYPE_TEXT_BLOCK;
-    el->sprite = &main_screen_sprite;
-    el->render_callback = NULL; // Ручной колбэк не нужен, отработает автоматика TextBlock!
-    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    el->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    strcpy(el->text_content, "-ИЗМЕРЕНИЯ-");
-    digits_node.children[digits_node.children_count++] = el;
-
-    // --- Строка 2: Динамическое значение КСВ ---
-    ui_swr_row = &panel_rows[panel_rows_count++];
-    ui_swr_row->type = UI_TYPE_TEXT_BLOCK;
-    ui_swr_row->sprite = &main_screen_sprite;
-    ui_swr_row->render_callback = NULL;
+    // --- Строка 2 панели: Динамический вывод активного КСВ ---
+    ui_swr_row = GUI_Panel_AddString(&digits_node, "SWR: 1.00"); 
     ui_swr_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    ui_swr_row->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    strcpy(ui_swr_row->text_content, "SWR: 1.00");
-    digits_node.children[digits_node.children_count++] = ui_swr_row;
+    ui_swr_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+    
+    // --- Строка 3 панели: Текстовый разделитель ---
+    el = GUI_Panel_AddString(&digits_node, "------------");
+    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->vertical_alignment   = VERTICAL_ALIGN_TOP;
 
-    // --- Строка 3: Разделитель ---
-    el = &panel_rows[panel_rows_count++];
-    el->type = UI_TYPE_TEXT_BLOCK;
-    el->sprite = &main_screen_sprite;
-    el->render_callback = NULL;
-    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    el->vertical_alignment = VERTICAL_ALIGN_TOP;
-    strcpy(el->text_content, "-----------");
-    digits_node.children[digits_node.children_count++] = el;
+    // === ИСПРАВЛЕНО: ВОТ ТУТ МЫ ВСТАВЛЯЕМ НАШ ЦЕЛОСТНЫЙ LISTBOX ===
+    // Инициализируем узел как ListBox и привязываем его к физическому спрайту правой панели
+    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
+    
+    // ЗАДАЕМ ОГРАНИЧЕНИЕ ВЫСОТЫ: Если высота одной строки шрифта Arial9 + рамка около 16-18 пикселей,
+    // высота 72 пикселя позволит ListBox'у идеально отображать 4 строки одновременно!
+    ui_bands_listbox.h = 72; 
+    
+    // Наполняем внутренний список ListBox пунктами (они берутся из panel_rows автоматически)
+    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
+    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
+    
+    // Сажаем ListBox как 4-го полноценного ребенка внутрь нашей StackPanel (digits_node)
+    digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
+    // ====================================================================
 
-    // --- Строка 4: Пояснение "АППАРАТУРА" ---
-    el = &panel_rows[panel_rows_count++];
-    el->type = UI_TYPE_TEXT_BLOCK;
-    el->sprite = &main_screen_sprite;
-    el->render_callback = NULL;
-    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    el->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    strcpy(el->text_content, "АППАРАТУРА");
-    digits_node.children[digits_node.children_count++] = el;
+    // --- Строка 5 панели (пойдет строго ПОД ListBox): Статус физических кнопок ---
+    ui_btn_row = GUI_Panel_AddString(&digits_node, "No btn");
+    ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    ui_btn_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
 
-    // --- Строка 5: Динамический статус физических кнопок ---
-    ui_btn_row = &panel_rows[panel_rows_count++];
-    ui_btn_row->type = UI_TYPE_TEXT_BLOCK;
-    ui_btn_row->sprite = &main_screen_sprite;
-    ui_btn_row->render_callback = NULL;
-    ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    ui_btn_row->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    strcpy(ui_btn_row->text_content, "No btn");
-    digits_node.children[digits_node.children_count++] = ui_btn_row;
-
-    // --- Строка 6: Динамический статус тачскрина ---
-    ui_touch_row = &panel_rows[panel_rows_count++];
-    ui_touch_row->type = UI_TYPE_TEXT_BLOCK;
-    ui_touch_row->sprite = &main_screen_sprite;
-    ui_touch_row->render_callback = NULL;
+    // --- Строка 6 панели: Динамический статус тачскрина ---
+    ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
     ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    ui_touch_row->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    strcpy(ui_touch_row->text_content, "No touch");
-    digits_node.children[digits_node.children_count++] = ui_touch_row;
-
-    // --- Строка 7: Версия прошивки ---
-    el = &panel_rows[panel_rows_count++];
-    el->type = UI_TYPE_TEXT_BLOCK;
-    el->sprite = &main_screen_sprite;
-    el->render_callback = NULL;
-    el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    el->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    strcpy(el->text_content, "v1.0.0 Stable");
-    digits_node.children[digits_node.children_count++] = el;
+    ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
 
     // 8. ЗАПУСК КОНТЕЙНЕРОВ: Расчет размеров по всему дереву компонентов
     extern uint16_t Display_Width;
     extern uint16_t Display_Height;
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
-    // Принудительно очищаем правый видеобуфер перед первым выводом дерева
+    // Принудительно очищаем правый видеобуфер черным перед первым кадром
     if (main_screen_sprite.is_allocated && main_screen_sprite.data != NULL) {
         uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
         memset(main_screen_sprite.data, 0, total_pixels * 2); 
@@ -374,6 +352,9 @@ void UI_DrawTree(UIElement_t* element) {
                         UI_RenderToggle(element);
                     
                         break;
+                    case UI_TYPE_LIST_BOX:
+                        UI_RenderListBox(element); // Отрисовка фона/рамки [1.1]
+                        break;
 
                     // КРИТИЧЕСКИЙ ФИКС: Если это контейнеры, и они затребовали рендер,
                     // принудительно заставляем всех их детей (текстовые блоки) перерисовать себя в ОЗУ!
@@ -388,9 +369,6 @@ void UI_DrawTree(UIElement_t* element) {
                                 child->render_callback(child);
                             }
                         }
-                        break;
-                    case UI_TYPE_LIST_BOX:
-                        UI_RenderListBox(element);
                         break;
 
                     default: break;
