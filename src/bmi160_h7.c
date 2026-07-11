@@ -134,17 +134,17 @@ uint8_t BMI160_CheckOrientationTask(I2C_HandleTypeDef *hi2c, uint16_t devAddress
             // --- ВЕРТИКАЛЬНЫЕ РЕЖИМЫ (Доминирует ось X) ---
             if (ax_abs > ay_abs) {
                 if (sensor_data.ax > 0) {
-                    target_orientation = 0; // Портретная стандартная
+                    target_orientation = 3; // Портретная стандартная
                 } else {
-                    target_orientation = 2; // Портретная перевернутая
+                    target_orientation = 1; // Портретная перевернутая
                 }
             } 
             // --- ГОРИЗОНТАЛЬНЫЕ РЕЖИМЫ (Доминирует ось Y) ---
             else {
                 if (sensor_data.ay > 0) {
-                    target_orientation = 1; // Альбомная стандартная
+                    target_orientation = 2; // Альбомная стандартная
                 } else {
-                    target_orientation = 3; // Альбомная перевернутая
+                    target_orientation = 0; // Альбомная перевернутая
                 }
             }
 
