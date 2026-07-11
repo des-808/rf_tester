@@ -832,7 +832,7 @@ void Draw_GeneralText_Callback(UIElement_t* el) {
     // 7. Печатаем текст. Цвет делаем зеленым для динамики, белым для статики (по вашему желанию)
     lcd_print_to_buffer(text_x, text_y, RGB565_GREEN, el->text_content, RGB565_BLACK, s);
 }
-
+ 
 
 
 
