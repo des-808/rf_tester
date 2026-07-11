@@ -251,51 +251,26 @@ void GUI_BuildProInterface(void) {
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h) {
     if (!element) return;
 
-    element->x = parent_x;
+    // Базовые координаты
+    element->x = parent_x; 
     element->y = parent_y;
-    element->w = available_w;
+    element->w = available_w; 
     element->h = available_h;
 
-    if (element->type == UI_TYPE_LIST_BOX) {
-        // ... инициализация sprite ...
-        int16_t current_y = element->y;
-        uint16_t item_h = (current_font ? current_font->char_height : 16) + 6;
-        uint8_t start = element->props.list_box.scroll_offset;
-        uint8_t visible_count = element->h / item_h;
-        for (uint8_t i = 0; i < element->children_count; i++) {
-            UIElement_t* child = (UIElement_t*)element->children[i];
-            if (i >= start && i < (start + visible_count)) {
-                UI_MeasureAndArrange(child, element->x, current_y, element->w, item_h);
-                current_y += item_h;
-            } else {
-                UI_MeasureAndArrange(child, 0, 0, 0, 0); // Скрываем
-            }
-        }
-    }
-
-    // ИСПРАВЛЕНО: Вместо UI_TYPE_SPRITE проверяем, является ли элемент конечным листом дерева со спрайтом.
-    // Если у него НЕТ детей (children_count == 0), но задан sprite, и память еще не выделена — выделяем!
+    // ШАГ 1 & 2: Выделение памяти (Leafs / Containers)
     if (element->children_count == 0 && element->sprite != NULL) {
         Sprite_t* s = element->sprite;
-        
-        // КРИТИЧЕСКИЙ ФИКС: Если геометрия спрайта еще не была инициализирована родителем,
-        // или если этот элемент сам является физическим родителем (его размеры совпадают с тем, что ему выделили)
         if (s->data == NULL) {
-            s->x = element->x;
-            s->y = element->y;
-            s->w = element->w;
-            s->h = element->h;
-            
-            // Выделяем физическую память ОДИН РАЗ строго для корневого спрайта окна!
+            s->x = element->x; s->y = element->y;
+            s->w = element->w; s->h = element->h;
             s->data = (uint16_t*)heap_caps_malloc(s->w * s->h * 2, 0);
             s->is_allocated = (s->data != NULL);
-            if (!s->is_allocated) { while(1); } // Пул переполнен
+            if (!s->is_allocated) { while(1); }
         }
         return; 
     }
 
-    // ЕСЛИ ЭТО STACK_PANEL (Вертикальный или горизонтальный список)
-    if (element->type == UI_TYPE_STACK_PANEL) {
+    if (element->type == UI_TYPE_STACK_PANEL || element->type == UI_TYPE_LIST_BOX) {
         if (element->sprite != NULL && element->sprite->data == NULL) {
             Sprite_t* s = element->sprite;
             s->x = element->x; s->y = element->y;
@@ -304,26 +279,33 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             s->is_allocated = (s->data != NULL);
             if (!s->is_allocated) { while(1); }
         }
+    }
 
-        int16_t current_x = element->x;
-        int16_t current_y = element->y;
-        uint8_t count = element->children_count;
-        if (count == 0 || count > 8) return;
-
-        // ВЫЧИСЛЯЕМ ФИКСИРОВАННУЮ ВЫСОТУ СТРОКИ НА ОСНОВЕ ТЕКУЩЕГО ШРИФТА
-        // Если шрифт не выбран, берем безопасные 16 пикселей по умолчанию
+    // ШАГ 3: Математика StackPanel
+    if (element->type == UI_TYPE_STACK_PANEL) {
+        int16_t cur_x = element->x, cur_y = element->y;
         uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
+        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+            UI_MeasureAndArrange((UIElement_t*)element->children[i], cur_x, cur_y, element->w, font_h);
+            cur_y += font_h + element->props.stack.spacing;
+        }
+    }
 
-        // Задаем размеры для детей
-        uint16_t child_w = element->w; 
-        uint16_t child_h = font_h; // Теперь высота строки строго равна высоте букв!
-
-        for (uint8_t i = 0; i < count; i++) {
-            // Передаем точную высоту строки в рекурсию
-            UI_MeasureAndArrange((UIElement_t*)element->children[i], current_x, current_y, child_w, child_h);
-            
-            // Сдвигаем координату Y для следующей строки на высоту букв + ваш зазор spacing
-            current_y += child_h + element->props.stack.spacing;
+    // ШАГ 4: Математика ListBox (с учетом скролла)
+    if (element->type == UI_TYPE_LIST_BOX) {
+        int16_t cur_y = element->y;
+        uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
+        uint16_t item_h = font_h + 6;
+        uint8_t start = element->props.list_box.scroll_offset;
+        uint8_t visible = element->h / item_h;
+        for (uint8_t i = 0; i < element->children_count; i++) {
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            if (i >= start && i < (start + visible)) {
+                UI_MeasureAndArrange(child, element->x, cur_y, element->w, item_h);
+                cur_y += item_h;
+            } else {
+                UI_MeasureAndArrange(child, 0, 0, 0, 0); // Скрываем
+            }
         }
     }
 
@@ -354,6 +336,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             UI_MeasureAndArrange(child, cell_x, cell_y, cell_w, cell_h);
         }
     }
+
 }
 
 void UI_DrawTree(UIElement_t* element) {

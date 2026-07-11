@@ -184,6 +184,7 @@ bool ui_needs_refresh = true;
  I2C_Scanner_HandleTypeDef i2c_scanner;
  extern UIElement_t root_grid;
  extern UIElement_t digits_node;
+ extern UIElement_t graph_node;
 uint8_t lastButtonState[8] = {0};
  void INIT_FT6336U(void);
 int main(void)
@@ -256,116 +257,127 @@ I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 //lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
- GUI_ShowAdvancedMeasurementScreen(0);
+ GUI_ShowAdvancedMeasurementScreen(1);
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+   /* USER CODE BEGIN WHILE */
   while (1)
   {
-      /* USER CODE END WHILE */
-      if (PCF8574_HasChanges(&pcf_handle)) {
-          Buttons_Update(&btn_s);
-          uint8_t btn = PCF8574_Read8(&pcf_handle);
-          if (btn != 0xFF) {
-              UI_SetText(ui_btn_row, "Btn 0x%02X", btn); 
-             Buzzer_Short();
-          }
-          else {
-              //snprintf(button_status_msg, sizeof(button_status_msg), "No btn");
-              UI_SetText(ui_btn_row, "No btn");
-          } 
-          PCF8574_AcknowledgeChanges(&pcf_handle);
-      }
-      // Пример: нажали кнопку на расширителе — прокрутили список вниз
-if (btn == 0x7F) { // код вашей кнопки
-    if (digits_node.props.list_box.scroll_offset < (digits_node.children_count - 1)) {
-        digits_node.props.list_box.scroll_offset++;
-        // Пересчитываем геометрию заново, так как видимые дети поменялись!
-        extern UIElement_t root_grid;
-        extern uint16_t Display_Width, Display_Height;
-        UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-        GUI_InvalidateSprite(digits_node.sprite);
-    }
-}
-  
-    // Отладка: мигнуть LED
-    //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-      //Buzzer_Short();HAL_Delay(1500);
-      //Buzzer_Long();HAL_Delay(1500);
-      //Buzzer_Beep2();HAL_Delay(1500);
-      //Buzzer_Beep3();HAL_Delay(1500);
-      //Buzzer_Alarm();HAL_Delay(1500);
-      //Buzzer_Confirm();//HAL_Delay(2500);
-      //Buzzer_Error();
+    /* USER CODE END WHILE */
 
-if (ft6336u.has_touch) {
+    // ====================================================================
+    // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
+    // ====================================================================
+    if (PCF8574_HasChanges(&pcf_handle)) {
+        Buttons_Update(&btn_s);
+        uint8_t btn = PCF8574_Read8(&pcf_handle);
+        
+        if (btn != 0xFF) {
+            UI_SetText(ui_btn_row, "Btn 0x%02X", btn);
+            Buzzer_Short();
+            
+            // Пробный тест прокрутки (скролла) по нажатию физической кнопки
+            // Если кнопка совпадает с кодом скролла — сдвигаем offset
+            if (btn == 0x7F) { 
+                if (digits_node.props.list_box.scroll_offset < (digits_node.children_count - 1)) {
+                    digits_node.props.list_box.scroll_offset++;
+                    
+                    // Пересчитываем геометрию StackPanel, так как видимые строки изменились
+                    extern uint16_t Display_Width, Display_Height;
+                    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+                    
+                    // Помечаем только правый спрайт грязным
+                    GUI_InvalidateSprite(digits_node.sprite);
+                }
+            }
+        }
+        else {
+            UI_SetText(ui_btn_row, "No btn");
+        }
+        
+        PCF8574_AcknowledgeChanges(&pcf_handle);
+    }
+
+    // ====================================================================
+    // 2. ОБРАБОТКА ТАЧСКРИНА (Клик по строкам StackPanel / ListBox)
+    // ====================================================================
+    if (ft6336u.has_touch) {
         uint16_t raw_x, raw_y;
-        FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем 1 точку
+        FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем аппаратную точку
 
-        // Пересчет координат под текущий поворот экрана
+        // Конвертируем сырые координаты под текущий альбомный разворот экрана
         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-        // Передаем координаты в текстовый блок тача
+
+        // Обновляем текст тачскрина в его динамическом блоке
         UI_SetText(ui_touch_row, "Touch:(%d,%d)", last_touch_x, last_touch_y);
-        // --- ЛОГИКА НАЖАТИЯ НА КНОПКИ (Пример) ---
-        // Теперь вы можете использовать last_touch_x и last_touch_y для обработки меню:
-        // if (last_touch_x > 400 && last_touch_y < 40) { ... нажали на кнопку Настроек ... }
+        
+        Buzzer_Short(); // Выдаем короткий писк подтверждения клика
 
-        ft6336u.has_touch = false;  // сброс флага тача
-        Buzzer_Short();             // Пищим при успешном нажатии
-    }
-    // 3. УМНАЯ ОТРИСОВКА ЭКРАНА{
-        UI_DrawTree(&root_grid); // Отрисовка только при изменениях
-
-
-
-int8_t selected_band = UI_ListBox_ProcessTouch(&digits_node, last_touch_x, last_touch_y);
-
-if (selected_band != -1) { 
-    // 1. Подаем звуковой сигнал, что пункт меню успешно выбрался
-    Buzzer_Short(); 
-
-    // 2. В зависимости от выбранного индекса строки (0, 1, 2...), меняем параметры
-    // Допустим, мы создали ListBox со списком радиолюбительских диапазонов
-    switch (selected_band) {
-        case 0: // Первая строка (например, HF / КВ)
-            UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
-            // Здесь в будущем вы измените стартовую и конечную частоту синтезатора:
-            // current_start_freq = 1800000;
-            break;
+        // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условияhas_touch!
+        // Проверяем, попал ли клик пальца по геометрии нашей правой панели digits_node
+        if (last_touch_x >= digits_node.x && last_touch_x < (digits_node.x + digits_node.w) &&
+            last_touch_y >= digits_node.y && last_touch_y < (digits_node.y + digits_node.h)) {
             
-        case 1: // Вторая строка (VHF / УКВ 2м)
-            UI_SetText(ui_swr_row, "BAND: 2m (144M)");
-            break;
+            // Математически вычисляем, на какую по счету строку StackPanel нажал палец
+            // Высота шрифта Arial9 + зазор (или Segoe) в среднем составляет около 22 пикселей
+            // Для идеальной точности мы считываем высоту el->h / count из MeasureAndArrange
+            uint16_t row_height = 22; 
+            int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
             
-        case 2: // Третья строка (UHF / УКВ 70см)
-            UI_SetText(ui_swr_row, "BAND: 70cm (430M)");
-            break;
-            
-        case 3: // Четвертая строка (WiFi / 2.4 GHz)
-            UI_SetText(ui_swr_row, "BAND: 2.4 GHz");
-            break;
+            // Защита от выхода за границы реального количества строк в панели
+            if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
+                
+                // В зависимости от индекса строки, на которую нажали, переключаем диапазоны тестера!
+                switch (clicked_row_idx) {
+                    case 0: // Строка 0: "--ИЗМЕРЕНИЯ--" (Статичный заголовок, можно проигнорировать)
+                        break;
+                        
+                    case 1: // Строка 1: "SWR: 1.00" (При клике сбросим или обновим замер)
+                        UI_SetText(ui_swr_row, "SCANNING...");
+                        break;
+                        
+                    case 2: // Строка 2: "------------" (Разделитель)
+                        break;
+                        
+                    case 4: // Строка 4: "No btn" (Пример переключения диапазона HF)
+                        UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
+                        break;
+                        
+                    case 5: // Строка 5: "No touch" (Пример переключения диапазона VHF)
+                        UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
+                        break;
+                        
+                    default:
+                        // Для всех остальных строк выводим общую информацию
+                        UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
+                        break;
+                }
+                
+                // Помечаем левый график грязным, чтобы он перерисовал свою сетку Брезенхема
+                // с учетом измененного диапазона частот
+                if (graph_node.sprite != NULL) {
+                    GUI_InvalidateSprite(graph_node.sprite);
+                }
+            }
+        }
 
-        default:
-            UI_SetText(ui_swr_row, "BAND: ID %d selected", selected_band);
-            break;
+        ft6336u.has_touch = false; // Обязательный сброс аппаратного флага тача!
     }
 
-    // 3. Помечаем график грязным, чтобы он перерисовал свою сетку или синусоиду 
-    // с учетом новых выбранных частот
-    extern UIElement_t graph_node;
-    if (graph_node.sprite != NULL) {
-        GUI_InvalidateSprite(graph_node.sprite);
-    }
-}
+    // ====================================================================
+    // 3. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
+    // ====================================================================
+    // Вызывается непрерывно на каждой итерации. Благодаря нашей Dirty-Rect оптимизации,
+    // функция работает как пустышка (0% CPU), отправляя данные по SPI DMA только тогда,
+    // когда UI_SetText или Invalidate локально взвели флагneeds_render у конкретного окна.
+    UI_DrawTree(&root_grid); 
 
-
-////////////////////////
-    // Другая логика (не блокирующая)
-    HAL_Delay(10); // только для watchdog, если нужен
+    // Разгрузочная пауза для стабильной работы аппаратного DMA SPI и Watchdog
+    HAL_Delay(10); 
+    
     /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
 }
 
 void INIT_FT6336U(void){
