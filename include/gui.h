@@ -159,5 +159,10 @@ void UI_RenderBorder(UIElement_t* el);
 void UI_RenderButton(UIElement_t* el);
 void UI_RenderToggle(UIElement_t* el);
 
+void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite);
+UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text);
+
+int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty);
+void UI_RenderListBox(UIElement_t* el);
 
 #endif // GUI_H

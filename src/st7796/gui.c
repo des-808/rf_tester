@@ -256,6 +256,23 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     element->w = available_w;
     element->h = available_h;
 
+    if (element->type == UI_TYPE_LIST_BOX) {
+        // ... инициализация sprite ...
+        int16_t current_y = element->y;
+        uint16_t item_h = (current_font ? current_font->char_height : 16) + 6;
+        uint8_t start = element->props.list_box.scroll_offset;
+        uint8_t visible_count = element->h / item_h;
+        for (uint8_t i = 0; i < element->children_count; i++) {
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            if (i >= start && i < (start + visible_count)) {
+                UI_MeasureAndArrange(child, element->x, current_y, element->w, item_h);
+                current_y += item_h;
+            } else {
+                UI_MeasureAndArrange(child, 0, 0, 0, 0); // Скрываем
+            }
+        }
+    }
+
     // ИСПРАВЛЕНО: Вместо UI_TYPE_SPRITE проверяем, является ли элемент конечным листом дерева со спрайтом.
     // Если у него НЕТ детей (children_count == 0), но задан sprite, и память еще не выделена — выделяем!
     if (element->children_count == 0 && element->sprite != NULL) {
@@ -372,6 +389,7 @@ void UI_DrawTree(UIElement_t* element) {
                     case UI_TYPE_CHECK_BOX:
                     case UI_TYPE_RADIO_BUTTON:
                         UI_RenderToggle(element);
+                    
                         break;
 
                     // КРИТИЧЕСКИЙ ФИКС: Если это контейнеры, и они затребовали рендер,
@@ -387,6 +405,9 @@ void UI_DrawTree(UIElement_t* element) {
                                 child->render_callback(child);
                             }
                         }
+                        break;
+                    case UI_TYPE_LIST_BOX:
+                        UI_RenderListBox(element);
                         break;
 
                     default: break;
@@ -912,6 +933,81 @@ void UI_RenderToggle(UIElement_t* el) {
 
     // Выводим сопровождающий текст справа от флажка
     lcd_print_to_buffer(lx + 16, ly, RGB565_WHITE, el->text_content, RGB565_BLACK, s);
+}
+
+
+/**
+ * @brief Инициализирует узел как ListBox
+ */
+void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
+    if (!el) return;
+    el->type = UI_TYPE_LIST_BOX;
+    el->sprite = target_sprite;
+    el->children_count = 0;
+    el->props.list_box.selected_index = -1;
+    el->props.list_box.scroll_offset = 0;
+}
+
+/**
+ * @brief Добавляет строку (пункт списка) внутрь ListBox
+ */
+UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
+    if (panel_rows_count >= MAX_PANEL_ROWS || listbox->children_count >= 8) return NULL;
+    UIElement_t* item = &panel_rows[panel_rows_count++];
+    item->type = UI_TYPE_TEXT_BLOCK;
+    item->sprite = listbox->sprite;
+    strncpy(item->text_content, item_text, sizeof(item->text_content) - 1);
+    listbox->children[listbox->children_count++] = item;
+    return item;
+}
+
+//Функция рисует рамку, подсвечивает выбранный пункт (0x10A5) и выводит текст
+void UI_RenderListBox(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+    Sprite_t* s = el->sprite;
+    int16_t lx = el->x - s->x, ly = el->y - s->y;
+
+    // 1. Очистка фона и рамка
+    for (int16_t y = ly; y < ly + el->h; y++)
+        for (int16_t x = lx; x < lx + el->w; x++)
+            s->data[y * s->w + x] = (y == ly || y == ly + el->h - 1 || x == lx || x == lx + el->w - 1) ? 0x7BEF : RGB565_BLACK;
+
+    lcd_set_font(&font_arial_9_struct);
+    uint16_t item_h = current_font->char_height + 6;
+    uint8_t start = el->props.list_box.scroll_offset, visible_count = el->h / item_h;
+
+    // 2. Отрисовка видимых элементов
+    for (uint8_t i = 0; i < el->children_count; i++) {
+        if (i >= start && i < (start + visible_count)) {
+            UIElement_t* child = (UIElement_t*)el->children[i];
+            int16_t clx = child->x - s->x, cly = child->y - s->y;
+            uint16_t bg = (i == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
+            
+            if (bg != RGB565_BLACK) // Подсветка
+                for (int16_t y = cly; y < cly + child->h; y++)
+                    for (int16_t x = clx + 1; x < clx + child->w - 1; x++)
+                        s->data[y * s->w + x] = bg;
+
+            lcd_print_to_buffer(clx + 10, cly + (child->h - current_font->char_height) / 2, RGB565_WHITE, child->text_content, bg, s);
+        }
+    }
+}
+
+//Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
+int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
+    if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite ||
+        tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) return -1;
+
+    uint8_t target = listbox->props.list_box.scroll_offset + (ty - listbox->y) / (font_arial_9_struct.char_height + 6);
+
+    if (target < listbox->children_count) {
+        if (listbox->props.list_box.selected_index != target) {
+            listbox->props.list_box.selected_index = target;
+            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
+        }
+        return target;
+    }
+    return -1;
 }
 
 

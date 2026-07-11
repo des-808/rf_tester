@@ -183,6 +183,7 @@ bool ui_needs_refresh = true;
  extern Buttons_HandleTypeDef btn_s;
  I2C_Scanner_HandleTypeDef i2c_scanner;
  extern UIElement_t root_grid;
+ extern UIElement_t digits_node;
 uint8_t lastButtonState[8] = {0};
  void INIT_FT6336U(void);
 int main(void)
@@ -276,6 +277,17 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
           } 
           PCF8574_AcknowledgeChanges(&pcf_handle);
       }
+      // Пример: нажали кнопку на расширителе — прокрутили список вниз
+if (btn == 0x7F) { // код вашей кнопки
+    if (digits_node.props.list_box.scroll_offset < (digits_node.children_count - 1)) {
+        digits_node.props.list_box.scroll_offset++;
+        // Пересчитываем геометрию заново, так как видимые дети поменялись!
+        extern UIElement_t root_grid;
+        extern uint16_t Display_Width, Display_Height;
+        UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+        GUI_InvalidateSprite(digits_node.sprite);
+    }
+}
   
     // Отладка: мигнуть LED
     //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -304,6 +316,49 @@ if (ft6336u.has_touch) {
     }
     // 3. УМНАЯ ОТРИСОВКА ЭКРАНА{
         UI_DrawTree(&root_grid); // Отрисовка только при изменениях
+
+
+
+int8_t selected_band = UI_ListBox_ProcessTouch(&digits_node, last_touch_x, last_touch_y);
+
+if (selected_band != -1) { 
+    // 1. Подаем звуковой сигнал, что пункт меню успешно выбрался
+    Buzzer_Short(); 
+
+    // 2. В зависимости от выбранного индекса строки (0, 1, 2...), меняем параметры
+    // Допустим, мы создали ListBox со списком радиолюбительских диапазонов
+    switch (selected_band) {
+        case 0: // Первая строка (например, HF / КВ)
+            UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
+            // Здесь в будущем вы измените стартовую и конечную частоту синтезатора:
+            // current_start_freq = 1800000;
+            break;
+            
+        case 1: // Вторая строка (VHF / УКВ 2м)
+            UI_SetText(ui_swr_row, "BAND: 2m (144M)");
+            break;
+            
+        case 2: // Третья строка (UHF / УКВ 70см)
+            UI_SetText(ui_swr_row, "BAND: 70cm (430M)");
+            break;
+            
+        case 3: // Четвертая строка (WiFi / 2.4 GHz)
+            UI_SetText(ui_swr_row, "BAND: 2.4 GHz");
+            break;
+
+        default:
+            UI_SetText(ui_swr_row, "BAND: ID %d selected", selected_band);
+            break;
+    }
+
+    // 3. Помечаем график грязным, чтобы он перерисовал свою сетку или синусоиду 
+    // с учетом новых выбранных частот
+    extern UIElement_t graph_node;
+    if (graph_node.sprite != NULL) {
+        GUI_InvalidateSprite(graph_node.sprite);
+    }
+}
+
 
 ////////////////////////
     // Другая логика (не блокирующая)
