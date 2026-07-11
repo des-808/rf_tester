@@ -60,6 +60,7 @@ extern PCF8574_HandleTypeDef pcf_handle;
 extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 extern DMA_HandleTypeDef hdma_spi4_tx;
 extern SPI_HandleTypeDef hspi4;
+extern uint8_t bmi160_irq_received;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -264,6 +265,8 @@ void DMA1_Stream0_IRQHandler(void)
   /* USER CODE END DMA1_Stream0_IRQn 1 */
 }
 
+extern uint32_t exti_counter;
+void LED_Blink(uint32_t delay);
 /**
   * @brief This function handles EXTI line[9:5] interrupts.
   */
@@ -289,7 +292,11 @@ void EXTI9_5_IRQHandler(void)
   // Для BMI160 
   if(__HAL_GPIO_EXTI_GET_IT(BMI160_INT_Pin) != RESET){
     __HAL_GPIO_EXTI_CLEAR_IT(BMI160_INT_Pin);
-    BMI160_IRQHandler(BMI160_INT_Pin );
+    ///BMI160_IRQHandler(BMI160_INT_Pin );
+    // 2. Взводим флаг для главного цикла while(1)
+      bmi160_irq_received = 1;
+      exti_counter++;
+      
   }
   /* USER CODE END EXTI9_5_IRQn 0 */
   /* USER CODE BEGIN EXTI9_5_IRQn 1 */

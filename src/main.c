@@ -88,6 +88,10 @@ extern UIElement_t* ui_swr_row;   // Указатель на элемент КС
 uint16_t last_touch_x = 0;              // Координата X для логики меню
 uint16_t last_touch_y = 0;              // Координата Y для логики меню
 
+
+char debug_str[64] = "BMI160: Wait interrupt..."; // Строка для вывода на экран
+volatile uint32_t exti_counter = 0;               // Счетчик прерываний для проверки физики
+
 volatile uint8_t bmi160_irq_received = 0;
 uint8_t current_display_orientation = 1; // 1 - Альбомная по умолчанию
 /* USER CODE END PFP */
@@ -171,7 +175,6 @@ bool ui_needs_refresh = true;
   * @retval int
   */
  extern void ST7796_FillScreen(uint16_t color);
- extern PCF8574_HandleTypeDef pcf_handle;
  extern Buttons_HandleTypeDef btn_s;
  I2C_Scanner_HandleTypeDef i2c_scanner;
  extern UIElement_t root_grid;
@@ -252,7 +255,7 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   {
     /* USER CODE END WHILE */
 // ====================================================================
-    if (bmi160_irq_received) 
+    /* if (bmi160_irq_received) 
     {
       bmi160_irq_received = 0; // Сбрасываем флаг события EXTI
       
@@ -275,6 +278,44 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
         extern uint16_t Display_Width, Display_Height;
         UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
         ui_needs_refresh = true; // Триггерим полную перерисовку UI дерева
+      }
+    }
+ */
+if (bmi160_irq_received) 
+    {
+      bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
+      
+      // Запрашиваем актуальный режим. Передаем текущую ориентацию.
+      uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
+      
+      // Если датчик зафиксировал изменение положения устройства
+      if (next_orientation != current_display_orientation) 
+      {
+        // Проверяем тип смены ориентации (горизонт/вертикаль)
+        // Если меняется тип (был альбомным (1,3), стал портретным (0,2) или наоборот):
+        uint8_t was_landscape = (current_display_orientation == 1 || current_display_orientation == 3);
+        uint8_t is_landscape  = (next_orientation == 1 || next_orientation == 3);
+        
+        // Физически разворачиваем контроллер ST7796
+        ST7796_SetRotation(next_orientation);
+        current_display_orientation = next_orientation;
+        
+        extern uint16_t Display_Width, Display_Height;
+        
+        if (was_landscape != is_landscape) 
+        {
+            // Рокировка размеров, так как плоскость кадра повернулась на 90 градусов
+            uint16_t temp = Display_Width; 
+            Display_Width = Display_Height; 
+            Display_Height = temp;
+        }
+        
+        // Очищаем экран, чтобы убрать артефакты старого кадра при перерисовке сетки
+        // ST7796_Clear(BLACK); 
+        
+        // Перестраиваем сетку GUI rf_tester под новые физические границы
+        UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+        ui_needs_refresh = true; 
       }
     }
 

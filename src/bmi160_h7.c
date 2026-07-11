@@ -123,21 +123,39 @@ uint8_t BMI160_CheckOrientationTask(I2C_HandleTypeDef *hi2c, uint16_t devAddress
     // Считываем актуальные данные осей
     if (BMI160_ReadData(hi2c, devAddress, &sensor_data)) {
         
-        // Проверяем наклон по оси X (переход в Портретный режим)
-        if (fabsf(sensor_data.ax) > BMI160_THRESHOLD_45_DEG) {
-            if (current_orientation != 2) {
-                return 2; // Требуется портретная ориентация
+        float ax_abs = fabsf(sensor_data.ax);
+        float ay_abs = fabsf(sensor_data.ay);
+        
+        // Порог детекции наклона в 45 градусов
+        if (ax_abs > BMI160_THRESHOLD_45_DEG || ay_abs > BMI160_THRESHOLD_45_DEG) {
+            
+            uint8_t target_orientation = current_orientation;
+
+            // --- ВЕРТИКАЛЬНЫЕ РЕЖИМЫ (Доминирует ось X) ---
+            if (ax_abs > ay_abs) {
+                if (sensor_data.ax > 0) {
+                    target_orientation = 0; // Портретная стандартная
+                } else {
+                    target_orientation = 2; // Портретная перевернутая
+                }
+            } 
+            // --- ГОРИЗОНТАЛЬНЫЕ РЕЖИМЫ (Доминирует ось Y) ---
+            else {
+                if (sensor_data.ay > 0) {
+                    target_orientation = 1; // Альбомная стандартная
+                } else {
+                    target_orientation = 3; // Альбомная перевернутая
+                }
             }
-        } 
-        // Проверяем наклон по оси Y (возврат в Альбомный режим)
-        else if (fabsf(sensor_data.ay) > BMI160_THRESHOLD_45_DEG) {
-            if (current_orientation != 1) {
-                return 1; // Требуется альбомная ориентация
+
+            // Если вычисленная ориентация отличается от текущей — возвращаем её код
+            if (target_orientation != current_orientation) {
+                return target_orientation;
             }
         }
     }
     
-    return 0; // Изменений нет
+    return current_orientation; // Возвращаем текущую, если изменений нет
 }
 
 
