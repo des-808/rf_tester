@@ -262,10 +262,20 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     // ШАГ 3: Математика StackPanel
     if (element->type == UI_TYPE_STACK_PANEL) {
         int16_t cur_x = element->x, cur_y = element->y;
-        uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
+        uint16_t default_font_h = (current_font != NULL) ? current_font->char_height : 16;
+
         for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
-            UI_MeasureAndArrange((UIElement_t*)element->children[i], cur_x, cur_y, element->w, font_h);
-            cur_y += font_h + element->props.stack.spacing;
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            
+            // КРИТИЧЕСКИЙ ФИКС: Проверяем, задана ли у ребенка своя кастомная высота (как h = 72 у ListBox).
+            // Если задана (child->h > 0) — используем её! Если не задана (равна 0) — берем стандартную высоту шрифта.
+            uint16_t child_h = (child->h > 0) ? child->h : default_font_h;
+
+            // Передаем правильную вычисленную высоту в рекурсию для этого ребенка
+            UI_MeasureAndArrange(child, cur_x, cur_y, element->w, child_h);
+            
+            // Сдвигаем координату Y для следующего элемента на РЕАЛЬНУЮ высоту текущего ребенка + зазор
+            cur_y += child_h + element->props.stack.spacing;
         }
     }
 
