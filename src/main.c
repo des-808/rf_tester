@@ -31,6 +31,7 @@
 #include "flash.h"
 #include "ft6336u.h"
 #include "gui.h"
+#include "bmi160_h7.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -75,15 +76,10 @@ void SystemClock_Config(void);
 void ST7796_Init(void);
 uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 DMA_HandleTypeDef hdma_spi4_tx;
-
-
 //extern void drawStatusBar(Sprite_t *sprite);
-
 extern Sprite_t status_bar_sprite;
 extern Sprite_t main_screen_sprite;
 extern Sprite_t graph_sprite; // если нужен доступ к графику из main.c
-
-
 
 extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
 extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
@@ -91,14 +87,13 @@ extern UIElement_t* ui_swr_row;   // Указатель на элемент КС
 
 uint16_t last_touch_x = 0;              // Координата X для логики меню
 uint16_t last_touch_y = 0;              // Координата Y для логики меню
-/* USER CODE END PFP */
 
+volatile uint8_t bmi160_irq_received = 0;
+uint8_t current_display_orientation = 1; // 1 - Альбомная по умолчанию
+/* USER CODE END PFP */
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-
 PCF8574_HandleTypeDef pcf_handle;
-
 static void MPU_Config(void)
 {
   MPU_Region_InitTypeDef MPU_InitStruct = {0};
@@ -160,7 +155,6 @@ static void CPU_CACHE_Enable(void)
   /* Enable D-Cache */
   SCB_EnableDCache();
 }
-
 void LED_Blink(uint32_t delay)
 {
 	HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_SET);
@@ -168,8 +162,6 @@ void LED_Blink(uint32_t delay)
 	HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_RESET);
 	HAL_Delay(500-1);
 }
-
-
 // Глобальный флаг: true — отрисовать экран, false — ждать изменений
 bool ui_needs_refresh = true; 
 /* USER CODE END 0 */
@@ -185,7 +177,7 @@ bool ui_needs_refresh = true;
  extern UIElement_t root_grid;
  extern UIElement_t digits_node;
  extern UIElement_t graph_node;
-uint8_t lastButtonState[8] = {0};
+ uint8_t lastButtonState[8] = {0};
  void INIT_FT6336U(void);
 int main(void)
 {
@@ -196,25 +188,17 @@ int main(void)
   MPU_Config();
   CPU_CACHE_Enable();
   /* USER CODE END 1 */
-
-  
-
   /* MCU Configuration--------------------------------------------------------*/
-
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
   /* USER CODE BEGIN Init */
   
   /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
-
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   HAL_GPIO_WritePin(CTP_RESET_GPIO_Port,CTP_RESET_Pin,GPIO_PIN_SET);
@@ -233,8 +217,6 @@ int main(void)
   MX_SPI1_Init();
   MX_UART8_Init();
 
-
-
   HAL_Delay(50);
   PCF8574_Init(&pcf_handle, &hi2c1, 0x3C);
   Buttons_Init(&btn_s, &pcf_handle);
@@ -243,9 +225,13 @@ int main(void)
   //HAL_SD_GetCardCID(&hmmc1, &pCID);
   //HAL_SD_GetCardCSD(&hmmc1, &pCSD);
 	//HAL_SD_GetCardInfo(&hmmc1, &pCardInfo);
+  if (!BMI160_Init(&hi2c1, BMI160_I2C_ADDR_VCC)) {
+      while(1); // Ошибка
+  }
 	HAL_Delay(150);
   /* USER CODE BEGIN 2 */
   ST7796_Init();
+
   // Используем Segoe Print 12 по умолчанию
   //lcd_set_font(&font_segoe_struct);
   // Или Arial 9:
@@ -257,7 +243,7 @@ I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 //lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
- GUI_ShowAdvancedMeasurementScreen(1);
+ GUI_ShowAdvancedMeasurementScreen(0);
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
@@ -265,6 +251,32 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   while (1)
   {
     /* USER CODE END WHILE */
+// ====================================================================
+    if (bmi160_irq_received) 
+    {
+      bmi160_irq_received = 0; // Сбрасываем флаг события EXTI
+      
+      // Вызываем упакованную функцию. Она сама решит, нужно ли менять экран
+      uint8_t task_reorient_display = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
+      
+      // Если функция вернула команду на смену режима (не 0)
+      if (task_reorient_display != 0) 
+      {
+        current_display_orientation = task_reorient_display;
+        
+        // Выполняем физический разворот дисплея ST7796
+        if (current_display_orientation == 1) {
+            // ST7796_SetRotation(1); // Альбомная
+        } else {
+            // ST7796_SetRotation(0); // Портретная
+        }
+        
+        // Пересчитываем сетку интерфейса rf_tester под новые размеры экрана
+        extern uint16_t Display_Width, Display_Height;
+        UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+        ui_needs_refresh = true; // Триггерим полную перерисовку UI дерева
+      }
+    }
 
     // ====================================================================
     // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)

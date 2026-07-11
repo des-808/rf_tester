@@ -285,6 +285,12 @@ void EXTI9_5_IRQHandler(void)
       __HAL_GPIO_EXTI_CLEAR_IT(INT_DS3231_Pin);
       // RTC_IRQHandler();
   }
+
+  // Для BMI160 
+  if(__HAL_GPIO_EXTI_GET_IT(BMI160_INT_Pin) != RESET){
+    __HAL_GPIO_EXTI_CLEAR_IT(BMI160_INT_Pin);
+    BMI160_IRQHandler(BMI160_INT_Pin );
+  }
   /* USER CODE END EXTI9_5_IRQn 0 */
   /* USER CODE BEGIN EXTI9_5_IRQn 1 */
   /* USER CODE END EXTI9_5_IRQn 1 */

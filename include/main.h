@@ -96,6 +96,9 @@ void Error_Handler(void);
 #define EXTI_PCF8574_Pin GPIO_PIN_7
 #define EXTI_PCF8574_GPIO_Port GPIOE
 #define EXTI_PCF8574_EXTI_IRQn EXTI9_5_IRQn
+#define BMI160_INT_Pin GPIO_PIN_8
+#define BMI160_INT_GPIO_Port GPIOE
+#define BMI160_INT_EXTI_IRQn EXTI9_5_IRQn
 #define LCD_RESET_Pin GPIO_PIN_9
 #define LCD_RESET_GPIO_Port GPIOE
 #define LCD_LED_Pin GPIO_PIN_10

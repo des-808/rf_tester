@@ -766,20 +766,22 @@ void GUI_Panel_ClearStrings(UIElement_t* parent) {
 }
 
 void Draw_GeneralText_Callback(UIElement_t* el) {
-    if (!el || !el->sprite || !el->sprite->data) return;
-
+    if (!el || !el->sprite || el->w == 0 || el->h == 0) return;
     Sprite_t* s = el->sprite;
+    int16_t lx = el->x - s->x, ly = el->y - s->y;
     
     // 1. Вычисляем локальные координаты ячейки внутри физического спрайта
     int16_t local_x = el->x - s->x;
     int16_t local_y = el->y - s->y;
 
     // 2. Очищаем пространство этой конкретной строки цветом фона (Dirty Rect)
-    for (int16_t y = local_y; y < local_y + el->h; y++) {
+   /*  for (int16_t y = local_y; y < local_y + el->h; y++) {
         for (int16_t x = local_x; x < local_x + el->w; x++) {
             s->data[y * s->w + x] = RGB565_BLACK; 
         }
-    }
+    } */
+   // КРИТИЧЕСКИЙ ФИКС 2: Не затираем фон черным! Определяем текущий цвет подложки.
+    uint16_t bg_color = s->data[ly * s->w + lx]; 
 
     // 3. Активируем шрифт
     lcd_set_font(&font_arial_9_struct);
@@ -822,7 +824,7 @@ void Draw_GeneralText_Callback(UIElement_t* el) {
     if (text_y < local_y) text_y = local_y;
 
     // 7. Печатаем текст. Цвет делаем зеленым для динамики, белым для статики (по вашему желанию)
-    lcd_print_to_buffer(text_x, text_y, RGB565_GREEN, el->text_content, RGB565_BLACK, s);
+    lcd_print_to_buffer(text_x, text_y, RGB565_GREEN, el->text_content, bg_color, s);
 }
  
 
@@ -936,30 +938,61 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
 void UI_RenderListBox(UIElement_t* el) {
     if (!el || !el->sprite || !el->sprite->data) return;
     Sprite_t* s = el->sprite;
-    int16_t lx = el->x - s->x, ly = el->y - s->y;
+    
+    // Локальные координаты самого ListBox внутри его физического спрайта
+    int16_t lx = el->x - s->x;
+    int16_t ly = el->y - s->y;
 
-    // 1. Очистка фона и рамка
-    for (int16_t y = ly; y < ly + el->h; y++)
-        for (int16_t x = lx; x < lx + el->w; x++)
+    // 1. Очистка фона ListBox и отрисовка серой рамки по краям
+    for (int16_t y = ly; y < ly + el->h; y++) {
+        for (int16_t x = lx; x < lx + el->w; x++) {
             s->data[y * s->w + x] = (y == ly || y == ly + el->h - 1 || x == lx || x == lx + el->w - 1) ? 0x7BEF : RGB565_BLACK;
+        }
+    }
 
     lcd_set_font(&font_arial_9_struct);
     uint16_t item_h = current_font->char_height + 6;
-    uint8_t start = el->props.list_box.scroll_offset, visible_count = el->h / item_h;
+    uint8_t start = el->props.list_box.scroll_offset;
+    uint8_t visible_count = el->h / item_h;
 
-    // 2. Отрисовка видимых элементов
+    // 2. Отрисовка видимых элементов списка
     for (uint8_t i = 0; i < el->children_count; i++) {
         if (i >= start && i < (start + visible_count)) {
             UIElement_t* child = (UIElement_t*)el->children[i];
-            int16_t clx = child->x - s->x, cly = child->y - s->y;
+            
+            // Вычисляем локальные координаты пункта относительно спрайта панели!
+            // Внимание: берем координаты child, которые посчитал менеджер разметки
+            int16_t clx = child->x - s->x;
+            int16_t cly = child->y - s->y;
+            
+            // Определяем цвет фона: синий для выбранного, черный для обычных
             uint16_t bg = (i == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
             
-            if (bg != RGB565_BLACK) // Подсветка
-                for (int16_t y = cly; y < cly + child->h; y++)
-                    for (int16_t x = clx + 1; x < clx + child->w - 1; x++)
-                        s->data[y * s->w + x] = bg;
+            // Заливаем прямоугольник элемента выбранным цветом фона
+            for (int16_t y = cly; y < cly + child->h; y++) {
+                for (int16_t x = clx + 1; x < clx + child->w - 1; x++) {
+                    s->data[y * s->w + x] = bg;
+                }
+            }
 
-            lcd_print_to_buffer(clx + 10, cly + (child->h - current_font->char_height) / 2, RGB565_WHITE, child->text_content, bg, s);
+            // Вычисляем точные локальные координаты для текста внутри спрайта
+            int16_t text_x = clx + 5; // небольшой отступ слева в 5 пикселей
+            int16_t text_y = cly + (child->h - current_font->char_height) / 2; // центрируем по вертикали
+
+            // Защита: передаем в lcd_print_to_buffer локальные координаты text_x и text_y,
+            // а также ПРАВИЛЬНЫЙ цвет фона (bg), чтобы вокруг букв не было черных ореолов!
+            lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg, s);
+            
+            // КРИТИЧЕСКИЙ ФИКС: Чтобы Draw_GeneralText_Callback не затер этот элемент позже,
+            // мы временно обнуляем его размеры для общего движка обхода дерева.
+            // Менеджер разметки все равно пересчитает их при следующем кадре.
+            child->w = 0;
+            child->h = 0;
+        } else {
+            // Скрытые элементы скролла тоже сбрасываем в 0, чтобы они не рисовались
+            UIElement_t* child = (UIElement_t*)el->children[i];
+            child->w = 0;
+            child->h = 0;
         }
     }
 }
