@@ -133,6 +133,7 @@ typedef struct UIElement {
     uint8_t grid_col;
 } UIElement_t;
 
+#define HEAP_CAP_DEFAULT 0
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation);
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
@@ -151,6 +152,7 @@ void GUI_InvalidateRect(Sprite_t* s, int16_t rx, int16_t ry, uint16_t rw, uint16
 
 void UI_SetText(UIElement_t* element, const char* format, ...);
 UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text);
+void GUI_Panel_ClearStrings(UIElement_t* parent);
 void Draw_GeneralText_Callback(UIElement_t* el);
 
 

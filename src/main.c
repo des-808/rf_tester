@@ -77,9 +77,9 @@ void ST7796_Init(void);
 uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 DMA_HandleTypeDef hdma_spi4_tx;
 //extern void drawStatusBar(Sprite_t *sprite);
-extern Sprite_t status_bar_sprite;
-extern Sprite_t main_screen_sprite;
-extern Sprite_t graph_sprite; // если нужен доступ к графику из main.c
+extern Sprite_t* status_bar_sprite;
+extern Sprite_t* main_screen_sprite;
+extern Sprite_t* graph_sprite; // если нужен доступ к графику из main.c
 
 extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
 extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
@@ -285,21 +285,31 @@ if (bmi160_irq_received)
     {
       bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
       
-      // 1. Запрашиваем у автомата датчика код целевой ориентации (0, 1, 2 или 3)
+      // Запрашиваем у датчика целевую ориентацию (0, 1, 2 или 3)
       uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
       
-      // 2. Если положение устройства физически изменилось
+      // Если положение устройства физически изменилось
       if (next_orientation != current_display_orientation) 
       {
         current_display_orientation = next_orientation;
         
-        // 3. Просто отдаем новую ориентацию в вашу "умную" функцию.
-        // Она сама вызовет ST7796_SetRotation, пересчитает Layout и обновит размеры.
+        // 1. Полностью пересобираем экран под новую ориентацию.
+        // Эта функция вызовет ST7796_SetRotation и обновит Display_Width/Display_Height.
         GUI_ShowAdvancedMeasurementScreen(next_orientation);
         
-        // 4. Оповещаем систему отрисовки, что дерево UI изменилось,
-        // и принудительно рендерим новый кадр на дисплей "на месте".
-        ui_needs_refresh = true; 
+        // 2. Получаем доступ к обновленным переменным размеров
+        //extern uint16_t Display_Width, Display_Height;
+        
+        // 3. Физически очищаем экран, чтобы стереть артефакты старого положения
+        //ST7796_FillScreen(RGB565_BLACK); 
+        
+        // 4. ЖЕСТКИЙ ПЕРЕРАСЧЕТ: Принудительно заставляем Layout Engine 
+        // пересчитать координаты ВСЕХ элементов дерева root_grid под НОВЫЕ Display_Width и Display_Height
+        //UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+        
+        // 5. Взводим флаг обновления и принудительно отрисовываем новое дерево кадра
+        //ui_needs_refresh = true; 
+        //UI_DrawTree(&root_grid);
       }
     }
 

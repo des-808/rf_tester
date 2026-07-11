@@ -14,9 +14,9 @@ UIElement_t digits_panel;  // Спрайт-контейнер панели (ис
 UIElement_t ui_bands_listbox; // Сам контейнер ListBox
 
 // Реальные структуры спрайтов LovyanGFX/Си
-Sprite_t status_bar_sprite;
-Sprite_t graph_sprite;
-Sprite_t main_screen_sprite;
+Sprite_t* status_bar_sprite     = NULL;
+Sprite_t* graph_sprite          = NULL;
+Sprite_t* main_screen_sprite    = NULL;
 
 // Пул элементов для строк (выделяем память статически внутри gui.c, чтобы не плодить глобальные имена)
 
@@ -32,7 +32,7 @@ UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
 UIElement_t* ui_touch_row = NULL;
 
-void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
+/* void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // 1. Поворачиваем железо дисплея и полностью очищаем старый пул памяти
     ST7796_SetRotation(rotation);
     heap_caps_reset_pool();
@@ -43,6 +43,10 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Принудительно сбрасываем счетчик детей и у самого ListBox,
     // так как при повторном заходе в функцию пункты меню не должны дублироваться!
     ui_bands_listbox.children_count = 0;
+
+    // Считываем актуальные системные размеры, которые только что выставила ST7796_SetRotation
+    extern uint16_t Display_Width;
+    extern uint16_t Display_Height;
 
     // 2. Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
     root_grid.type = UI_TYPE_GRID;
@@ -146,16 +150,152 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Принудительно очищаем правый видеобуфер черным перед первым кадром
     if (main_screen_sprite.is_allocated && main_screen_sprite.data != NULL) {
         uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
-        memset(main_screen_sprite.data, 0, total_pixels * 2); 
+        memset(&main_screen_sprite.data, 0, total_pixels * 2); 
     }
 
     // 9. ЗАПУСК ОТРИСОВКИ: Полная валидация грязных зон и вывод дерева на экран
     GUI_InvalidateAll(&root_grid);
     UI_DrawTree(&root_grid);
+} */
+
+void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
+    // 1. АППАРАТНЫЙ СБРОС: Поворачиваем железо и полностью очищаем весь прошлый пул памяти.
+    // Все старые динамические спрайты и ноды стираются здесь автоматически!
+    ST7796_SetRotation(rotation);
+    heap_caps_reset_pool();
+    
+    // Сбрасываем вспомогательные счетчики строк и списков
+    GUI_Panel_ClearStrings(&digits_node);
+    ui_bands_listbox.children_count = 0;
+
+    extern uint16_t Display_Width;
+    extern uint16_t Display_Height;
+
+    // ====================================================================
+    // ЭТАП 1: СБОРКА СТРУКТУРЫ СЕТОК (БЕЗ СПРАЙТОВ)
+    // ====================================================================
+    root_grid.type = UI_TYPE_GRID;
+    root_grid.children_count = 0;
+    root_grid.props.grid.rows_count = 2;
+    root_grid.props.grid.cols_count = 1;
+
+    root_grid.props.grid.row_definitions[0] = 10; // 10% под статус-бар (строка 0)
+    root_grid.props.grid.row_definitions[1] = 90; // 90% под рабочую зону (строка 1)
+    root_grid.props.grid.col_definitions[0] = 100; // 100% ширины экрана
+
+    status_bar_node.type = UI_TYPE_TEXT_BLOCK;
+    status_bar_node.grid_row = 0;
+    status_bar_node.grid_col = 0;
+    root_grid.children[root_grid.children_count++] = &status_bar_node;
+
+    main_work_grid.type = UI_TYPE_GRID;
+    main_work_grid.children_count = 0;
+    main_work_grid.grid_row = 1;
+    main_work_grid.grid_col = 0;
+    main_work_grid.props.grid.rows_count = 1;
+    main_work_grid.props.grid.cols_count = 2;
+    main_work_grid.props.grid.row_definitions[0] = 100; // Вся высота рабочей зоны
+    main_work_grid.props.grid.col_definitions[0] = 70;  // 70% ширины под График
+    main_work_grid.props.grid.col_definitions[1] = 30;  // 30% ширины под цифры  
+    root_grid.children[root_grid.children_count++] = &main_work_grid;
+
+    graph_node.type = UI_TYPE_TEXT_BLOCK;
+    graph_node.grid_row = 0;
+    graph_node.grid_col = 0;
+    main_work_grid.children[main_work_grid.children_count++] = &graph_node;
+
+    digits_node.type = UI_TYPE_STACK_PANEL;
+    digits_node.grid_row = 0; 
+    digits_node.grid_col = 1; 
+    digits_node.children_count = 0; 
+    main_work_grid.children[main_work_grid.children_count++] = &digits_node;
+
+    // 🔥 АВТОРАСЧЕТ ГЕОМЕТРИИ: Узнаем точные .w и .h для каждой ячейки под текущую ориентацию
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+
+    // ====================================================================
+    // ЭТАП 2: АВТОМАТИЧЕСКОЕ СОЗДАНИЕ ДИНАМИЧЕСКИХ СПРАЙТОВ
+    // ====================================================================
+    
+    // --- Динамический Спрайт Статус-бара ---
+    status_bar_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), HEAP_CAP_DEFAULT);
+    status_bar_sprite->w = status_bar_node.w;
+    status_bar_sprite->h = status_bar_node.h;
+    status_bar_sprite->is_allocated = true;
+    status_bar_sprite->data = (uint16_t*)heap_caps_malloc(status_bar_sprite->w * status_bar_sprite->h * 2, HEAP_CAP_DEFAULT);
+    
+    status_bar_node.sprite = status_bar_sprite; // Привязываем указатель
+    status_bar_node.render_callback = Draw_StatusBar_Callback;
+
+    // --- Динамический Спрайт Графика ---
+    graph_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), HEAP_CAP_DEFAULT);
+    graph_sprite->w = graph_node.w;
+    graph_sprite->h = graph_node.h;
+    graph_sprite->is_allocated = true;
+    graph_sprite->data = (uint16_t*)heap_caps_malloc(graph_sprite->w * graph_sprite->h * 2, HEAP_CAP_DEFAULT);
+    
+    graph_node.sprite = graph_sprite;
+    graph_node.render_callback = Draw_Graph_Content;
+
+    // --- Динамический Спрайт Панели цифр ---
+    main_screen_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), HEAP_CAP_DEFAULT);
+    main_screen_sprite->w = digits_node.w;
+    main_screen_sprite->h = digits_node.h;
+    main_screen_sprite->is_allocated = true;
+    main_screen_sprite->data = (uint16_t*)heap_caps_malloc(main_screen_sprite->w * main_screen_sprite->h * 2, HEAP_CAP_DEFAULT);
+    
+    digits_node.sprite = main_screen_sprite;
+    digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
+    digits_node.props.stack.spacing = 2;
+
+    // Очищаем видеобуфер новой панели
+    if (main_screen_sprite->data != NULL) {
+        uint32_t total_pixels = (uint32_t)main_screen_sprite->w * main_screen_sprite->h;
+        memset(main_screen_sprite->data, 0, total_pixels * 2); 
+    }
+
+    // ====================================================================
+    // ЭТАП 3: НАПОЛНЕНИЕ ТЕКСТОМ И ЭЛЕМЕНТАМИ (Внутри новых динамических спрайтов)
+    // ====================================================================
+    
+    UIElement_t* el = GUI_Panel_AddString(&digits_node, "--ИЗМЕРЕНИЯ--");
+    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+
+    ui_swr_row = GUI_Panel_AddString(&digits_node, "SWR: 1.00"); 
+    ui_swr_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+    ui_swr_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+    
+    el = GUI_Panel_AddString(&digits_node, "------------");
+    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    el->vertical_alignment   = VERTICAL_ALIGN_TOP;
+
+    // Инициализация ListBox. Теперь передаем указатель на динамический спрайт
+    UI_InitListBox(&ui_bands_listbox, main_screen_sprite);
+    ui_bands_listbox.h = 72; 
+    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
+    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
+    digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
+
+    ui_btn_row = GUI_Panel_AddString(&digits_node, "No btn");
+    ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+    ui_btn_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+
+    ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
+    ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+    ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+
+    // Финальный каскадный перерасчет контента
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+
+    // Полная валидация зон и отрисовка на экране
+    GUI_InvalidateAll(&root_grid);
+    UI_DrawTree(&root_grid);
 }
 
-
-void GUI_BuildProInterface(void) {
+/* void GUI_BuildProInterface(void) {
     // 1. Поворачиваем железо дисплея и сбрасываем статический пул памяти
     ST7796_SetRotation(1); // Ландшафтный режим
     heap_caps_reset_pool();
@@ -224,7 +364,7 @@ void GUI_BuildProInterface(void) {
     // 5. Полная отрисовка и вывод грязных зон на экран
     GUI_InvalidateAll(&root_grid);
     UI_DrawTree(&root_grid);
-}
+} */
 
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h) {
     if (!element) return;

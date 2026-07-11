@@ -34,7 +34,8 @@ uint8_t dma_buffer[320 * 2] __attribute__((section(".ram_d1"), aligned(32)));
 // Создаем один большой массив памяти строго в AXI SRAM. 
 // Максимальный размер: статус-бар (480*30) + экран (480*290) = 153 600 слов (307 200 байт)
 // Выравниваем сам массив по границе 32 байт для D-Cache
-__attribute__((aligned(32))) uint16_t global_sprite_pool[160000];
+#define MAX_HEAP_POOL 160000
+__attribute__((aligned(32))) uint16_t global_sprite_pool[MAX_HEAP_POOL];
 uint32_t pool_offset = 0;
 
 void* heap_caps_malloc(size_t size, uint32_t caps) {
@@ -43,7 +44,7 @@ void* heap_caps_malloc(size_t size, uint32_t caps) {
     size_t aligned_words = (size_in_words + 15) & ~15;
 
     // Проверяем по новому лимиту
-    if (pool_offset + aligned_words > 160000) {
+    if (pool_offset + aligned_words > MAX_HEAP_POOL) {
         return NULL; 
     }
 
