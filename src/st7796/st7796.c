@@ -101,41 +101,27 @@ static HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len) {
     return HAL_OK;
 }
 
-/* void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-    uint16_t xe = x + w - 1, ye = y + h - 1;
-    ST7796_WriteCmd(ST7796_CASET);
-    uint8_t data[] = {x >> 8, x & 0xFF, xe >> 8, xe & 0xFF};
-    ST7796_WriteData(data, 4);
-    ST7796_WriteCmd(ST7796_PASET);
-    data[0] = y >> 8; 
-    data[1] = y & 0xFF;
-    data[2] = ye >> 8; 
-    data[3] = ye & 0xFF;
-    ST7796_WriteData(data, 4);
-    ST7796_WriteCmd(ST7796_RAMWR);
-} */
-
 /**
  * @brief Установка окна адресации дисплея
  * @note  Параметры x2 и y2 ДОЛЖНЫ быть конечными координатами (Старт + Размер - 1), 
  *        а не шириной и высотой.
  */
-void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t x2, uint16_t y2) {
     // Защита от выхода за физические границы текущего режима экрана
-    if (w >= Display_Width)  w = Display_Width - 1;
-    if (h >= Display_Height) h = Display_Height - 1;
+    if (x2 >= Display_Width)  x2 = Display_Width - 1;
+    if (y2 >= Display_Height) y2 = Display_Height - 1;
 
     ST7796_WriteCmd(ST7796_CASET); // Column Address Set (0x2A)
     ST7796_WriteDataByte(x >> 8);
     ST7796_WriteDataByte(x & 0xFF);
-    ST7796_WriteDataByte(w >> 8);
-    ST7796_WriteDataByte(w & 0xFF);
+    ST7796_WriteDataByte(x2 >> 8);
+    ST7796_WriteDataByte(x2 & 0xFF);
 
     ST7796_WriteCmd(ST7796_PASET); // Row Address Set (0x2B)
     ST7796_WriteDataByte(y >> 8);
     ST7796_WriteDataByte(y & 0xFF);
-    ST7796_WriteDataByte(h >> 8);
-    ST7796_WriteDataByte(h & 0xFF);
+    ST7796_WriteDataByte(y2 >> 8);
+    ST7796_WriteDataByte(y2 & 0xFF);
 
     ST7796_WriteCmd(ST7796_RAMWR); // Memory Write (0x2C)
 }
@@ -167,7 +153,7 @@ bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h, uint16_t x, uint16_t 
 // ✅ Уничтожение спрайта
 void Sprite_destroy(Sprite_t* s) {
     if (!s || !s->is_allocated || !s->data) return;
-    free(s->data); // ← ИСПРАВЛЕНО
+    heap_caps_free(s->data);
     s->data = NULL;
     s->is_allocated = false;
 }
@@ -222,8 +208,8 @@ void ST7796_PushSprite(Sprite_t* s) {
 
 
 void ST7796_DrawPixel(int16_t x, int16_t y, uint16_t color) {
-    if (x < 0 || x >= 320 || y < 0 || y >= 480) return;
-    ST7796_SetAddressWindowRotated(x, y, 1, 1);
+    if (x < 0 || x >= Display_Width || y < 0 || y >= Display_Height) return;
+    ST7796_SetAddressWindow(x, y, x, y);
     uint8_t data[] = {color >> 8, color & 0xFF};
     ST7796_WriteData(data, 2);
 }
@@ -264,7 +250,7 @@ void ST7796_Init(void) {
     ST7796_WriteCmd(ST7796_DISPON);
     HAL_Delay(10);
 
-    ST7796_FillScreen(RGB565_DARK_GRAY);
+    ST7796_FillScreen(RGB565_CYAN);
 }
 
 
@@ -284,23 +270,14 @@ uint16_t BGR565(uint8_t r, uint8_t g, uint8_t b) {
 
 void ST7796_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t* data) {
     if (!data || w == 0 || h == 0) return;
+    if (x >= Display_Width || y >= Display_Height || x + w > Display_Width || y + h > Display_Height) return;
 
-    int16_t px = x, py = y;
-    uint16_t pw = w, ph = h;
-
-    switch (screen_rotation) {
-        case 1: { int tmp = px; px = py; py = 319 - tmp - pw + 1; int tmp2 = pw; pw = ph; ph = tmp2; } break;
-        case 2: px = 319 - px - pw + 1; py = 479 - py - ph + 1; break;
-        case 3: { int tmp = px; px = py; py = 319 - tmp - pw + 1; int tmp2 = pw; pw = ph; ph = tmp2; } break;
-        default: break;
-    }
-
-    //ST7796_SetAddressWindow(px, py, pw, ph);
-    ST7796_SetAddressWindow(x, y, w, h);
+    ST7796_SetAddressWindow(x, y, x + w - 1, y + h - 1);
     LCD_CS_LOW;
     LCD_DC_DATA;
 
-    uint32_t total = w * h, sent = 0;
+    uint32_t total = (uint32_t)w * h;
+    uint32_t sent = 0;
     while (sent < total) {
         uint32_t chunk = (total - sent > 320) ? 320 : (total - sent);
         memcpy(dma_buffer, &data[sent], chunk * 2);
@@ -411,7 +388,7 @@ uint8_t battery_Level = 17;
 
 // ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
 void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer) {
-    if (x < 0 || y < 0 || x + w > 320 || y + h > 480) return;
+    if (x < 0 || y < 0 || (uint16_t)(x + w) > Display_Width || (uint16_t)(y + h) > Display_Height) return;
 
     for (uint16_t row = 0; row < h; row++) {
         uint16_t byte_idx = row * ((w + 7) / 8);
@@ -419,7 +396,7 @@ void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, 
             uint8_t mask = 0x80 >> (col % 8);
             uint8_t bit = (bitmap[byte_idx + col / 8] & mask);
 
-            uint32_t idx = (y + row) * 320 + (x + col);
+            uint32_t idx = (uint32_t)(y + row) * Display_Width + (x + col);
             if (bit) {
                 buffer[idx] = fgColor;
             } else if (bgColor != 0xFFFF) {
@@ -428,13 +405,12 @@ void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, 
         }
     }
 
-    // Отрисовка на экране (только область) — ИСПРАВЛЕНО: удалена несуществующая ST7796_UpdateScreenArea
-    // Вызвать ST7796_SetAddressWindowRotated и отправить по DMA
-    ST7796_SetAddressWindow(x, y, w, h);
+    ST7796_SetAddressWindow(x, y, x + w - 1, y + h - 1);
     LCD_CS_LOW;
     LCD_DC_DATA;
 
-    uint32_t total = w * h, sent = 0;
+    uint32_t total = (uint32_t)w * h;
+    uint32_t sent = 0;
     while (sent < total) {
         uint32_t chunk = (total - sent > 320) ? 320 : (total - sent);
         memcpy(dma_buffer, &buffer[sent], chunk * 2);

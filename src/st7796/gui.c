@@ -169,10 +169,17 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
     // 1. Сброс железа, очистка старых указателей и сброс пула памяти
     ST7796_SetRotation(rotation);
+    HAL_Delay(40); // Небольшая пауза: даём контроллеру ST7796 применить MADCTL перед отрисовкой
     heap_caps_reset_pool();
     status_bar_sprite.data = graph_sprite.data = main_screen_sprite.data = NULL;
+    status_bar_sprite.is_allocated = graph_sprite.is_allocated = main_screen_sprite.is_allocated = false;
+    status_bar_sprite.needs_render = graph_sprite.needs_render = main_screen_sprite.needs_render = false;
+    status_bar_sprite.dirty_x1 = status_bar_sprite.dirty_y1 = status_bar_sprite.dirty_x2 = status_bar_sprite.dirty_y2 = 0;
+    graph_sprite.dirty_x1 = graph_sprite.dirty_y1 = graph_sprite.dirty_x2 = graph_sprite.dirty_y2 = 0;
+    main_screen_sprite.dirty_x1 = main_screen_sprite.dirty_y1 = main_screen_sprite.dirty_x2 = main_screen_sprite.dirty_y2 = 0;
     GUI_Panel_ClearStrings(&digits_node);
     ui_bands_listbox.children_count = 0;
+    //ST7796_FillScreen(RGB565_BLACK); // Полностью очищаем экран черным перед отрисовкой нового интерфейса
 
     extern uint16_t Display_Width, Display_Height;
 
@@ -1103,7 +1110,16 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
     UIElement_t* item = &panel_rows[panel_rows_count++];
     item->type = UI_TYPE_TEXT_BLOCK;
     item->sprite = listbox->sprite;
+    item->render_callback = NULL;
+    item->children_count = 0;
+    item->x = 0;
+    item->y = 0;
+    item->w = 0;
+    item->h = 0;
+    item->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+    item->vertical_alignment = VERTICAL_ALIGN_CENTER;
     strncpy(item->text_content, item_text, sizeof(item->text_content) - 1);
+    item->text_content[sizeof(item->text_content) - 1] = '\0';
     listbox->children[listbox->children_count++] = item;
     return item;
 }

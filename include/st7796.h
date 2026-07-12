@@ -78,7 +78,8 @@ void heap_caps_free(void* ptr);
 //static void ST7796_WriteData(const uint8_t *data, size_t len);
 //static void ST7796_WriteDataByte(uint8_t data);
 //static HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len);
-void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+// x/y = start coordinate, x2/y2 = end coordinate inclusive
+void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t x2, uint16_t y2);
 // ✅ Создание спрайта — выделяем буфер
 bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y, SpriteAnchor_t anchor);
 // ✅ Уничтожение спрайта
