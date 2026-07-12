@@ -167,20 +167,14 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
     // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
     // ====================================================================
-    // Поворачиваем железо дисплея. Функция сама обновит Display_Width и Display_Height!
+    // 1. Сброс железа, очистка старых указателей и сброс пула памяти
     ST7796_SetRotation(rotation);
-    // Полностью очищаем прошлый пул памяти графики
     heap_caps_reset_pool();
-
     status_bar_sprite.data = graph_sprite.data = main_screen_sprite.data = NULL;
-    status_bar_sprite.is_allocated = graph_sprite.is_allocated = main_screen_sprite.is_allocated = false;
-    
-    // Сбрасываем счетчики строк и списка
     GUI_Panel_ClearStrings(&digits_node);
     ui_bands_listbox.children_count = 0;
 
-    extern uint16_t Display_Width;
-    extern uint16_t Display_Height;
+    extern uint16_t Display_Width, Display_Height;
 
     // Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
     root_grid.type = UI_TYPE_GRID;
@@ -231,7 +225,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
 
     // 🔥 ПЕРВЫЙ ОБМЕР (ОБЯЗАТЕЛЬНО): Движок каскадно рассчитывает точные .w и .h 
     // для каждой ячейки на основе текущего Display_Width и Display_Height
-    //UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
     // ====================================================================
     // ЭТАП 2: АВТОМАТИЧЕСКАЯ АЛЛОКАЦИЯ БУФЕРОВ СПРАЙТОВ
@@ -304,10 +298,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // внутри уже созданных и выделенных спрайтов
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
-    // Очистка только после того, как движок выделил память
-    if (main_screen_sprite.data != NULL) {
-        memset(main_screen_sprite.data, 0, (uint32_t)main_screen_sprite.w * main_screen_sprite.h * 2);
-    }
+    
 
     // Сбрасываем флаги "чистых" зон и принудительно выводим готовый Layout на матрицу дисплея
     GUI_InvalidateAll(&root_grid);
