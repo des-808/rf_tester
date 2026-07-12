@@ -167,12 +167,13 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
     // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
     // ====================================================================
-    
     // Поворачиваем железо дисплея. Функция сама обновит Display_Width и Display_Height!
     ST7796_SetRotation(rotation);
-    
     // Полностью очищаем прошлый пул памяти графики
     heap_caps_reset_pool();
+
+    status_bar_sprite.data = graph_sprite.data = main_screen_sprite.data = NULL;
+    status_bar_sprite.is_allocated = graph_sprite.is_allocated = main_screen_sprite.is_allocated = false;
     
     // Сбрасываем счетчики строк и списка
     GUI_Panel_ClearStrings(&digits_node);
@@ -302,6 +303,11 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // 🔥 ВТОРОЙ ОБМЕР (ОБЯЗАТЕЛЬНО): Пересчитываем внутреннее положение текста и ListBox 
     // внутри уже созданных и выделенных спрайтов
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+
+    // Очистка только после того, как движок выделил память
+    if (main_screen_sprite.data != NULL) {
+        memset(main_screen_sprite.data, 0, (uint32_t)main_screen_sprite.w * main_screen_sprite.h * 2);
+    }
 
     // Сбрасываем флаги "чистых" зон и принудительно выводим готовый Layout на матрицу дисплея
     GUI_InvalidateAll(&root_grid);
@@ -890,7 +896,7 @@ UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text) 
     
     // 2. Настраиваем его по новым правилам компонентного движка
     new_node->type = UI_TYPE_TEXT_BLOCK;                  // Тип — текстовый блок
-    new_node->sprite = NULL;// parent->sprite;                    // Наследует физический спрайт панели
+    new_node->sprite = parent->sprite;                    // Наследует физический спрайт панели
     new_node->render_callback = NULL;                     // Зануляем: отрисовкой управляет движок!
     new_node->children_count = 0;                         // У текста нет детей
     
