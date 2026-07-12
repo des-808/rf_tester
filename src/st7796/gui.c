@@ -13,10 +13,15 @@ UIElement_t digits_node;   // Наша правая панель (использ
 UIElement_t digits_panel;  // Спрайт-контейнер панели (используется в GUI_BuildProInterface)
 UIElement_t ui_bands_listbox; // Сам контейнер ListBox
 
-// Реальные структуры спрайтов LovyanGFX/Си
+/* // Реальные структуры спрайтов LovyanGFX/Си
 Sprite_t* status_bar_sprite     = NULL;
 Sprite_t* graph_sprite          = NULL;
-Sprite_t* main_screen_sprite    = NULL;
+Sprite_t* main_screen_sprite    = NULL; */
+
+/* Глобальные объекты спрайтов для экранов интерфейса */
+Sprite_t status_bar_sprite;
+Sprite_t graph_sprite;
+Sprite_t main_screen_sprite;
 
 // Пул элементов для строк (выделяем память статически внутри gui.c, чтобы не плодить глобальные имена)
 
@@ -159,35 +164,41 @@ UIElement_t* ui_touch_row = NULL;
 } */
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
-    // 1. АППАРАТНЫЙ СБРОС: Поворачиваем железо и полностью очищаем весь прошлый пул памяти.
-    // Все старые динамические спрайты и ноды стираются здесь автоматически!
+    // ====================================================================
+    // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
+    // ====================================================================
+    
+    // Поворачиваем железо дисплея. Функция сама обновит Display_Width и Display_Height!
     ST7796_SetRotation(rotation);
+    
+    // Полностью очищаем прошлый пул памяти графики
     heap_caps_reset_pool();
     
-    // Сбрасываем вспомогательные счетчики строк и списков
+    // Сбрасываем счетчики строк и списка
     GUI_Panel_ClearStrings(&digits_node);
     ui_bands_listbox.children_count = 0;
 
     extern uint16_t Display_Width;
     extern uint16_t Display_Height;
 
-    // ====================================================================
-    // ЭТАП 1: СБОРКА СТРУКТУРЫ СЕТОК (БЕЗ СПРАЙТОВ)
-    // ====================================================================
+    // Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
     root_grid.type = UI_TYPE_GRID;
     root_grid.children_count = 0;
     root_grid.props.grid.rows_count = 2;
     root_grid.props.grid.cols_count = 1;
+    root_grid.props.grid.row_definitions[0] = 10; // 10% под статус-бар
+    root_grid.props.grid.row_definitions[1] = 90; // 90% под рабочую зону
+    root_grid.props.grid.col_definitions[0] = 100;
 
-    root_grid.props.grid.row_definitions[0] = 10; // 10% под статус-бар (строка 0)
-    root_grid.props.grid.row_definitions[1] = 90; // 90% под рабочую зону (строка 1)
-    root_grid.props.grid.col_definitions[0] = 100; // 100% ширины экрана
-
+    // Подключаем Статус-бар в ячейку (строка 0, колонка 0)
     status_bar_node.type = UI_TYPE_TEXT_BLOCK;
     status_bar_node.grid_row = 0;
     status_bar_node.grid_col = 0;
+    status_bar_node.sprite = &status_bar_sprite; // Привязываем статический объект
+    status_bar_node.render_callback = Draw_StatusBar_Callback;
     root_grid.children[root_grid.children_count++] = &status_bar_node;
 
+    // Создаем вложенную сетку для разделения Графика и Цифр
     main_work_grid.type = UI_TYPE_GRID;
     main_work_grid.children_count = 0;
     main_work_grid.grid_row = 1;
@@ -196,68 +207,62 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.props.grid.cols_count = 2;
     main_work_grid.props.grid.row_definitions[0] = 100; // Вся высота рабочей зоны
     main_work_grid.props.grid.col_definitions[0] = 70;  // 70% ширины под График
-    main_work_grid.props.grid.col_definitions[1] = 30;  // 30% ширины под цифры  
+    main_work_grid.props.grid.col_definitions[1] = 30;  // 30% ширины под цифры
     root_grid.children[root_grid.children_count++] = &main_work_grid;
 
+    // Сажаем График во вложенную сетку (0, 0) — левая часть
     graph_node.type = UI_TYPE_TEXT_BLOCK;
     graph_node.grid_row = 0;
     graph_node.grid_col = 0;
+    graph_node.sprite = &graph_sprite;
+    graph_node.render_callback = Draw_Graph_Content;
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
 
+    // Настраиваем правую панель как STACK_PANEL (Вертикальный список)
     digits_node.type = UI_TYPE_STACK_PANEL;
+    digits_node.sprite = &main_screen_sprite; 
+    digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
+    digits_node.props.stack.spacing = 2; 
     digits_node.grid_row = 0; 
     digits_node.grid_col = 1; 
     digits_node.children_count = 0; 
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
 
-    // 🔥 АВТОРАСЧЕТ ГЕОМЕТРИИ: Узнаем точные .w и .h для каждой ячейки под текущую ориентацию
+    // 🔥 ПЕРВЫЙ ОБМЕР (ОБЯЗАТЕЛЬНО): Движок каскадно рассчитывает точные .w и .h 
+    // для каждой ячейки на основе текущего Display_Width и Display_Height
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
     // ====================================================================
-    // ЭТАП 2: АВТОМАТИЧЕСКОЕ СОЗДАНИЕ ДИНАМИЧЕСКИХ СПРАЙТОВ
+    // ЭТАП 2: АВТОМАТИЧЕСКАЯ АЛЛОКАЦИЯ БУФЕРОВ СПРАЙТОВ
     // ====================================================================
     
-    // --- Динамический Спрайт Статус-бара ---
-    status_bar_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), HEAP_CAP_DEFAULT);
-    status_bar_sprite->w = status_bar_node.w;
-    status_bar_sprite->h = status_bar_node.h;
-    status_bar_sprite->is_allocated = true;
-    status_bar_sprite->data = (uint16_t*)heap_caps_malloc(status_bar_sprite->w * status_bar_sprite->h * 2, HEAP_CAP_DEFAULT);
-    
-    status_bar_node.sprite = status_bar_sprite; // Привязываем указатель
-    status_bar_node.render_callback = Draw_StatusBar_Callback;
+    // Синхронизируем размеры спрайтов с автоматически рассчитанными размерами нод
+    status_bar_sprite.w = status_bar_node.w;
+    status_bar_sprite.h = status_bar_node.h;
+    status_bar_sprite.is_allocated = true;
+    status_bar_sprite.data = (uint16_t*)heap_caps_malloc(status_bar_sprite.w * status_bar_sprite.h * 2, 0);
 
-    // --- Динамический Спрайт Графика ---
-    graph_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), HEAP_CAP_DEFAULT);
-    graph_sprite->w = graph_node.w;
-    graph_sprite->h = graph_node.h;
-    graph_sprite->is_allocated = true;
-    graph_sprite->data = (uint16_t*)heap_caps_malloc(graph_sprite->w * graph_sprite->h * 2, HEAP_CAP_DEFAULT);
-    
-    graph_node.sprite = graph_sprite;
-    graph_node.render_callback = Draw_Graph_Content;
+    graph_sprite.w = graph_node.w;
+    graph_sprite.h = graph_node.h;
+    graph_sprite.is_allocated = true;
+    graph_sprite.data = (uint16_t*)heap_caps_malloc(graph_sprite.w * graph_sprite.h * 2, 0);
 
-    // --- Динамический Спрайт Панели цифр ---
-    main_screen_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), HEAP_CAP_DEFAULT);
-    main_screen_sprite->w = digits_node.w;
-    main_screen_sprite->h = digits_node.h;
-    main_screen_sprite->is_allocated = true;
-    main_screen_sprite->data = (uint16_t*)heap_caps_malloc(main_screen_sprite->w * main_screen_sprite->h * 2, HEAP_CAP_DEFAULT);
-    
-    digits_node.sprite = main_screen_sprite;
-    digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
-    digits_node.props.stack.spacing = 2;
+    main_screen_sprite.w = digits_node.w;
+    main_screen_sprite.h = digits_node.h;
+    main_screen_sprite.is_allocated = true;
+    main_screen_sprite.data = (uint16_t*)heap_caps_malloc(main_screen_sprite.w * main_screen_sprite.h * 2, 0);
 
-    // Очищаем видеобуфер новой панели
-    if (main_screen_sprite->data != NULL) {
-        uint32_t total_pixels = (uint32_t)main_screen_sprite->w * main_screen_sprite->h;
-        memset(main_screen_sprite->data, 0, total_pixels * 2); 
+    // Очищаем буфер правой панели, так как под нее выделилась новая память
+    if (main_screen_sprite.data != NULL) {
+        uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
+        memset(main_screen_sprite.data, 0, total_pixels * 2); 
     }
 
     // ====================================================================
-    // ЭТАП 3: НАПОЛНЕНИЕ ТЕКСТОМ И ЭЛЕМЕНТАМИ (Внутри новых динамических спрайтов)
+    // ЭТАП 3: НАПОЛНЕНИЕ КОНТЕНТОМ (Теперь функции увидят корректные размеры!)
     // ====================================================================
     
+    // Добавляем строки текста на панель
     UIElement_t* el = GUI_Panel_AddString(&digits_node, "--ИЗМЕРЕНИЯ--");
     el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
     el->vertical_alignment   = VERTICAL_ALIGN_CENTER;
@@ -270,9 +275,16 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
     el->vertical_alignment   = VERTICAL_ALIGN_TOP;
 
-    // Инициализация ListBox. Теперь передаем указатель на динамический спрайт
-    UI_InitListBox(&ui_bands_listbox, main_screen_sprite);
-    ui_bands_listbox.h = 72; 
+    // Инициализируем ListBox. Передаем адрес статического объекта, у которого .w и .h уже верные
+    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
+    
+    // В зависимости от плоскости задаем высоту ListBox динамически, чтобы он не ломал Layout в альбоме
+    if (rotation == 0 || rotation == 2) {
+        ui_bands_listbox.h = 80; // Портрет: места по вертикали много
+    } else {
+        ui_bands_listbox.h = 50; // Альбом: высоту списка лучше уменьшить, чтобы влезли нижние строки
+    }
+    
     UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
     UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
     UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
@@ -287,10 +299,11 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
 
-    // Финальный каскадный перерасчет контента
+    // 🔥 ВТОРОЙ ОБМЕР (ОБЯЗАТЕЛЬНО): Пересчитываем внутреннее положение текста и ListBox 
+    // внутри уже созданных и выделенных спрайтов
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
-    // Полная валидация зон и отрисовка на экране
+    // Сбрасываем флаги "чистых" зон и принудительно выводим готовый Layout на матрицу дисплея
     GUI_InvalidateAll(&root_grid);
     UI_DrawTree(&root_grid);
 }
@@ -670,54 +683,54 @@ static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8
 
 // Функция для отрисовки сетки графика
 void Draw_Graph_Content(UIElement_t* el) {
-    if (!graph_sprite || !graph_sprite->data) return;
+    if ( !graph_sprite.data) return;
 
     // Заливаем фон графика черным (используем динамические размеры)
-    uint32_t total_pixels = (uint32_t)graph_sprite->w * graph_sprite->h;
-    memset(graph_sprite->data, 0, total_pixels * 2);
+    uint32_t total_pixels = (uint32_t)graph_sprite.w * graph_sprite.h;
+    memset(graph_sprite.data, 0, total_pixels * 2);
 
     // Рисуем сетку графика. 
-    // Вместо жестких макросов используем graph_sprite->w и graph_sprite->h!
+    // Вместо жестких макросов используем graph_sprite.w и graph_sprite.h!
     // Движок сам адаптирует сетку и под 224px (портрет), и под 336px (альбом)
     uint16_t grid_color = 0x31A6;
 
     // 2. Рисуем сетку графика (горизонтальные линии шкал)
     // Рисуем 3 горизонтальные линии через каждые 50 пикселей внутри спрайта
-    for (uint16_t y = 40; y < graph_sprite->h; y += 50) {
-        for (uint16_t x = 10; x < graph_sprite->w - 10; x++) {
-            graph_sprite->data[y * graph_sprite->w + x] = grid_color; // Тускло-серый цвет сетки
+    for (uint16_t y = 40; y < graph_sprite.h; y += 50) {
+        for (uint16_t x = 10; x < graph_sprite.w - 10; x++) {
+            graph_sprite.data[y * graph_sprite.w + x] = grid_color; // Тускло-серый цвет сетки
         }
     }
 
     // 3. РИСУЕМ ЖИВУЮ КРИВУЮ ИЗМЕРЕНИЙ (Пример: синусоида или массив точек КСВ)
     // Пробегаем по всей ширине окна графика шаг за шагом
     int16_t prev_x = 10;
-    int16_t prev_y = graph_sprite->h / 2; // Стартовая точка по центру
+    int16_t prev_y = graph_sprite.h / 2; // Стартовая точка по центру
 
-    for (int16_t x = 11; x < graph_sprite->w - 10; x++) {
+    for (int16_t x = 11; x < graph_sprite.w - 10; x++) {
         // Имитируем график: вычисляем Y (в реальном коде тут будет значение из массива SWR_Array[x])
         // Переводим значение КСВ в пиксели высоты спрайта
-        int16_t y = (graph_sprite->h / 2) + (int16_t)(sinf(x * 0.05f) * 40.0f); 
+        int16_t y = (graph_sprite.h / 2) + (int16_t)(sinf(x * 0.05f) * 40.0f); 
 
         // Соединяем прошлую точку с текущей быстрой линией Брезенхема!
-        Draw_Line_To_Sprite(graph_sprite, prev_x, prev_y, x, y, RGB565_YELLOW);
+        Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, RGB565_YELLOW);
 
         prev_x = x;
         prev_y = y;
     }
 
     // Подпись
-    lcd_print_to_buffer(15, 10, RGB565_WHITE, "SWR SCANNER", RGB565_BLACK, graph_sprite);
+    lcd_print_to_buffer(15, 10, RGB565_WHITE, "SWR SCANNER", RGB565_BLACK, &graph_sprite);
 
     // Рисуем рамку вокруг графика с отступом 5 пикселей от краев спрайта.
     // Верхняя линия
-    for (uint16_t x = 5; x < graph_sprite->w - 5; x++) graph_sprite->data[25 * graph_sprite->w + x] = 0x7BEF; // Серый цвет
+    for (uint16_t x = 5; x < graph_sprite.w - 5; x++) graph_sprite.data[25 * graph_sprite.w + x] = 0x7BEF; // Серый цвет
     // Нижня линия
-    for (uint16_t x = 5; x < graph_sprite->w - 5; x++) graph_sprite->data[(graph_sprite->h - 5) * graph_sprite->w + x] = 0x7BEF;
+    for (uint16_t x = 5; x < graph_sprite.w - 5; x++) graph_sprite.data[(graph_sprite.h - 5) * graph_sprite.w + x] = 0x7BEF;
     // Левая линия
-    for (uint16_t y = 25; y < graph_sprite->h - 5; y++) graph_sprite->data[y * graph_sprite->w + 5] = 0x7BEF;
+    for (uint16_t y = 25; y < graph_sprite.h - 5; y++) graph_sprite.data[y * graph_sprite.w + 5] = 0x7BEF;
     // Правая линия
-    for (uint16_t y = 25; y < graph_sprite->h - 5; y++) graph_sprite->data[y * graph_sprite->w + (graph_sprite->w - 5)] = 0x7BEF;
+    for (uint16_t y = 25; y < graph_sprite.h - 5; y++) graph_sprite.data[y * graph_sprite.w + (graph_sprite.w - 5)] = 0x7BEF;
 }
 
 
@@ -868,7 +881,7 @@ void UI_SetText(UIElement_t* element, const char* format, ...) {
  */
 UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text) {
     // Жесткая защита: проверяем лимиты пула строк и массива детей в gui.h (макс 8)
-    if (panel_rows_count >= MAX_PANEL_ROWS || parent->children_count >= 8) {
+    if (panel_rows_count >= MAX_PANEL_ROWS || parent->children_count >= MAX_PANEL_ROWS) {
         return NULL; 
     }
 
@@ -877,7 +890,7 @@ UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text) 
     
     // 2. Настраиваем его по новым правилам компонентного движка
     new_node->type = UI_TYPE_TEXT_BLOCK;                  // Тип — текстовый блок
-    new_node->sprite = parent->sprite;                    // Наследует физический спрайт панели
+    new_node->sprite = NULL;// parent->sprite;                    // Наследует физический спрайт панели
     new_node->render_callback = NULL;                     // Зануляем: отрисовкой управляет движок!
     new_node->children_count = 0;                         // У текста нет детей
     
