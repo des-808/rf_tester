@@ -469,7 +469,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         int16_t cur_x = element->x, cur_y = element->y;
         uint16_t default_font_h = (current_font != NULL) ? current_font->char_height : 16;
 
-        for (uint8_t i = 0; i < element->children_count && i < MAX_PANEL_ROWS; i++) {
+        for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             
             // КРИТИЧЕСКИЙ ФИКС: Проверяем, задана ли у ребенка своя кастомная высота (как h = 72 у ListBox).
@@ -505,23 +505,23 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     // ЕСЛИ ЭТО GRID
     if (element->type == UI_TYPE_GRID) {
         GridDefinition_t* grid = &element->props.grid;
-        uint16_t row_heights[8] = {0};
-        uint16_t col_widths[8] = {0};
+        uint16_t row_heights[MAX_GRID_CHILDREN] = {0};
+        uint16_t col_widths[MAX_GRID_CHILDREN] = {0};
 
-        for (uint8_t r = 0; r < grid->rows_count && r < 8; r++) {
+        for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
             row_heights[r] = (element->h * grid->row_definitions[r]) / 100;
         }
-        for (uint8_t c = 0; c < grid->cols_count && c < 8; c++) {
+        for (uint8_t c = 0; c < grid->cols_count && c < MAX_GRID_CHILDREN; c++) {
             col_widths[c] = (element->w * grid->col_definitions[c]) / 100;
         }
 
-        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+        for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             int16_t cell_x = element->x;
             int16_t cell_y = element->y;
             
-            for (uint8_t c = 0; c < child->grid_col && c < 8; c++) cell_x += col_widths[c];
-            for (uint8_t r = 0; r < child->grid_row && r < 8; r++) cell_y += row_heights[r];
+            for (uint8_t c = 0; c < child->grid_col && c < MAX_GRID_CHILDREN; c++) cell_x += col_widths[c];
+            for (uint8_t r = 0; r < child->grid_row && r < MAX_GRID_CHILDREN; r++) cell_y += row_heights[r];
 
             uint16_t cell_w = col_widths[child->grid_col];
             uint16_t cell_h = row_heights[child->grid_row];
@@ -572,12 +572,23 @@ void UI_DrawTree(UIElement_t* element) {
                         break;
 
                     // КРИТИЧЕСКИЙ ФИКС: Если это контейнеры, и они затребовали рендер,
-                    // принудительно заставляем всех их детей (текстовые блоки) перерисовать себя в ОЗУ!
-                    case UI_TYPE_STACK_PANEL:
+                    // принудительно заставляем всех их детей перерисовать себя в ОЗУ!
                     case UI_TYPE_GRID:
-                        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+                        // Для GRID лимит 8 СТРОГИЙ, так как массивы геометрии сетки ограничены 8
+                        for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
                             UIElement_t* child = (UIElement_t*)element->children[i];
-                            // Если у ребенка тип TEXT_BLOCK — вызываем его отрисовку
+                            if (child->type == UI_TYPE_TEXT_BLOCK) {
+                                Draw_GeneralText_Callback(child);
+                            } else if (child->render_callback != NULL) {
+                                child->render_callback(child);
+                            }
+                        }
+                        break;
+
+                    case UI_TYPE_STACK_PANEL:
+                        // Для STACK_PANEL лимит равен максимальному числу детей, которое вы заложили в структуру (например, 24)
+                        for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+                            UIElement_t* child = (UIElement_t*)element->children[i];
                             if (child->type == UI_TYPE_TEXT_BLOCK) {
                                 Draw_GeneralText_Callback(child);
                             } else if (child->render_callback != NULL) {
@@ -593,7 +604,7 @@ void UI_DrawTree(UIElement_t* element) {
             // Если это StackPanel — принудительно просим всех детей (текстовые строки)
             // нарисовать свои буквы в этот же открытый буфер ОЗУ
             if (element->type == UI_TYPE_STACK_PANEL) {
-                for (uint8_t i = 0; i < element->children_count && i < MAX_PANEL_ROWS; i++) {
+                for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
                     UIElement_t* child = (UIElement_t*)element->children[i];
                     if (child->render_callback != NULL) {
                         child->render_callback(child);
@@ -612,8 +623,15 @@ void UI_DrawTree(UIElement_t* element) {
     }
 
     // ШАГ 2: Безусловный рекурсивный обход детей для Grid и StackPanel
-    if (element->type == UI_TYPE_GRID || element->type == UI_TYPE_STACK_PANEL) {
-        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+    if (element->type == UI_TYPE_GRID) {
+        // Для сетки лимит строго 8 элементов (MAX_GRID_CHILDREN)
+        for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
+            UI_DrawTree((UIElement_t*)element->children[i]);
+        }
+    } 
+    else if (element->type == UI_TYPE_STACK_PANEL) {
+        // Для стек-панели лимит расширенный (MAX_ELEMENT_CHILDREN, например 24)
+        for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UI_DrawTree((UIElement_t*)element->children[i]);
         }
     }
