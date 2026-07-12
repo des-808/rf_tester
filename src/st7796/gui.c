@@ -323,6 +323,14 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         }
     }
 
+    // 🔥 ФИНАЛЬНЫЙ СУПЕР-ФИКС:
+    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+        UIElement_t* item = (UIElement_t*)ui_bands_listbox.children[i];
+        if (item && item->type == UI_TYPE_TEXT_BLOCK) {
+            Draw_GeneralText_Callback(item); // Отрисовка пунктов меню
+        }
+    }
+
     // 5. 🔥 КРИТИЧЕСКИЙ ФИКС: Выставляем правильный тип С ПОДЧЁРКИВАНИЕМ.
     // Именно его ждёт функция UI_DrawTree, чтобы вызвать UI_RenderListBox!
     ui_bands_listbox.type = UI_TYPE_LIST_BOX; 
