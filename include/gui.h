@@ -5,6 +5,16 @@
 #include "st7796.h"
 
 
+#define MAX_PANEL_ROWS 18
+#define MAX_GRID_CHILDREN  8   // Для сеток и панелей этого более чем достаточно
+#define MAX_LISTBOX_ITEMS  24  // Столько пунктов теперь может быть в меню/списках
+
+// Выберите бóльшее значение для размера базового массива
+#define MAX_ELEMENT_CHILDREN MAX_LISTBOX_ITEMS 
+
+#define SHRIFT_HEIGHT 18
+#define SHRIFT_OTSTUP_TOP_BOTTOM 4
+
 typedef enum {
     UI_TYPE_GRID,
     UI_TYPE_STACK_PANEL,
@@ -78,8 +88,8 @@ typedef enum {
 typedef struct {
     uint8_t rows_count;
     uint8_t cols_count;
-    uint8_t row_definitions[8]; // Доли/проценты для строк (например: 10, 70, 20)
-    uint8_t col_definitions[8]; // Доли/проценты для колонок (например: 60, 40)
+    uint8_t row_definitions[MAX_GRID_CHILDREN]; // Доли/проценты для строк (например: 10, 70, 20)
+    uint8_t col_definitions[MAX_GRID_CHILDREN]; // Доли/проценты для колонок (например: 60, 40)
 } GridDefinition_t;
 
 // Структура для StackPanel (последовательное расположение)
@@ -87,16 +97,6 @@ typedef struct {
     Orientation_t orientation;
     uint16_t spacing;           // Зазор между элементами в пикселях
 } StackPanelDefinition_t;
-
-#define MAX_PANEL_ROWS 18
-#define MAX_GRID_CHILDREN  8   // Для сеток и панелей этого более чем достаточно
-#define MAX_LISTBOX_ITEMS  24  // Столько пунктов теперь может быть в меню/списках
-
-// Выберите бóльшее значение для размера базового массива
-#define MAX_ELEMENT_CHILDREN MAX_LISTBOX_ITEMS 
-
-#define SHRIFT_HEIGHT 18
-#define SHRIFT_OTSTUP_TOP_BOTTOM 4
 
 // Универсальная сущность UI (Элемент)
 typedef struct UIElement {
@@ -110,7 +110,7 @@ typedef struct UIElement {
     Sprite_t* sprite;           
 
     // Указатели на детей (для контейнеров Grid и StackPanel)
-    struct UIElement* children[MAX_PANEL_ROWS+2];
+    struct UIElement* children[MAX_ELEMENT_CHILDREN];
     uint8_t children_count;
 
     // КРИТИЧЕСКИ ВАЖНО: Добавляем указатель на функцию отрисовки содержимого!
