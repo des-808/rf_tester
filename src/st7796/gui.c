@@ -238,7 +238,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
 
     // ПЕРВЫЙ ОБМЕР: Выделяем память под 3 главных спрайта-контейнера
-    //UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
     // Очищаем буфер правой панели
     if (main_screen_sprite.data != NULL) {
@@ -280,7 +280,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Каждая строка шрифта Arial9 с учетом внутренних рамок и отступов списка занимает ~16 пикселей.
     // Умножаем количество элементов на высоту одной строки (+2 пикселя на внешнюю рамку самого ListBox)
     uint8_t items_count = ui_bands_listbox.children_count;
-    ui_bands_listbox.h = (items_count * 16) + 2; 
+    ui_bands_listbox.h = (items_count * 18) + 4; 
 
     // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
     digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
