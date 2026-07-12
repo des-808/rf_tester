@@ -238,7 +238,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
 
     // ПЕРВЫЙ ОБМЕР: Выделяем память под 3 главных спрайта-контейнера
-    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+    //UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
     // Очищаем буфер правой панели
     if (main_screen_sprite.data != NULL) {
@@ -265,17 +265,24 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Инициализируем ListBox. 
     UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
     
-    // Адаптивная высота под геометрию экрана
+    /* // Адаптивная высота под геометрию экрана
     if (rotation == 0 || rotation == 2) {
         ui_bands_listbox.h = 80; // В портрете даем больше места
     } else {
         ui_bands_listbox.h = 52; // В альбоме сжимаем, чтобы влез нижний текст
-    }
+    } */
     
     UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
     UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
     UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
     UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
+    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: Узнаем количество добавленных элементов
+    // Каждая строка шрифта Arial9 с учетом внутренних рамок и отступов списка занимает ~16 пикселей.
+    // Умножаем количество элементов на высоту одной строки (+2 пикселя на внешнюю рамку самого ListBox)
+    uint8_t items_count = ui_bands_listbox.children_count;
+    ui_bands_listbox.h = (items_count * 16) + 2; 
+
+    // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
     digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
 
     ui_btn_row = GUI_Panel_AddString(&digits_node, "No btn");
@@ -285,11 +292,12 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
     ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
-// ПЕРВЫЙ ОБМЕР: Выделяем память под 3 главных спрайта-контейнера
+    // ====================================================================
+    // ЭТАП 3: ОБМЕР И АЛЛОКАЦИЯ ПАМЯТИ
+    // ====================================================================
+    // 🔥 Теперь этот обмер увидит реальную автоматическую высоту ListBox (4 * 16 + 2 = 66 пикселей),
+    // заложит её в расчет StackPanel и выделит буфер памяти точного размера!
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-    // ====================================================================
-    // ЭТАП 3: ПОЛНАЯ ЗА ЗАЩИТА СТРУКТУРЫ И ВТОРOЙ ОБМЕР
-    // ====================================================================
     
     // 1. Временно снимаем холст со всех строк StackPanel
     for (uint8_t i = 0; i < digits_node.children_count; i++) {
