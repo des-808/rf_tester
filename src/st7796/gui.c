@@ -231,7 +231,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
 
     // 🔥 ПЕРВЫЙ ОБМЕР (ОБЯЗАТЕЛЬНО): Движок каскадно рассчитывает точные .w и .h 
     // для каждой ячейки на основе текущего Display_Width и Display_Height
-    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+    //UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
     // ====================================================================
     // ЭТАП 2: АВТОМАТИЧЕСКАЯ АЛЛОКАЦИЯ БУФЕРОВ СПРАЙТОВ
