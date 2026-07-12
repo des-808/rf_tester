@@ -189,7 +189,6 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     status_bar_node.type = UI_TYPE_TEXT_BLOCK;
     status_bar_node.grid_row = 0;
     status_bar_node.grid_col = 0;
-    status_bar_node.sprite = &status_bar_sprite; // Привязываем статический объект
     status_bar_node.render_callback = Draw_StatusBar_Callback;
     root_grid.children[root_grid.children_count++] = &status_bar_node;
 
@@ -209,13 +208,11 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     graph_node.type = UI_TYPE_TEXT_BLOCK;
     graph_node.grid_row = 0;
     graph_node.grid_col = 0;
-    graph_node.sprite = &graph_sprite;
     graph_node.render_callback = Draw_Graph_Content;
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
 
     // Настраиваем правую панель как STACK_PANEL (Вертикальный список)
     digits_node.type = UI_TYPE_STACK_PANEL;
-    digits_node.sprite = &main_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
     digits_node.props.stack.spacing = 2; 
     digits_node.grid_row = 0; 
@@ -234,18 +231,36 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Синхронизируем размеры спрайтов с автоматически рассчитанными размерами нод
     status_bar_sprite.w = status_bar_node.w;
     status_bar_sprite.h = status_bar_node.h;
-    status_bar_sprite.is_allocated = true;
     status_bar_sprite.data = (uint16_t*)heap_caps_malloc(status_bar_sprite.w * status_bar_sprite.h * 2, 0);
+    status_bar_sprite.is_allocated = (status_bar_sprite.data != NULL);
 
     graph_sprite.w = graph_node.w;
     graph_sprite.h = graph_node.h;
-    graph_sprite.is_allocated = true;
     graph_sprite.data = (uint16_t*)heap_caps_malloc(graph_sprite.w * graph_sprite.h * 2, 0);
+    graph_sprite.is_allocated = (graph_sprite.data != NULL);
 
     main_screen_sprite.w = digits_node.w;
     main_screen_sprite.h = digits_node.h;
-    main_screen_sprite.is_allocated = true;
     main_screen_sprite.data = (uint16_t*)heap_caps_malloc(main_screen_sprite.w * main_screen_sprite.h * 2, 0);
+    main_screen_sprite.is_allocated = (main_screen_sprite.data != NULL);
+
+    // Привязываем физические спрайты к нодам ТОЛЬКО после расчёта размеров и выделения памяти,
+    // чтобы избежать двойной аллокации при первом обмере
+    status_bar_node.sprite = &status_bar_sprite;
+    graph_node.sprite = &graph_sprite;
+    digits_node.sprite = &main_screen_sprite;
+
+    // Устанавливаем физические координаты спрайтов в соответствии с вычисленными нодами
+    status_bar_sprite.x = status_bar_node.x; status_bar_sprite.y = status_bar_node.y;
+    graph_sprite.x = graph_node.x; graph_sprite.y = graph_node.y;
+    main_screen_sprite.x = digits_node.x; main_screen_sprite.y = digits_node.y;
+
+    // Проставляем у уже созданных дочерних текстовых узлов указатель на физический спрайт панели,
+    // чтобы Draw_GeneralText_Callback смог отрисовать их в памяти спрайта.
+    for (uint8_t i = 0; i < digits_node.children_count && i < MAX_PANEL_ROWS; i++) {
+        UIElement_t* child = (UIElement_t*)digits_node.children[i];
+        if (child) child->sprite = digits_node.sprite;
+    }
 
     // Очищаем буфер правой панели, так как под нее выделилась новая память
     if (main_screen_sprite.data != NULL) {
@@ -391,9 +406,15 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         if (s->data == NULL) {
             s->x = element->x; s->y = element->y;
             s->w = element->w; s->h = element->h;
-            s->data = (uint16_t*)heap_caps_malloc(s->w * s->h * 2, 0);
+            // Защита: не выделяем при нулевой ширине/высоте
+            if (s->w == 0 || s->h == 0) return;
+            size_t bytes = (size_t)s->w * (size_t)s->h * 2u;
+            s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
             s->is_allocated = (s->data != NULL);
-            if (!s->is_allocated) { while(1); }
+            // Не делать бесконечный цикл при ошибке аллокации — просто вернуться
+            if (!s->is_allocated) {
+                return;
+            }
         }
         return; 
     }
@@ -403,9 +424,14 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             Sprite_t* s = element->sprite;
             s->x = element->x; s->y = element->y;
             s->w = element->w; s->h = element->h;
-            s->data = (uint16_t*)heap_caps_malloc(s->w * s->h * 2, 0);
+            // Защита от нулевых размеров
+            if (s->w == 0 || s->h == 0) return;
+            size_t bytes = (size_t)s->w * (size_t)s->h * 2u;
+            s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
             s->is_allocated = (s->data != NULL);
-            if (!s->is_allocated) { while(1); }
+            if (!s->is_allocated) {
+                return;
+            }
         }
     }
 
@@ -867,10 +893,6 @@ void UI_SetText(UIElement_t* element, const char* format, ...) {
     }
 }
 
-
-
-
-
 /**
  * @brief Универсальный хелпер для потокового добавления текстовых блоков в StackPanel
  * @param parent Контейнер (например, digits_node), куда добавляется строка
@@ -887,7 +909,8 @@ UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text) 
     
     // 2. Настраиваем его по новым правилам компонентного движка
     new_node->type = UI_TYPE_TEXT_BLOCK;                  // Тип — текстовый блок
-    new_node->sprite = parent->sprite;                    // Наследует физический спрайт панели
+    // Наследует физический спрайт панели (если он уже привязан)
+    new_node->sprite = (parent) ? parent->sprite : NULL;
     new_node->render_callback = NULL;                     // Зануляем: отрисовкой управляет движок!
     new_node->children_count = 0;                         // У текста нет детей
     

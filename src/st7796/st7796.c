@@ -142,18 +142,6 @@ void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 
 
 // ✅ Создание спрайта — выделяем буфер
-/* bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y, SpriteAnchor_t anchor) {
-    if (!s || w == 0 || h == 0) return false;
-    s->x=x;
-    s->y=y;
-    s->w = w; 
-    s->h = h;
-    s->is_allocated = true;
-    s->data = (uint16_t*)malloc(w * h * 2);
-    s->anchor = anchor;
-    return s->data != NULL;
-}
- */
 bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h, uint16_t x, uint16_t y, SpriteAnchor_t anchor) {
     if (!s || w == 0 || h == 0) return false;
     
@@ -193,59 +181,6 @@ void Sprite_fill(Sprite_t* s, uint16_t color) {
     }
 }
 
-// ✅ Отправка спрайта на экран — здесь учитываем поворот!
-/* void Sprite_push(const Sprite_t* s, int16_t x, int16_t y) {
-    if (!s || !s->data || s->w == 0 || s->h == 0) return;
-
-    // Просто окно (0, 0, s->w, s->h)
-    ST7796_SetAddressWindow(s->x, s->y, s->w, s->h);
-    LCD_CS_LOW;
-    LCD_DC_DATA;
-
-    uint32_t total = s->w * s->h;
-    uint32_t sent = 0;
-    while (sent < total) {
-        uint32_t chunk = (total - sent > 320) ? 320 : (total - sent);
-        memcpy(dma_buffer, &s->data[sent], chunk * 2);
-        SCB_CleanDCache_by_Addr((uint32_t*)dma_buffer, (chunk * 2 + 31) & ~31);
-        __DSB();
-        if (ST7796_TransmitDMA(dma_buffer, chunk * 2) != HAL_OK) break;
-        sent += chunk;
-    }
-
-    LCD_CS_HIGH;
-} */
-
-/**
- * @brief Вывод готового спрайта на экран
- */
-/* void ST7796_PushSprite(Sprite_t* s) {
-    // Проверка на выход за границы текущего разрешения экрана
-    if ((s->x + s->w) > Display_Width || (s->y + s->h) > Display_Height) {
-        return; // Защита от разрушения памяти дисплея
-    }
-
-    // Передаем правильные конечные координаты: (Старт + Размер - 1)
-    ST7796_SetAddressWindow(s->x, s->y, s->x + s->w - 1, s->y + s->h - 1);
-
-    uint32_t total_pixels = (uint32_t)s->w * s->h;
-    
-    LCD_CS_LOW;
-    LCD_DC_DATA;
-
-    uint32_t total = s->w * s->h;
-    uint32_t sent = 0;
-    while (sent < total) {
-        uint32_t chunk = (total - sent > 320) ? 320 : (total - sent);
-        memcpy(dma_buffer, &s->data[sent], chunk * 2);
-        SCB_CleanDCache_by_Addr((uint32_t*)dma_buffer, (chunk * 2 + 31) & ~31);
-        __DSB();
-        if (ST7796_TransmitDMA(dma_buffer, chunk * 2) != HAL_OK) break;
-        sent += chunk;
-    }
-
-    LCD_CS_HIGH;
-} */
 void ST7796_PushSprite(Sprite_t* s) {
     if ((s->x + s->w) > Display_Width || (s->y + s->h) > Display_Height) {
         return; 
