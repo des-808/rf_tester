@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "st7796.h"
+#include <stdbool.h>
 
 
 #define MAX_PANEL_ROWS 18
@@ -173,6 +174,10 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite);
 UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text);
 
 int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty);
+UIElement_t* UI_FindElementAt(UIElement_t* root, uint16_t tx, uint16_t ty, int16_t* out_local_x, int16_t* out_local_y);
 void UI_RenderListBox(UIElement_t* el);
+
+// Включить/выключить отладочную отрисовку геометрии элементов и скроллбара
+extern bool ui_debug_draw;
 
 #endif // GUI_H

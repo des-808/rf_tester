@@ -47,6 +47,7 @@
 #include "i2c_scanner.h"
 #include "buzzer.h"
 //#include "font8x8_Arial.h"
+#include <string.h>
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -247,7 +248,7 @@ I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 //lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
- GUI_ShowAdvancedMeasurementScreen(3);
+ GUI_ShowAdvancedMeasurementScreen(0);
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
@@ -344,53 +345,77 @@ if (bmi160_irq_received)
         Buzzer_Short(); // Выдаем короткий писк подтверждения клика
 
         // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условия has_touch!
-        // Проверяем, попал ли клик пальца по геометрии нашей правой панели digits_node
-        if (last_touch_x >= digits_node.x && last_touch_x < (digits_node.x + digits_node.w) &&
-            last_touch_y >= digits_node.y && last_touch_y < (digits_node.y + digits_node.h)) {
+        int16_t local_x = 0, local_y = 0;
+        UIElement_t* hit_element = UI_FindElementAt(&root_grid, last_touch_x, last_touch_y, &local_x, &local_y);
 
-            // Если тач попал в сам ListBox — обрабатываем через UI_ListBox_ProcessTouch
-            if (last_touch_x >= ui_bands_listbox.x && last_touch_x < (ui_bands_listbox.x + ui_bands_listbox.w) &&
-                last_touch_y >= ui_bands_listbox.y && last_touch_y < (ui_bands_listbox.y + ui_bands_listbox.h)) {
-
+        if (hit_element != NULL) {
+          // Сначала обрабатываем кнопки прокрутки, если нажата одна из них
+          if (hit_element->type == UI_TYPE_BUTTON) {
+            if (strcmp(hit_element->text_content, "Up") == 0) {
+              if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
+                ui_bands_listbox.props.list_box.scroll_offset--;
+                extern uint16_t Display_Width, Display_Height;
+                UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+                GUI_InvalidateSprite(digits_node.sprite);
+              }
+            } else if (strcmp(hit_element->text_content, "Down") == 0) {
+              uint8_t max_offset = (ui_bands_listbox.children_count > 0) ? (ui_bands_listbox.children_count - 1) : 0;
+              if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
+                ui_bands_listbox.props.list_box.scroll_offset++;
+                extern uint16_t Display_Width, Display_Height;
+                UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+                GUI_InvalidateSprite(digits_node.sprite);
+              }
+            }
+          } else {
+            // Проверяем, попали ли на видимый элемент списка (ListBox children)
+            for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+              if ((UIElement_t*)ui_bands_listbox.children[i] == hit_element) {
                 int8_t selected_index = UI_ListBox_ProcessTouch(&ui_bands_listbox, last_touch_x, last_touch_y);
                 if (selected_index >= 0) {
-                    UIElement_t* selected_item = (UIElement_t*)ui_bands_listbox.children[selected_index];
-                    if (selected_item != NULL) {
-                        UI_SetText(ui_swr_row, "BAND: %s", selected_item->text_content);
-                    }
-                    if (graph_node.sprite != NULL) {
-                        GUI_InvalidateSprite(graph_node.sprite);
-                    }
+                  UIElement_t* selected_item = (UIElement_t*)ui_bands_listbox.children[selected_index];
+                  if (selected_item != NULL) {
+                    UI_SetText(ui_swr_row, "BAND: %s", selected_item->text_content);
+                  }
+                  if (graph_node.sprite != NULL) {
+                    GUI_InvalidateSprite(graph_node.sprite);
+                  }
                 }
-            } else {
-                // Если тач попал в правую панель, но не в сам ListBox — сохраняем текущую логику по строкам
-                uint16_t row_height = 22;
-                int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
-
-                if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
-                    switch (clicked_row_idx) {
-                        case 0:
-                            break;
-                        case 1:
-                            UI_SetText(ui_swr_row, "SCANNING...");
-                            break;
-                        case 2:
-                            break;
-                        case 4:
-                            UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
-                            break;
-                        case 5:
-                            UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
-                            break;
-                        default:
-                            UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
-                            break;
-                    }
-                    if (graph_node.sprite != NULL) {
-                        GUI_InvalidateSprite(graph_node.sprite);
-                    }
-                }
+                hit_element = NULL;
+                break;
+              }
             }
+
+            // Если тач не был внутри конкретного пункта списка, но по-прежнему в панели — старая логика
+            if (hit_element != NULL && hit_element == &digits_node) {
+              uint16_t row_height = 22;
+              int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
+
+              if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
+                switch (clicked_row_idx) {
+                  case 0:
+                    break;
+                  case 1:
+                    UI_SetText(ui_swr_row, "SCANNING...");
+                    break;
+                  case 2:
+                    break;
+                  case 4:
+                    UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
+                    break;
+                  case 5:
+                    UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
+                    break;
+                  default:
+                    UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
+                    break;
+                }
+                if (graph_node.sprite != NULL) {
+                  GUI_InvalidateSprite(graph_node.sprite);
+                }
+              }
+            }
+          }
         }
 
         ft6336u.has_touch = false; // Обязательный сброс аппаратного флага тача!
