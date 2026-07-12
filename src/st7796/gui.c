@@ -285,7 +285,8 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
     ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
-
+// ПЕРВЫЙ ОБМЕР: Выделяем память под 3 главных спрайта-контейнера
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
     // ====================================================================
     // ЭТАП 3: ПОЛНАЯ ЗА ЗАЩИТА СТРУКТУРЫ И ВТОРOЙ ОБМЕР
     // ====================================================================
