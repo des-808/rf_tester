@@ -287,27 +287,6 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
 
     // ====================================================================
-    // ЭТАП 3: ПОЛНАЯ ЗАЩИТА СТРУКТУРЫ И ВТОРОЙ ОБМЕР
-    // ====================================================================
-    
-    // 1. Временно снимаем холст со всех строк StackPanel
-    for (uint8_t i = 0; i < digits_node.children_count; i++) {
-        digits_node.children[i]->sprite = NULL;
-    }
-    
-    // 2. 🔥 ДОБИВАЕМ LISTBOX: У ListBox есть свои внутренние «дети» (пункты меню).
-    // Чтобы они тоже не вызвали аллокацию памяти внутри UI_MeasureAndArrange,
-    // временно убираем спрайт у каждого пункта внутри ListBox!
-    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
-        if (ui_bands_listbox.children[i] != NULL) {
-            ui_bands_listbox.children[i]->sprite = NULL;
-        }
-    }
-
-    // ВТОРОЙ ОБМЕР: Абсолютно безопасный расчет геометрии контента
-    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-
-    // ====================================================================
     // ЭТАП 3: ПОЛНАЯ ЗА ЗАЩИТА СТРУКТУРЫ И ВТОРOЙ ОБМЕР
     // ====================================================================
     
