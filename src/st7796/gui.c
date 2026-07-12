@@ -265,15 +265,18 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Инициализируем ListBox. 
     UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
     
+    UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
     UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
     UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
     UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
     UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
-    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: Узнаем количество добавленных элементов
-    // Каждая строка шрифта Arial9 с учетом внутренних рамок и отступов списка занимает ~16 пикселей.
-    // Умножаем количество элементов на высоту одной строки (+2 пикселя на внешнюю рамку самого ListBox)
+    UI_ListBox_AddItem(&ui_bands_listbox, "5. 5.0 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "6. 6.4 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "7. 7.2 GHz");
+    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: используем ту же высоту строки, что и рендерер ListBox
     uint8_t items_count = ui_bands_listbox.children_count;
-    ui_bands_listbox.h = (items_count * SHRIFT_HEIGHT) + SHRIFT_OTSTUP_TOP_BOTTOM; 
+    uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
+    ui_bands_listbox.h = items_count * item_h;
 
     // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
     digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
@@ -1236,19 +1239,22 @@ void UI_RenderListBox(UIElement_t* el) {
 
 //Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
 int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
-    if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite ||
-        tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) return -1;
+    if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
+    if (tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) return -1;
 
-    uint8_t target = listbox->props.list_box.scroll_offset + (ty - listbox->y) / (font_arial_9_struct.char_height + 6);
+    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+    uint16_t item_h = font_h + 6;
+    int16_t local_y = ty - listbox->y;
+    if (local_y < 0 || local_y >= listbox->h) return -1;
 
-    if (target < listbox->children_count) {
-        if (listbox->props.list_box.selected_index != target) {
-            listbox->props.list_box.selected_index = target;
-            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-        }
-        return target;
+    int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
+    if (target < 0 || target >= listbox->children_count) return -1;
+
+    if (listbox->props.list_box.selected_index != target) {
+        listbox->props.list_box.selected_index = target;
+        GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
     }
-    return -1;
+    return target;
 }
 
 

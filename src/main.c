@@ -84,6 +84,7 @@ extern Sprite_t* graph_sprite; // если нужен доступ к графи
 extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
 extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
 extern UIElement_t* ui_swr_row;   // Указатель на элемент КСВ из gui.c
+extern UIElement_t ui_bands_listbox; // Контейнер ListBox из gui.c
 
 uint16_t last_touch_x = 0;              // Координата X для логики меню
 uint16_t last_touch_y = 0;              // Координата Y для логики меню
@@ -342,50 +343,52 @@ if (bmi160_irq_received)
         
         Buzzer_Short(); // Выдаем короткий писк подтверждения клика
 
-        // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условияhas_touch!
+        // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условия has_touch!
         // Проверяем, попал ли клик пальца по геометрии нашей правой панели digits_node
         if (last_touch_x >= digits_node.x && last_touch_x < (digits_node.x + digits_node.w) &&
             last_touch_y >= digits_node.y && last_touch_y < (digits_node.y + digits_node.h)) {
-            
-            // Математически вычисляем, на какую по счету строку StackPanel нажал палец
-            // Высота шрифта Arial9 + зазор (или Segoe) в среднем составляет около 22 пикселей
-            // Для идеальной точности мы считываем высоту el->h / count из MeasureAndArrange
-            uint16_t row_height = 22; 
-            int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
-            
-            // Защита от выхода за границы реального количества строк в панели
-            if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
-                
-                // В зависимости от индекса строки, на которую нажали, переключаем диапазоны тестера!
-                switch (clicked_row_idx) {
-                    case 0: // Строка 0: "--ИЗМЕРЕНИЯ--" (Статичный заголовок, можно проигнорировать)
-                        break;
-                        
-                    case 1: // Строка 1: "SWR: 1.00" (При клике сбросим или обновим замер)
-                        UI_SetText(ui_swr_row, "SCANNING...");
-                        break;
-                        
-                    case 2: // Строка 2: "------------" (Разделитель)
-                        break;
-                        
-                    case 4: // Строка 4: "No btn" (Пример переключения диапазона HF)
-                        UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
-                        break;
-                        
-                    case 5: // Строка 5: "No touch" (Пример переключения диапазона VHF)
-                        UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
-                        break;
-                        
-                    default:
-                        // Для всех остальных строк выводим общую информацию
-                        UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
-                        break;
+
+            // Если тач попал в сам ListBox — обрабатываем через UI_ListBox_ProcessTouch
+            if (last_touch_x >= ui_bands_listbox.x && last_touch_x < (ui_bands_listbox.x + ui_bands_listbox.w) &&
+                last_touch_y >= ui_bands_listbox.y && last_touch_y < (ui_bands_listbox.y + ui_bands_listbox.h)) {
+
+                int8_t selected_index = UI_ListBox_ProcessTouch(&ui_bands_listbox, last_touch_x, last_touch_y);
+                if (selected_index >= 0) {
+                    UIElement_t* selected_item = (UIElement_t*)ui_bands_listbox.children[selected_index];
+                    if (selected_item != NULL) {
+                        UI_SetText(ui_swr_row, "BAND: %s", selected_item->text_content);
+                    }
+                    if (graph_node.sprite != NULL) {
+                        GUI_InvalidateSprite(graph_node.sprite);
+                    }
                 }
-                
-                // Помечаем левый график грязным, чтобы он перерисовал свою сетку Брезенхема
-                // с учетом измененного диапазона частот
-                if (graph_node.sprite != NULL) {
-                    GUI_InvalidateSprite(graph_node.sprite);
+            } else {
+                // Если тач попал в правую панель, но не в сам ListBox — сохраняем текущую логику по строкам
+                uint16_t row_height = 22;
+                int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
+
+                if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
+                    switch (clicked_row_idx) {
+                        case 0:
+                            break;
+                        case 1:
+                            UI_SetText(ui_swr_row, "SCANNING...");
+                            break;
+                        case 2:
+                            break;
+                        case 4:
+                            UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
+                            break;
+                        case 5:
+                            UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
+                            break;
+                        default:
+                            UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
+                            break;
+                    }
+                    if (graph_node.sprite != NULL) {
+                        GUI_InvalidateSprite(graph_node.sprite);
+                    }
                 }
             }
         }
@@ -398,7 +401,7 @@ if (bmi160_irq_received)
     // ====================================================================
     // Вызывается непрерывно на каждой итерации. Благодаря нашей Dirty-Rect оптимизации,
     // функция работает как пустышка (0% CPU), отправляя данные по SPI DMA только тогда,
-    // когда UI_SetText или Invalidate локально взвели флагneeds_render у конкретного окна.
+    // когда UI_SetText или Invalidate локально взвели флаг needs_render у конкретного окна.
     UI_DrawTree(&root_grid); 
 
     // Разгрузочная пауза для стабильной работы аппаратного DMA SPI и Watchdog
