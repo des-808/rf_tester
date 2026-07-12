@@ -606,7 +606,8 @@ void UI_DrawTree(UIElement_t* element) {
             if (element->type == UI_TYPE_STACK_PANEL) {
                 for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
                     UIElement_t* child = (UIElement_t*)element->children[i];
-                    if (child->render_callback != NULL) {
+                    // Одной компактной строчкой проверяем и сам элемент, и его колбэк
+                    if (child && child->render_callback != NULL) {
                         child->render_callback(child);
                     }
                 }
@@ -863,8 +864,14 @@ void GUI_InvalidateAll(UIElement_t* element) {
     }
 
     if (element->type == UI_TYPE_GRID || element->type == UI_TYPE_STACK_PANEL) {
-        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
-            GUI_InvalidateAll((UIElement_t*)element->children[i]);
+        // Выбираем правильный лимит в зависимости от контейнера, чтобы не обрезать инвалидацию строк
+        uint8_t max_limit = (element->type == UI_TYPE_GRID) ? MAX_GRID_CHILDREN : MAX_ELEMENT_CHILDREN;
+        
+        for (uint8_t i = 0; i < element->children_count && i < max_limit; i++) {
+            // Добавляем проверку на NULL перед рекурсивным шагом
+            if (element->children[i] != NULL) {
+                GUI_InvalidateAll((UIElement_t*)element->children[i]);
+            }
         }
     }
 }
