@@ -167,21 +167,28 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
     // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
     // ====================================================================
-    // 1. Сброс железа, очистка старых указателей и сброс пула памяти
+    
+    // 1. Поворачиваем железо дисплея. Функция сама обновит Display_Width и Display_Height!
     ST7796_SetRotation(rotation);
-    HAL_Delay(40); // Небольшая пауза: даём контроллеру ST7796 применить MADCTL перед отрисовкой
+    
+    // Полностью очищаем прошлый пул памяти графики
     heap_caps_reset_pool();
-    status_bar_sprite.data = graph_sprite.data = main_screen_sprite.data = NULL;
-    status_bar_sprite.is_allocated = graph_sprite.is_allocated = main_screen_sprite.is_allocated = false;
-    status_bar_sprite.needs_render = graph_sprite.needs_render = main_screen_sprite.needs_render = false;
-    status_bar_sprite.dirty_x1 = status_bar_sprite.dirty_y1 = status_bar_sprite.dirty_x2 = status_bar_sprite.dirty_y2 = 0;
-    graph_sprite.dirty_x1 = graph_sprite.dirty_y1 = graph_sprite.dirty_x2 = graph_sprite.dirty_y2 = 0;
-    main_screen_sprite.dirty_x1 = main_screen_sprite.dirty_y1 = main_screen_sprite.dirty_x2 = main_screen_sprite.dirty_y2 = 0;
+    
+    // Принудительно зануляем указатели .data, чтобы движок понял, что память очищена!
+    status_bar_sprite.data = NULL;
+    graph_sprite.data = NULL;
+    main_screen_sprite.data = NULL;
+    
+    status_bar_sprite.is_allocated = false;
+    graph_sprite.is_allocated = false;
+    main_screen_sprite.is_allocated = false;
+    
+    // Сбрасываем счетчики строк и списка
     GUI_Panel_ClearStrings(&digits_node);
     ui_bands_listbox.children_count = 0;
-    //ST7796_FillScreen(RGB565_BLACK); // Полностью очищаем экран черным перед отрисовкой нового интерфейса
 
-    extern uint16_t Display_Width, Display_Height;
+    extern uint16_t Display_Width;
+    extern uint16_t Display_Height;
 
     // Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
     root_grid.type = UI_TYPE_GRID;
@@ -192,10 +199,11 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     root_grid.props.grid.row_definitions[1] = 90; // 90% под рабочую зону
     root_grid.props.grid.col_definitions[0] = 100;
 
-    // Подключаем Статус-бар в ячейку (строка 0, колонка 0)
+    // Подключаем Статус-бар в ячейку (строка 0, column 0)
     status_bar_node.type = UI_TYPE_TEXT_BLOCK;
     status_bar_node.grid_row = 0;
     status_bar_node.grid_col = 0;
+    status_bar_node.sprite = &status_bar_sprite; 
     status_bar_node.render_callback = Draw_StatusBar_Callback;
     root_grid.children[root_grid.children_count++] = &status_bar_node;
 
@@ -215,11 +223,13 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     graph_node.type = UI_TYPE_TEXT_BLOCK;
     graph_node.grid_row = 0;
     graph_node.grid_col = 0;
+    graph_node.sprite = &graph_sprite;
     graph_node.render_callback = Draw_Graph_Content;
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
 
     // Настраиваем правую панель как STACK_PANEL (Вертикальный список)
     digits_node.type = UI_TYPE_STACK_PANEL;
+    digits_node.sprite = &main_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
     digits_node.props.stack.spacing = 2; 
     digits_node.grid_row = 0; 
@@ -227,59 +237,19 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     digits_node.children_count = 0; 
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
 
-    // 🔥 ПЕРВЫЙ ОБМЕР (ОБЯЗАТЕЛЬНО): Движок каскадно рассчитывает точные .w и .h 
-    // для каждой ячейки на основе текущего Display_Width и Display_Height
+    // ПЕРВЫЙ ОБМЕР: Выделяем память под 3 главных спрайта-контейнера
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
-    // ====================================================================
-    // ЭТАП 2: АВТОМАТИЧЕСКАЯ АЛЛОКАЦИЯ БУФЕРОВ СПРАЙТОВ
-    // ====================================================================
-    
-    // Синхронизируем размеры спрайтов с автоматически рассчитанными размерами нод
-    status_bar_sprite.w = status_bar_node.w;
-    status_bar_sprite.h = status_bar_node.h;
-    status_bar_sprite.data = (uint16_t*)heap_caps_malloc(status_bar_sprite.w * status_bar_sprite.h * 2, 0);
-    status_bar_sprite.is_allocated = (status_bar_sprite.data != NULL);
-
-    graph_sprite.w = graph_node.w;
-    graph_sprite.h = graph_node.h;
-    graph_sprite.data = (uint16_t*)heap_caps_malloc(graph_sprite.w * graph_sprite.h * 2, 0);
-    graph_sprite.is_allocated = (graph_sprite.data != NULL);
-
-    main_screen_sprite.w = digits_node.w;
-    main_screen_sprite.h = digits_node.h;
-    main_screen_sprite.data = (uint16_t*)heap_caps_malloc(main_screen_sprite.w * main_screen_sprite.h * 2, 0);
-    main_screen_sprite.is_allocated = (main_screen_sprite.data != NULL);
-
-    // Привязываем физические спрайты к нодам ТОЛЬКО после расчёта размеров и выделения памяти,
-    // чтобы избежать двойной аллокации при первом обмере
-    status_bar_node.sprite = &status_bar_sprite;
-    graph_node.sprite = &graph_sprite;
-    digits_node.sprite = &main_screen_sprite;
-
-    // Устанавливаем физические координаты спрайтов в соответствии с вычисленными нодами
-    status_bar_sprite.x = status_bar_node.x; status_bar_sprite.y = status_bar_node.y;
-    graph_sprite.x = graph_node.x; graph_sprite.y = graph_node.y;
-    main_screen_sprite.x = digits_node.x; main_screen_sprite.y = digits_node.y;
-
-    // Проставляем у уже созданных дочерних текстовых узлов указатель на физический спрайт панели,
-    // чтобы Draw_GeneralText_Callback смог отрисовать их в памяти спрайта.
-    for (uint8_t i = 0; i < digits_node.children_count && i < MAX_PANEL_ROWS; i++) {
-        UIElement_t* child = (UIElement_t*)digits_node.children[i];
-        if (child) child->sprite = digits_node.sprite;
-    }
-
-    // Очищаем буфер правой панели, так как под нее выделилась новая память
+    // Очищаем буфер правой панели
     if (main_screen_sprite.data != NULL) {
         uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
         memset(main_screen_sprite.data, 0, total_pixels * 2); 
     }
 
     // ====================================================================
-    // ЭТАП 3: НАПОЛНЕНИЕ КОНТЕНТОМ (Теперь функции увидят корректные размеры!)
+    // ЭТАП 2: НАПОЛНЕНИЕ КОНТЕНТОМ
     // ====================================================================
     
-    // Добавляем строки текста на панель
     UIElement_t* el = GUI_Panel_AddString(&digits_node, "--ИЗМЕРЕНИЯ--");
     el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
     el->vertical_alignment   = VERTICAL_ALIGN_CENTER;
@@ -292,14 +262,14 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
     el->vertical_alignment   = VERTICAL_ALIGN_TOP;
 
-    // Инициализируем ListBox. Передаем адрес статического объекта, у которого .w и .h уже верные
+    // Инициализируем ListBox. 
     UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
     
-    // В зависимости от плоскости задаем высоту ListBox динамически, чтобы он не ломал Layout в альбоме
+    // Адаптивная высота под геометрию экрана
     if (rotation == 0 || rotation == 2) {
-        ui_bands_listbox.h = 80; // Портрет: места по вертикали много
+        ui_bands_listbox.h = 80; // В портрете даем больше места
     } else {
-        ui_bands_listbox.h = 50; // Альбом: высоту списка лучше уменьшить, чтобы влезли нижние строки
+        ui_bands_listbox.h = 52; // В альбоме сжимаем, чтобы влез нижний текст
     }
     
     UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
@@ -316,13 +286,76 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
 
-    // 🔥 ВТОРОЙ ОБМЕР (ОБЯЗАТЕЛЬНО): Пересчитываем внутреннее положение текста и ListBox 
-    // внутри уже созданных и выделенных спрайтов
+    // ====================================================================
+    // ЭТАП 3: ПОЛНАЯ ЗАЩИТА СТРУКТУРЫ И ВТОРОЙ ОБМЕР
+    // ====================================================================
+    
+    // 1. Временно снимаем холст со всех строк StackPanel
+    for (uint8_t i = 0; i < digits_node.children_count; i++) {
+        digits_node.children[i]->sprite = NULL;
+    }
+    
+    // 2. 🔥 ДОБИВАЕМ LISTBOX: У ListBox есть свои внутренние «дети» (пункты меню).
+    // Чтобы они тоже не вызвали аллокацию памяти внутри UI_MeasureAndArrange,
+    // временно убираем спрайт у каждого пункта внутри ListBox!
+    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+        if (ui_bands_listbox.children[i] != NULL) {
+            ui_bands_listbox.children[i]->sprite = NULL;
+        }
+    }
+
+    // ВТОРОЙ ОБМЕР: Абсолютно безопасный расчет геометрии контента
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
+    // ====================================================================
+    // ЭТАП 3: ПОЛНАЯ ЗА ЗАЩИТА СТРУКТУРЫ И ВТОРOЙ ОБМЕР
+    // ====================================================================
     
+    // 1. Временно снимаем холст со всех строк StackPanel
+    for (uint8_t i = 0; i < digits_node.children_count; i++) {
+        digits_node.children[i]->sprite = NULL;
+    }
+    
+    // 2. Убираем спрайт у каждого пункта внутри ListBox для защиты от while(1)
+    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+        if (ui_bands_listbox.children[i] != NULL) {
+            ui_bands_listbox.children[i]->sprite = NULL;
+        }
+    }
+    ui_bands_listbox.sprite = NULL; // Снимаем спрайт с самого списка
 
-    // Сбрасываем флаги "чистых" зон и принудительно выводим готовый Layout на матрицу дисплея
+    // ВТОРOЙ ОБМЕР: Считаем точные координаты элементов
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+
+    // ====================================================================
+    // ВОССТАНОВЛЕНИЕ ДЛЯ ПОЛНОГО РЕНДЕРА
+    // ====================================================================
+
+    // 3. Возвращаем спрайт панели текстовым блокам
+    for (uint8_t i = 0; i < digits_node.children_count; i++) {
+        digits_node.children[i]->sprite = &main_screen_sprite;
+    }
+    
+    // 4. Возвращаем спрайт панели самому ListBox и его внутренним пунктам
+    ui_bands_listbox.sprite = &main_screen_sprite;
+    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+        if (ui_bands_listbox.children[i] != NULL) {
+            ui_bands_listbox.children[i]->sprite = &main_screen_sprite;
+        }
+    }
+
+    // 5. 🔥 КРИТИЧЕСКИЙ ФИКС: Выставляем правильный тип С ПОДЧЁРКИВАНИЕМ.
+    // Именно его ждёт функция UI_DrawTree, чтобы вызвать UI_RenderListBox!
+    ui_bands_listbox.type = UI_TYPE_LIST_BOX; 
+    ui_bands_listbox.render_callback = NULL; // Отрисовкой будет управлять встроенный UI_RenderListBox
+
+    // 6. Активируем флаг рендеринга для всех трёх статических спрайтов-контейнеров,
+    // иначе UI_DrawTree пропустит вызовы низкоуровневой отрисовки
+    status_bar_sprite.needs_render = true;
+    graph_sprite.needs_render = true;
+    main_screen_sprite.needs_render = true;
+
+    // Сбрасываем флаги графических зон на полный размер окон и гоним дерево на экран
     GUI_InvalidateAll(&root_grid);
     UI_DrawTree(&root_grid);
 }
