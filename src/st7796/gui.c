@@ -265,13 +265,6 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Инициализируем ListBox. 
     UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
     
-    /* // Адаптивная высота под геометрию экрана
-    if (rotation == 0 || rotation == 2) {
-        ui_bands_listbox.h = 80; // В портрете даем больше места
-    } else {
-        ui_bands_listbox.h = 52; // В альбоме сжимаем, чтобы влез нижний текст
-    } */
-    
     UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
     UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
     UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
@@ -280,7 +273,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Каждая строка шрифта Arial9 с учетом внутренних рамок и отступов списка занимает ~16 пикселей.
     // Умножаем количество элементов на высоту одной строки (+2 пикселя на внешнюю рамку самого ListBox)
     uint8_t items_count = ui_bands_listbox.children_count;
-    ui_bands_listbox.h = (items_count * 18) + 4; 
+    ui_bands_listbox.h = (items_count * SHRIFT_HEIGHT) + SHRIFT_OTSTUP_TOP_BOTTOM; 
 
     // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
     digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
@@ -476,7 +469,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         int16_t cur_x = element->x, cur_y = element->y;
         uint16_t default_font_h = (current_font != NULL) ? current_font->char_height : 16;
 
-        for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+        for (uint8_t i = 0; i < element->children_count && i < MAX_PANEL_ROWS; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             
             // КРИТИЧЕСКИЙ ФИКС: Проверяем, задана ли у ребенка своя кастомная высота (как h = 72 у ListBox).
@@ -600,7 +593,7 @@ void UI_DrawTree(UIElement_t* element) {
             // Если это StackPanel — принудительно просим всех детей (текстовые строки)
             // нарисовать свои буквы в этот же открытый буфер ОЗУ
             if (element->type == UI_TYPE_STACK_PANEL) {
-                for (uint8_t i = 0; i < element->children_count && i < 8; i++) {
+                for (uint8_t i = 0; i < element->children_count && i < MAX_PANEL_ROWS; i++) {
                     UIElement_t* child = (UIElement_t*)element->children[i];
                     if (child->render_callback != NULL) {
                         child->render_callback(child);
@@ -1135,7 +1128,7 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
  * @brief Добавляет строку (пункт списка) внутрь ListBox
  */
 UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
-    if (panel_rows_count >= MAX_PANEL_ROWS || listbox->children_count >= 8) return NULL;
+    if (panel_rows_count >= MAX_PANEL_ROWS || listbox->children_count >= MAX_PANEL_ROWS) return NULL;
     UIElement_t* item = &panel_rows[panel_rows_count++];
     item->type = UI_TYPE_TEXT_BLOCK;
     item->sprite = listbox->sprite;

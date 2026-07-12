@@ -88,7 +88,15 @@ typedef struct {
     uint16_t spacing;           // Зазор между элементами в пикселях
 } StackPanelDefinition_t;
 
-#define MAX_PANEL_ROWS 12
+#define MAX_PANEL_ROWS 18
+#define MAX_GRID_CHILDREN  8   // Для сеток и панелей этого более чем достаточно
+#define MAX_LISTBOX_ITEMS  24  // Столько пунктов теперь может быть в меню/списках
+
+// Выберите бóльшее значение для размера базового массива
+#define MAX_ELEMENT_CHILDREN MAX_LISTBOX_ITEMS 
+
+#define SHRIFT_HEIGHT 18
+#define SHRIFT_OTSTUP_TOP_BOTTOM 4
 
 // Универсальная сущность UI (Элемент)
 typedef struct UIElement {
