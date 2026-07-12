@@ -670,53 +670,54 @@ static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8
 
 // Функция для отрисовки сетки графика
 void Draw_Graph_Content(UIElement_t* el) {
-    if (!el || !el->sprite || !el->sprite->data) return;
-    // Достаем физический спрайт графика из элемента интерфейса
-    Sprite_t* s = el->sprite;
-    //if (!s || !s->data) return;
+    if (!graph_sprite || !graph_sprite->data) return;
 
-    // 1. Устанавливаем шрифт и очищаем буфер графика
-    lcd_set_font(&font_arial_9_struct);
-    memset(s->data, 0, (uint32_t)s->w * s->h * 2);
-    // Выводим текст заголовка
-    //lcd_print_to_buffer(10, 70, RGB565_GREEN, "SWR GRAPH", RGB565_BLACK, s);
+    // Заливаем фон графика черным (используем динамические размеры)
+    uint32_t total_pixels = (uint32_t)graph_sprite->w * graph_sprite->h;
+    memset(graph_sprite->data, 0, total_pixels * 2);
+
+    // Рисуем сетку графика. 
+    // Вместо жестких макросов используем graph_sprite->w и graph_sprite->h!
+    // Движок сам адаптирует сетку и под 224px (портрет), и под 336px (альбом)
+    uint16_t grid_color = 0x31A6;
+
     // 2. Рисуем сетку графика (горизонтальные линии шкал)
     // Рисуем 3 горизонтальные линии через каждые 50 пикселей внутри спрайта
-    for (uint16_t y = 40; y < s->h; y += 50) {
-        for (uint16_t x = 10; x < s->w - 10; x++) {
-            s->data[y * s->w + x] = 0x31A6; // Тускло-серый цвет сетки
+    for (uint16_t y = 40; y < graph_sprite->h; y += 50) {
+        for (uint16_t x = 10; x < graph_sprite->w - 10; x++) {
+            graph_sprite->data[y * graph_sprite->w + x] = grid_color; // Тускло-серый цвет сетки
         }
     }
 
     // 3. РИСУЕМ ЖИВУЮ КРИВУЮ ИЗМЕРЕНИЙ (Пример: синусоида или массив точек КСВ)
     // Пробегаем по всей ширине окна графика шаг за шагом
     int16_t prev_x = 10;
-    int16_t prev_y = s->h / 2; // Стартовая точка по центру
+    int16_t prev_y = graph_sprite->h / 2; // Стартовая точка по центру
 
-    for (int16_t x = 11; x < s->w - 10; x++) {
+    for (int16_t x = 11; x < graph_sprite->w - 10; x++) {
         // Имитируем график: вычисляем Y (в реальном коде тут будет значение из массива SWR_Array[x])
         // Переводим значение КСВ в пиксели высоты спрайта
-        int16_t y = (s->h / 2) + (int16_t)(sinf(x * 0.05f) * 40.0f); 
+        int16_t y = (graph_sprite->h / 2) + (int16_t)(sinf(x * 0.05f) * 40.0f); 
 
         // Соединяем прошлую точку с текущей быстрой линией Брезенхема!
-        Draw_Line_To_Sprite(s, prev_x, prev_y, x, y, RGB565_YELLOW);
+        Draw_Line_To_Sprite(graph_sprite, prev_x, prev_y, x, y, RGB565_YELLOW);
 
         prev_x = x;
         prev_y = y;
     }
 
     // Подпись
-    lcd_print_to_buffer(15, 10, RGB565_WHITE, "SWR SCANNER", RGB565_BLACK, s);
+    lcd_print_to_buffer(15, 10, RGB565_WHITE, "SWR SCANNER", RGB565_BLACK, graph_sprite);
 
     // Рисуем рамку вокруг графика с отступом 5 пикселей от краев спрайта.
     // Верхняя линия
-    for (uint16_t x = 5; x < s->w - 5; x++) s->data[25 * s->w + x] = 0x7BEF; // Серый цвет
+    for (uint16_t x = 5; x < graph_sprite->w - 5; x++) graph_sprite->data[25 * graph_sprite->w + x] = 0x7BEF; // Серый цвет
     // Нижня линия
-    for (uint16_t x = 5; x < s->w - 5; x++) s->data[(s->h - 5) * s->w + x] = 0x7BEF;
+    for (uint16_t x = 5; x < graph_sprite->w - 5; x++) graph_sprite->data[(graph_sprite->h - 5) * graph_sprite->w + x] = 0x7BEF;
     // Левая линия
-    for (uint16_t y = 25; y < s->h - 5; y++) s->data[y * s->w + 5] = 0x7BEF;
+    for (uint16_t y = 25; y < graph_sprite->h - 5; y++) graph_sprite->data[y * graph_sprite->w + 5] = 0x7BEF;
     // Правая линия
-    for (uint16_t y = 25; y < s->h - 5; y++) s->data[y * s->w + (s->w - 5)] = 0x7BEF;
+    for (uint16_t y = 25; y < graph_sprite->h - 5; y++) graph_sprite->data[y * graph_sprite->w + (graph_sprite->w - 5)] = 0x7BEF;
 }
 
 
