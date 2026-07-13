@@ -271,7 +271,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
     UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
     UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cmUHF");
     UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
     UI_ListBox_AddItem(&ui_bands_listbox, "5. 5.0 GHz");
     UI_ListBox_AddItem(&ui_bands_listbox, "6. 6.4 GHz");
