@@ -21,16 +21,6 @@ uint16_t Display_Height = ST7796_HEIGHT; // Изначально 480
 // Буфер для DMA (остаётся — нужен для передачи)
 uint8_t dma_buffer[320 * 2] __attribute__((section(".ram_d1"), aligned(32)));
 
-// Вспомогательные статические переменные (если нужны — лучше передавать через Sprite_t)
-// static Sprite_t main_screen; // → теперь создаются динамически в init_ui()
-
-// ✅ DMA-совместимый allocator для STM32 (аналог heap_caps_malloc)
-/* void* heap_caps_malloc(size_t size, uint32_t caps) {
-    (void)caps; // игнорируем caps — STM32 не поддерживает MALLOC_CAP_DMA
-    void* ptr = malloc(size);
-    if (!ptr) return NULL;
-    return ptr;
-} */
 // Создаем один большой массив памяти строго в AXI SRAM. 
 // Максимальный размер: статус-бар (480*30) + экран (480*290) = 153 600 слов (307 200 байт)
 // Выравниваем сам массив по границе 32 байт для D-Cache
@@ -320,72 +310,6 @@ const uint8_t* iconMirrorVertical(const unsigned char* bitmap, int w, int h) {
     return temp_icon_buffer;
 }
 
-// Глобальные переменные (как у тебя в ESP32)
-/*extern int batteryLevel;
-extern bool bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, bluetoothMode;
-extern uint8_t currentHour, currentMinute;
-
-// Внешние иконки (примеры — см. ниже)
-extern const uint8_t icon_battery_bits[];
-extern const uint8_t icon_bluetooth_bits[];
-extern const uint8_t icon_wifi_bits[];
-extern const uint8_t icon_not_wifi_bits[];
-extern const uint8_t icon_ntp_bits[];
-extern const uint8_t icon_buzzer_on_bits[];
-extern const uint8_t icon_buzzer_off_bits[];
-extern const uint8_t icon_rs485ToBt_bits[];
-
-uint8_t currentHour = 22;
-uint8_t currentMinute = 43;
-uint8_t battery_Level = 17;
-
- void drawStatusBar(Sprite_t *sprite) {
-    lcd_set_font(&font_segoe_struct);
-    // 1. Очистка буфера статус-бара — ИСПРАВЛЕНО: ST7796_FillBufferRect → Sprite_fill
-    //Sprite_fill(sprite, RGB565_BLACK);
-    Sprite_fill(sprite, RGB565_DARK_GRAY);
-    // --- Время ---
-    char timeBuf[6];
-    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
-    lcd_print_to_buffer(0, 4, 0xFFFF, timeBuf, 0x0000, sprite);
-    lcd_set_font(&font_arial_9_struct);
-    // --- Батарея ---
-    char batBuf[8]; 
-    snprintf(batBuf, sizeof(batBuf), "%d%%", battery_Level);
-    int batWidth = lcd_get_str_width(batBuf);
-    int curX = sprite->w - batWidth;
-    // Текст батареи — ИСПРАВЛЕНО: удалена несуществующая функция
-    // lcd_print_to_buffer_ex(curX, 4, 0xFFFF, batBuf, 0x0000, sprite, false);
-    lcd_print_to_buffer(curX, 4, 0xFFFF, batBuf, 0x0000, sprite);
-    // --- Иконка батареи ---
-    ST7796_DrawBitmap(curX - 10, 4, icon_battery_16_16_bits, 16, 16, 0xFFFF, 0x0000, sprite->data);
-    // --- Bluetooth ---
-    if (bluetoothEnabled) {
-        const uint8_t* icon = iconMirrorHorizontal(icon_bluetooth_bits, 10, 8);
-        ST7796_DrawBitmap(curX - 32, 4, icon, 10, 8, 0x001F, 0x0000, sprite->data);
-    }
-    // --- Wi-Fi ---
-    bool wifiConnected = wifiEnabled;
-    if (wifiConnected) {
-        const uint8_t* icon = iconMirrorHorizontal(icon_wifi_bits, 10, 8);
-        ST7796_DrawBitmap(curX - 44, 4, icon, 10, 8, 0x07E0, 0x0000, sprite->data);
-    }
-    // --- Auto NTP ---
-    if (ntpSyncEnabled) {
-        const uint8_t* icon = iconMirrorHorizontal(icon_ntp_bits, 8, 8);
-        ST7796_DrawBitmap(curX - 58, 4, icon, 8, 8, 0xFFFF, 0x0000, sprite->data);
-    }
-    // --- Buzzer ---
-    const uint8_t* icon_buzz = buzzerOnOff ? icon_buzzer_on_bits : icon_buzzer_off_bits;
-    ST7796_DrawBitmap(curX - 72, 4, iconMirrorHorizontal(icon_buzz, 8, 8), 8, 8, 0xFFFF, 0x0000, sprite->data);
-    // --- Bluetooth Mode (RS485→BT) ---
-    const uint8_t* icon_bt_mode = iconMirrorHorizontal(icon_rs485ToBt_bits, 10, 8);
-    ST7796_DrawBitmap(curX - 86, 4, icon_bt_mode, 10, 8, bluetoothMode ? 0x07E0 : 0x0000, 0x0000, sprite->data);
-    // 2. Отправить буфер статус-бара на экран — ИСПРАВЛЕНО: ST7796_UpdateSprite → Sprite_push
-    //Sprite_push(sprite, sprite->x, sprite->y);
-    ST7796_PushSprite(sprite);
-} */
-
 // ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
 void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer) {
     if (x < 0 || y < 0 || (uint16_t)(x + w) > Display_Width || (uint16_t)(y + h) > Display_Height) return;
@@ -469,7 +393,7 @@ void ST7796_SetRotation(uint8_t rotation) {
  * @param x0, y0 - стартовая точка (локальные координаты внутри спрайта)
  * @param x1, y1 - конечная точка (локальные координаты внутри спрайта)
  */
-void Draw_Line_To_Sprite(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
+void Draw_Line_To_Sprite_OLD(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
     if (!s || !s->data || !s->is_allocated) return;
 
     int16_t dx = abs(x1 - x0);
@@ -497,6 +421,51 @@ void Draw_Line_To_Sprite(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_
             y0 += dy_sign;
         }
     }
+}
+
+void Draw_Line_To_Sprite(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
+    if (!s || !s->data || !s->is_allocated) return;
+
+    int16_t dx = abs(x1 - x0);
+    int16_t dy = abs(y1 - y0);
+    int16_t sx = (x0 < x1) ? 1 : -1;
+    int16_t dy_sign = (y0 < y1) ? 1 : -1;
+    int16_t err = dx - dy;
+
+    // Промежуточные переменные для оптимизации
+    uint32_t row_stride = (uint32_t)s->w;
+
+    while (1) {
+        // Проверка границ (с приведением к unsigned для безопасности)
+        if ((uint32_t)y0 < (uint32_t)s->h && (uint32_t)x0 < (uint32_t)s->w) {
+            s->data[(uint32_t)y0 * s->w + x0] = color;
+        }
+
+        if (x0 == x1 && y0 == y1) break;
+
+        int16_t e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x0 += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y0 += dy_sign;
+        }
+    }
+
+    // 🟢 КРИТИЧЕСКИЙ ФИКС: Синхронизация D-Cache и буферов записи
+    // Вычисляем диапазон строк, которые могли измениться
+    int16_t min_y = (y0 < y1) ? y0 : y1;
+    int16_t max_y = (y0 < y1) ? y1 : y0;
+    uint32_t bytes_per_row = (uint32_t)s->w * 2;
+    
+    // Очищаем кэш для каждой затронутой строки (или, лучше, для всей области)
+    // Но проще и надёжнее — очистить всё окно спрайта целиком (всего один вызов)
+    uint32_t total_bytes = (uint32_t)s->w * (uint32_t)s->h * 2;
+    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (total_bytes + 31) & ~31);
+    
+    __DSB(); // Гарантированная запись в память перед DMA
 }
 
 /**

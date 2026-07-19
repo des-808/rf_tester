@@ -60,7 +60,6 @@ bool FT6336U_ReadData(FT6336U_HandleTypeDef *ts);
 uint8_t FT6336U_GetTouchNum(FT6336U_HandleTypeDef *ts);
 bool FT6336U_GetTouchPoint(FT6336U_HandleTypeDef *ts, uint8_t index, uint16_t *x, uint16_t *y);
 
-
 uint8_t FT6336U_GetChipID(FT6336U_HandleTypeDef *ts);
 uint8_t FT6336U_GetFirmwareVersion(FT6336U_HandleTypeDef *ts);
 uint8_t FT6336U_GetThreshold(FT6336U_HandleTypeDef *ts);

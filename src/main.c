@@ -32,6 +32,7 @@
 #include "ft6336u.h"
 #include "gui.h"
 #include "bmi160_h7.h"
+#include "ds3231.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */

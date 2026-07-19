@@ -104,6 +104,7 @@ void drawStatusBar(Sprite_t *sprite);
 void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer);
 void ST7796_SetRotation(uint8_t r);
 
+void Draw_Line_To_Sprite_OLD(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
 void Draw_Line_To_Sprite(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
 
 void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2);

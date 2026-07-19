@@ -1,6 +1,6 @@
-#include "W25QXX/w25qxx.h"
+#include <w25qxx.h>
 #include <string.h>
-#include "fonts.h"
+//#include "fonts.h"
 #include <flash.h>
 
 //#define FONT_BIN_ADDRESS   0x000000  // Начальный адрес в Flash

@@ -7,7 +7,7 @@
 #endif 
 
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
+//#include "main.h"
 #include "spi.h"
 	 
 /** @addtogroup BSP
@@ -138,8 +138,8 @@ typedef struct
 extern W25Qx_Parameter W25Qx_Para;
 
 uint8_t W25Qx_Init(void);
-static void	W25Qx_Reset(void);
-static uint8_t W25Qx_GetStatus(void);
+//static void	W25Qx_Reset(void);
+//static uint8_t W25Qx_GetStatus(void);
 uint8_t W25Qx_WriteEnable(void);
 void W25Qx_Read_ID(uint16_t *ID);
 uint8_t W25Qx_Read(uint8_t* pData, uint32_t ReadAddr, uint32_t Size);

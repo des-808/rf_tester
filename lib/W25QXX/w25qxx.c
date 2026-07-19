@@ -3,21 +3,7 @@
 #define delay(ms) HAL_Delay(ms-1)
 #define get_tick() HAL_GetTick()
 
-W25Qx_Parameter W25Qx_Para;
-/**
-  * @brief  Initializes the W25QXXXX interface.
-  * @retval None
-  */
-uint8_t W25Qx_Init(void)
-{ 
-	uint8_t state;
-	/* Reset W25Qxxx */
-	W25Qx_Reset();
-	delay(5);
-	state = W25Qx_Get_Parameter(&W25Qx_Para);
-	
-	return state;
-}
+
 
 /**
   * @brief  This function reset the W25Qx.
@@ -61,6 +47,24 @@ static uint8_t W25Qx_GetStatus(void)
 		return W25Qx_OK;
 	}		
 }
+
+W25Qx_Parameter W25Qx_Para;
+/**
+  * @brief  Initializes the W25QXXXX interface.
+  * @retval None
+  */
+uint8_t W25Qx_Init(void)
+{ 
+	uint8_t state;
+	/* Reset W25Qxxx */
+	W25Qx_Reset();
+	delay(5);
+	state = W25Qx_Get_Parameter(&W25Qx_Para);
+	
+	return state;
+}
+
+
 
 /**
   * @brief  This function send a Write Enable and wait it is effective.

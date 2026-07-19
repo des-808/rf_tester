@@ -3,7 +3,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include <stdint.h>
-//#include "w25qxx.h"
+#include <w25qxx.h>
 
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
@@ -12,14 +12,9 @@
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions prototypes ---------------------------------------------*/
 
-
 /* #ifdef __cplusplus
 extern "C" {
 #endif */
-
-
-
-
 
 void init_flash();
 void SPI_Read_Font(uint8_t* buffer, uint32_t offset, uint32_t size);

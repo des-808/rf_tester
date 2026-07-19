@@ -287,9 +287,13 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     UI_ListBox_AddItem(&ui_bands_listbox, "16. 7.2 GHz");
 
     // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: используем ту же высоту строки, что и рендерер ListBox
-    uint8_t items_count = ui_bands_listbox.children_count;
+    //uint8_t items_count = ui_bands_listbox.children_count;
+    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
+    //ui_bands_listbox.h = items_count * item_h;
+    //Задаем жесткую высоту ListBox -----
     uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
-    ui_bands_listbox.h = items_count * item_h;
+    ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
+    
 
     // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
     digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
@@ -532,20 +536,34 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         }
     }
 
-    // ШАГ 4: Математика ListBox (с учетом скролла)
+    // ШАГ 4: Математика ListBox (с учетом скролла и резерва под скроллбар)
     if (element->type == UI_TYPE_LIST_BOX) {
         int16_t cur_y = element->y;
         uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
         uint16_t item_h = font_h + 6;
+        
         uint8_t start = element->props.list_box.scroll_offset;
         uint8_t visible = element->h / item_h;
-        for (uint8_t i = 0; i < element->children_count; i++) {
+        
+        // Защита от деления на ноль, если высота контейнера почему-то оказалась мала
+        if (visible == 0) visible = 1; 
+
+        // Ширина скроллбара (например, 10 пикселей). 
+        // Если элементов меньше, чем влазит в экран, скроллбар не нужен — отступ 0
+        uint16_t scrollbar_width = (element->children_count > visible) ? 10 : 0;
+        uint16_t item_w = element->w - scrollbar_width; // Сужаем пункты, освобождая место справа
+
+        for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
+            if (!child) continue;
+
             if (i >= start && i < (start + visible)) {
-                UI_MeasureAndArrange(child, element->x, cur_y, element->w, item_h);
+                // Передаем урезанную ширину item_w, чтобы не затереть скроллбар
+                UI_MeasureAndArrange(child, element->x, cur_y, item_w, item_h);
                 cur_y += item_h;
             } else {
-                UI_MeasureAndArrange(child, 0, 0, 0, 0); // Скрываем
+                // Скрытые элементы сбрасываем в 0
+                UI_MeasureAndArrange(child, 0, 0, 0, 0); 
             }
         }
     }
@@ -829,7 +847,7 @@ void Draw_Graph_Content(UIElement_t* el) {
     for (int16_t x = 11; x < graph_sprite.w - 10; x++) {
         // Имитируем график: вычисляем Y (в реальном коде тут будет значение из массива SWR_Array[x])
         // Переводим значение КСВ в пиксели высоты спрайта
-        int16_t y = (graph_sprite.h / 2) + (int16_t)(sinf(x * 0.05f) * 40.0f); 
+        int16_t y = (graph_sprite.h / 2) + (int16_t)(sinf(x * 0.4f) * 65.0f); 
 
         // Соединяем прошлую точку с текущей быстрой линией Брезенхема!
         Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, RGB565_YELLOW);
