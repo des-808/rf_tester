@@ -198,9 +198,13 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     root_grid.children_count = 0;
     root_grid.props.grid.rows_count = 2;
     root_grid.props.grid.cols_count = 1;
-    root_grid.props.grid.row_definitions[0] = 10; // 10% под статус-бар
-    root_grid.props.grid.row_definitions[1] = 90; // 90% под рабочую зону
-    root_grid.props.grid.col_definitions[0] = 100;
+
+    // 🔥 СТРОКИ: строка 0 — фикс 30 px, строка 1 — 90% от остатка
+    UI_SetGridRowPixel(&root_grid, 0, 25);   // 30 пикселей под статус-бар
+    UI_SetGridRowPercent(&root_grid, 1, 90); // 90% от остатка под рабочую зону
+
+    // Колонка: 100%
+    UI_SetGridColPercent(&root_grid, 0, 100); // 100% ширины
 
     // Подключаем Статус-бар в ячейку (строка 0, column 0)
     status_bar_node.type = UI_TYPE_TEXT_BLOCK;
@@ -217,9 +221,15 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.grid_col = 0;
     main_work_grid.props.grid.rows_count = 1;
     main_work_grid.props.grid.cols_count = 2;
-    main_work_grid.props.grid.row_definitions[0] = 100; // Вся высота рабочей зоны
+    /* main_work_grid.props.grid.row_definitions[0] = 100; // Вся высота рабочей зоны
     main_work_grid.props.grid.col_definitions[0] = 70;  // 70% ширины под График
-    main_work_grid.props.grid.col_definitions[1] = 30;  // 30% ширины под цифры
+    main_work_grid.props.grid.col_definitions[1] = 30;  // 30% ширины под цифры */
+    // 🔥 КОЛОНКИ: колонка 0 = фикс 250 px, колонка 1 = 100% от остатка
+    UI_SetGridColPercent(&main_work_grid, 0, 65);   // 250 пикселей под График (фиксировано)
+    UI_SetGridColPercent(&main_work_grid, 1, 35); // Остаток — под цифры (100% от остатка)
+
+    // Если нужно — можно задать и строку в пикселях, но пока у нас только 1 строка
+     //UI_SetGridRowPixel(&main_work_grid, 0, 300); // например, фикс 300 px высоты
     root_grid.children[root_grid.children_count++] = &main_work_grid;
 
     // Сажаем График во вложенную сетку (0, 0) — левая часть
@@ -401,6 +411,42 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     UI_DrawTree(&root_grid);
 }
 
+void UI_SetGridRowPixel(UIElement_t* grid_elem, uint8_t row_idx, uint8_t size_px) {
+    if (!grid_elem || grid_elem->type != UI_TYPE_GRID) return;
+    if (row_idx >= MAX_GRID_CHILDREN) return;
+
+    GridDefinition_t* g = &grid_elem->props.grid;
+    g->row_definitions[row_idx] = size_px;
+    g->row_is_pixel[row_idx] = true;
+}
+
+void UI_SetGridColPixel(UIElement_t* grid_elem, uint8_t col_idx, uint8_t size_px) {
+    if (!grid_elem || grid_elem->type != UI_TYPE_GRID) return;
+    if (col_idx >= MAX_GRID_CHILDREN) return;
+
+    GridDefinition_t* g = &grid_elem->props.grid;
+    g->col_definitions[col_idx] = size_px;
+    g->col_is_pixel[col_idx] = true;
+}
+
+void UI_SetGridRowPercent(UIElement_t* grid_elem, uint8_t row_idx, uint8_t percent) {
+    if (!grid_elem || grid_elem->type != UI_TYPE_GRID) return;
+    if (row_idx >= MAX_GRID_CHILDREN) return;
+
+    GridDefinition_t* g = &grid_elem->props.grid;
+    g->row_definitions[row_idx] = percent;
+    g->row_is_pixel[row_idx] = false;
+}
+
+void UI_SetGridColPercent(UIElement_t* grid_elem, uint8_t col_idx, uint8_t percent) {
+    if (!grid_elem || grid_elem->type != UI_TYPE_GRID) return;
+    if (col_idx >= MAX_GRID_CHILDREN) return;
+
+    GridDefinition_t* g = &grid_elem->props.grid;
+    g->col_definitions[col_idx] = percent;
+    g->col_is_pixel[col_idx] = false;
+}
+
 /* void GUI_BuildProInterface(void) {
     // 1. Поворачиваем железо дисплея и сбрасываем статический пул памяти
     ST7796_SetRotation(1); // Ландшафтный режим
@@ -569,10 +615,13 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     }
 
     // ЕСЛИ ЭТО GRID
-    if (element->type == UI_TYPE_GRID) {
+    /* if (element->type == UI_TYPE_GRID) {
         GridDefinition_t* grid = &element->props.grid;
         uint16_t row_heights[MAX_GRID_CHILDREN] = {0};
         uint16_t col_widths[MAX_GRID_CHILDREN] = {0};
+
+        uint8_t pixel_rows = 0, pixel_cols = 0;
+        uint16_t total_pixel_rows = 0, total_pixel_cols = 0;
 
         for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
             row_heights[r] = (element->h * grid->row_definitions[r]) / 100;
@@ -594,7 +643,112 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
 
             UI_MeasureAndArrange(child, cell_x, cell_y, cell_w, cell_h);
         }
+    } */
+        if (element->type == UI_TYPE_GRID) {
+        GridDefinition_t* grid = &element->props.grid;
+        uint16_t row_heights[MAX_GRID_CHILDREN] = {0};
+        uint16_t col_widths[MAX_GRID_CHILDREN] = {0};
+
+        uint8_t pixel_rows = 0, pixel_cols = 0;
+        uint16_t total_pixel_rows = 0, total_pixel_cols = 0;
+
+        // --- ШАГ 1: Разбираем фиксированные (пиксельные) размеры ---
+        for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
+            if (grid->row_is_pixel[r]) {
+                row_heights[r] = grid->row_definitions[r];
+                total_pixel_rows += row_heights[r];
+                pixel_rows++;
+            } else {
+                row_heights[r] = 0;
+            }
+        }
+        for (uint8_t c = 0; c < grid->cols_count && c < MAX_GRID_CHILDREN; c++) {
+            if (grid->col_is_pixel[c]) {
+                col_widths[c] = grid->col_definitions[c];
+                total_pixel_cols += col_widths[c];
+                pixel_cols++;
+            } else {
+                col_widths[c] = 0;
+            }
+        }
+
+        // --- ШАГ 2: Остаток распределяем по процентам ---
+        uint16_t remaining_w = (element->w > total_pixel_cols) ? (element->w - total_pixel_cols) : 1;
+        uint16_t remaining_h = (element->h > total_pixel_rows) ? (element->h - total_pixel_rows) : 1;
+
+        uint32_t percent_sum_h = 0, percent_sum_w = 0;
+        for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
+            if (!grid->row_is_pixel[r]) {
+                percent_sum_h += grid->row_definitions[r];
+            }
+        }
+        for (uint8_t c = 0; c < grid->cols_count && c < MAX_GRID_CHILDREN; c++) {
+            if (!grid->col_is_pixel[c]) {
+                percent_sum_w += grid->col_definitions[c];
+            }
+        }
+
+        // Расчет процентных размеров
+        for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
+            if (!grid->row_is_pixel[r]) {
+                if (percent_sum_h > 0) {
+                    row_heights[r] = (uint16_t)((uint32_t)remaining_h * grid->row_definitions[r] / percent_sum_h);
+                } else {
+                    row_heights[r] = remaining_h / (grid->rows_count - pixel_rows);
+                }
+            }
+        }
+        for (uint8_t c = 0; c < grid->cols_count && c < MAX_GRID_CHILDREN; c++) {
+            if (!grid->col_is_pixel[c]) {
+                if (percent_sum_w > 0) {
+                    col_widths[c] = (uint16_t)((uint32_t)remaining_w * grid->col_definitions[c] / percent_sum_w);
+                } else {
+                    col_widths[c] = remaining_w / (grid->cols_count - pixel_cols);
+                }
+            }
+        }
+
+        // --- Проверка на переполнение (если пиксели > доступной ширины/высоты) ---
+        if (total_pixel_cols > element->w) {
+            for (uint8_t c = 0; c < grid->cols_count; c++) {
+                if (!grid->col_is_pixel[c]) {
+                    col_widths[c] = 0;
+                }
+            }
+        }
+        if (total_pixel_rows > element->h) {
+            for (uint8_t r = 0; r < grid->rows_count; r++) {
+                if (!grid->row_is_pixel[r]) {
+                    row_heights[r] = 0;
+                }
+            }
+        }
+
+        // --- ГЕНЕРАЦИЯ ЯЧЕЕК ---
+        for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            if (!child) continue;
+
+            int16_t cell_x = element->x;
+            int16_t cell_y = element->y;
+
+            for (uint8_t c = 0; c < child->grid_col && c < MAX_GRID_CHILDREN; c++) {
+                cell_x += col_widths[c];
+            }
+            for (uint8_t r = 0; r < child->grid_row && r < MAX_GRID_CHILDREN; r++) {
+                cell_y += row_heights[r];
+            }
+
+            uint16_t cell_w = col_widths[child->grid_col];
+            uint16_t cell_h = row_heights[child->grid_row];
+
+            if (cell_w == 0) cell_w = 1;
+            if (cell_h == 0) cell_h = 1;
+
+            UI_MeasureAndArrange(child, cell_x, cell_y, cell_w, cell_h);
+        }
     }
+
 
 }
 
@@ -732,7 +886,7 @@ void Draw_StatusBar_Callback(UIElement_t* el) {
     Sprite_t* sprite = el->sprite; // Достаем физический спрайт из элемента
 
     // 1. Очистка буфера статус-бара цветом RGB565_DARK_GRAY (например, 0x39E7)
-    Sprite_fill(sprite, RGB565_DARK_GRAY);
+    Sprite_fill(sprite, RGB565_BLACK);
 
     // 2. Отрисовка ВРЕМЕНИ (слева, отступ 5 пикселей)
     lcd_set_font(&font_segoe_struct);
@@ -817,7 +971,52 @@ static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8
     }
 }
 
+// Конвертация HSL (HUE 0..360) в RGB565 (без saturation/lightness — просто яркие цвета)
+uint16_t HUE_to_RGB565(uint16_t hue_deg) {
+    // Hue: 0..360 → 0..65535 (умножаем на 182.04 для масштабирования)
+    uint32_t hue = (uint32_t)hue_deg * 182; // 360 * 182 = 65520 ≈ 65535
+    uint8_t r, g, b;
 
+    uint16_t s = 255; // saturation
+    uint16_t l = 240; // lightness — средний яркий цвет
+
+    // Псевдокод из HSL → RGB
+    if (s == 0) {
+        r = g = b = l;
+    } else {
+        uint16_t q = (l < 128) ? (l * (256 + s) / 256) : (l + s - (l * s / 128));
+        uint16_t p = 2 * l - q;
+        uint16_t rc = (hue + 43690) % 65535; // +120°
+        uint16_t gc = hue;
+        uint16_t bc = (65535 - hue + 43690) % 65535;
+
+        // Red
+        if (rc < 21845) r = (uint8_t)(p + (q - p) * rc / 21845);
+        else if (rc < 65535) r = (uint8_t)q;
+        else r = (uint8_t)(p + (q - p) * (65535 - rc) / 21845);
+
+        // Green
+        if (gc < 21845) g = (uint8_t)(p + (q - p) * gc / 21845);
+        else if (gc < 43690) g = (uint8_t)q;
+        else g = (uint8_t)(p + (q - p) * (65535 - gc) / 21845);
+
+        // Blue
+        if (bc < 21845) b = (uint8_t)(p + (q - p) * bc / 21845);
+        else if (bc < 43690) b = (uint8_t)q;
+        else b = (uint8_t)(p + (q - p) * (65535 - bc) / 21845);
+    }
+
+    // ⚡ УБЕДИМСЯ, что цвета не вырождаются в серые
+    r = (r < 64) ? (r + 64) : r;
+    g = (g < 64) ? (g + 64) : g;
+    b = (b < 64) ? (b + 64) : b;
+
+    // Переводим в RGB565 (с SWAP для SPI)
+    uint16_t color = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+    return ((color & 0xFF) << 8) | ((color >> 8) & 0xFF); // SWAP
+}
+
+#define M_PI 3.14
 // Функция для отрисовки сетки графика
 void Draw_Graph_Content(UIElement_t* el) {
     if ( !graph_sprite.data) return;
@@ -839,6 +1038,11 @@ void Draw_Graph_Content(UIElement_t* el) {
         }
     }
 
+    // Перед циклом добавьте:
+/* const float frequency = 0.4f;               // частота синуса: 0.4
+const float period_length = 2.0f * M_PI / frequency; // ~15.708
+const uint8_t hue_step_per_period = 20; // градусов на период */
+
     // 3. РИСУЕМ ЖИВУЮ КРИВУЮ ИЗМЕРЕНИЙ (Пример: синусоида или массив точек КСВ)
     // Пробегаем по всей ширине окна графика шаг за шагом
     int16_t prev_x = 10;
@@ -849,8 +1053,13 @@ void Draw_Graph_Content(UIElement_t* el) {
         // Переводим значение КСВ в пиксели высоты спрайта
         int16_t y = (graph_sprite.h / 2) + (int16_t)(sinf(x * 0.4f) * 65.0f); 
 
+        // ✅ Генерируем цвет: каждый шаг — +3 градуса (360/120 = 3)
+/*     uint16_t period_index = (x - 11) / (uint16_t)period_length;
+uint16_t hue = (period_index * hue_step_per_period) % 360;
+uint16_t color = HUE_to_RGB565(hue); */
+uint16_t color = RGB565_RED;
         // Соединяем прошлую точку с текущей быстрой линией Брезенхема!
-        Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, RGB565_YELLOW);
+        Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, color);
 
         prev_x = x;
         prev_y = y;

@@ -16,6 +16,9 @@
 #define SHRIFT_HEIGHT 18
 #define SHRIFT_OTSTUP_TOP_BOTTOM 4
 
+#define UI_GRID_DIMENSION_PERCENT 100  // обычный процент
+#define UI_GRID_DIMENSION_PIXEL   0xFFFF  // специальный код: пиксельный размер
+
 typedef enum {
     UI_TYPE_GRID,
     UI_TYPE_STACK_PANEL,
@@ -91,6 +94,9 @@ typedef struct {
     uint8_t cols_count;
     uint8_t row_definitions[MAX_GRID_CHILDREN]; // Доли/проценты для строк (например: 10, 70, 20)
     uint8_t col_definitions[MAX_GRID_CHILDREN]; // Доли/проценты для колонок (например: 60, 40)
+    // 🔥 НОВОЕ: массивы флагов — false = процент, true = пиксели
+    bool row_is_pixel[MAX_GRID_CHILDREN];
+    bool col_is_pixel[MAX_GRID_CHILDREN];
 } GridDefinition_t;
 
 // Структура для StackPanel (последовательное расположение)
@@ -145,6 +151,13 @@ typedef struct UIElement {
 #define HEAP_CAP_DEFAULT 0
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation);
+
+//Хелперы для работы с элементами интерфейса Grid
+void UI_SetGridRowPixel(UIElement_t* grid_elem, uint8_t row_idx, uint8_t size_px);
+void UI_SetGridColPixel(UIElement_t* grid_elem, uint8_t col_idx, uint8_t size_px);
+void UI_SetGridRowPercent(UIElement_t* grid_elem, uint8_t row_idx, uint8_t percent);
+void UI_SetGridColPercent(UIElement_t* grid_elem, uint8_t col_idx, uint8_t percent);
+
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
 void UI_DrawTree(UIElement_t* element);
 
