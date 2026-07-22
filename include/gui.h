@@ -163,7 +163,9 @@ void UI_SetGridRowPercent(UIElement_t* grid_elem, uint8_t row_idx, uint8_t perce
 void UI_SetGridColPercent(UIElement_t* grid_elem, uint8_t col_idx, uint8_t percent);
 
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
+static void UI_RenderChildElement(void* child_ptr);
 void UI_DrawTree(UIElement_t* element);
+
 
 
 void Draw_StatusBar_Callback(UIElement_t* el);

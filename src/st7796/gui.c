@@ -200,7 +200,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
     //ui_bands_listbox.h = items_count * item_h;
     //Задаем жесткую высоту ListBox -----
-    uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
+    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
     //ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
     ui_bands_listbox.h = 292;
 
@@ -652,6 +652,49 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     }
 }
 
+/**
+ * @brief Вспомогательная функция для отрисовки одиночного дочернего элемента
+ *        Обеспечивает инкапсуляцию и защиту от дублирования кода в UI_DrawTree
+ */
+static void UI_RenderChildElement(void* child_ptr) {
+    UIElement_t* child = (UIElement_t*)child_ptr;
+    
+    // 1. Строгая защита от нулевого указателя (HardFault protection)
+    if (!child) return; 
+
+    // 2. Если у элемента назначен кастомный колбэк — он имеет наивысший приоритет
+    if (child->render_callback != NULL) { child->render_callback(child); } 
+    // 3. Если колбэка нет — отрисовываем стандартными средствами движка по его типу
+    else {
+        switch (child->type) {
+            case UI_TYPE_TEXT_BLOCK: 
+                Draw_GeneralText_Callback(child); 
+                break;
+                
+            case UI_TYPE_BUTTON:     
+                UI_RenderButton(child);           
+                break;
+                
+            case UI_TYPE_LIST_BOX:   
+                UI_RenderListBox(child); // Отрисовка встроенного списка (фон, рамка, скроллбар)
+                break;
+                
+            case UI_TYPE_BORDER:     
+                UI_RenderBorder(child);           
+                break;
+                
+            case UI_TYPE_CHECK_BOX:
+            case UI_TYPE_RADIO_BUTTON: 
+                UI_RenderToggle(child);           
+                break;
+                
+            default: 
+                // Неизвестные типы или чистые контейнеры без контента просто пропускаем
+                break;
+        }
+    }
+}
+
 void UI_DrawTree(UIElement_t* element) {
     if (!element) return;
 
@@ -696,24 +739,24 @@ void UI_DrawTree(UIElement_t* element) {
                     case UI_TYPE_GRID:
                         // Для GRID лимит 8 СТРОГИЙ, так как массивы геометрии сетки ограничены 8
                         for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
-                            UIElement_t* child = (UIElement_t*)element->children[i];
-                            if (child->type == UI_TYPE_TEXT_BLOCK) {
-                                Draw_GeneralText_Callback(child);
+                            UI_RenderChildElement(element->children[i]);
+                            /*UIElement_t* child = (UIElement_t*)element->children[i];
+                             if (child->type == UI_TYPE_TEXT_BLOCK) { Draw_GeneralText_Callback(child);
                             } else if (child->render_callback != NULL) {
                                 child->render_callback(child);
-                            }
+                            } */
                         }
                         break;
 
                     case UI_TYPE_STACK_PANEL:
                         // Для STACK_PANEL лимит равен максимальному числу детей, которое вы заложили в структуру (например, 24)
                         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
-                            UIElement_t* child = (UIElement_t*)element->children[i];
-                            if (child->type == UI_TYPE_TEXT_BLOCK) {
-                                Draw_GeneralText_Callback(child);
+                            UI_RenderChildElement(element->children[i]);
+                            /* UIElement_t* child = (UIElement_t*)element->children[i];
+                            if (child->type == UI_TYPE_TEXT_BLOCK) { Draw_GeneralText_Callback(child);
                             } else if (child->render_callback != NULL) {
                                 child->render_callback(child);
-                            }
+                            } */
                         }
                         break;
 
@@ -750,13 +793,16 @@ void UI_DrawTree(UIElement_t* element) {
             UI_DrawTree((UIElement_t*)element->children[i]);
         }
     } 
-    else if (element->type == UI_TYPE_STACK_PANEL) {
+    /* else if (element->type == UI_TYPE_STACK_PANEL) {
         // Для стек-панели лимит расширенный (MAX_ELEMENT_CHILDREN, например 24)
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UI_DrawTree((UIElement_t*)element->children[i]);
         }
-    }
+    } */
 }
+
+
+
 
 extern int batteryLevel;
 extern bool bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, bluetoothMode;
@@ -916,7 +962,7 @@ uint16_t HUE_to_RGB565(uint16_t hue_deg) {
     return ((color & 0xFF) << 8) | ((color >> 8) & 0xFF); // SWAP
 }
 
-#define M_PI 3.14
+//#define M_PI 3.14
 // Функция для отрисовки сетки графика
 void Draw_Graph_Content(UIElement_t* el) {
     if ( !graph_sprite.data) return;
