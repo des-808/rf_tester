@@ -247,7 +247,7 @@ int main(void)
 // Запуск сканирования
 I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
-//lcd_clear_screen(0x0000);  // чёрный фон
+lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
  GUI_ShowAdvancedMeasurementScreen(0);
   /* USER CODE END 2 */ 

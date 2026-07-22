@@ -40,132 +40,6 @@ UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
 UIElement_t* ui_touch_row = NULL;
 
-/* void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
-    // 1. Поворачиваем железо дисплея и полностью очищаем старый пул памяти
-    ST7796_SetRotation(rotation);
-    heap_caps_reset_pool();
-    
-    // Сбрасываем счетчик динамического пула элементов перед сборкой
-    GUI_Panel_ClearStrings(&digits_node);
-    
-    // Принудительно сбрасываем счетчик детей и у самого ListBox,
-    // так как при повторном заходе в функцию пункты меню не должны дублироваться!
-    ui_bands_listbox.children_count = 0;
-
-    // Считываем актуальные системные размеры, которые только что выставила ST7796_SetRotation
-    extern uint16_t Display_Width;
-    extern uint16_t Display_Height;
-
-    // 2. Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
-    root_grid.type = UI_TYPE_GRID;
-    root_grid.children_count = 0;
-    root_grid.props.grid.rows_count = 2;
-    root_grid.props.grid.cols_count = 1;
-    root_grid.props.grid.row_definitions[0] = 10; // 10% под статус-бар
-    root_grid.props.grid.row_definitions[1] = 90; // 90% под рабочую зону
-    root_grid.props.grid.col_definitions[0] = 100;
-
-    // 3. Подключаем Статус-бар в ячейку (строка 0, колонка 0)
-    status_bar_node.type = UI_TYPE_TEXT_BLOCK;
-    status_bar_node.sprite = &status_bar_sprite;
-    status_bar_node.render_callback = Draw_StatusBar_Callback;
-    status_bar_node.grid_row = 0;
-    status_bar_node.grid_col = 0;
-    root_grid.children[root_grid.children_count++] = &status_bar_node;
-
-    // 4. Создаем вложенную сетку для разделения Графика и Цифр
-    main_work_grid.type = UI_TYPE_GRID;
-    main_work_grid.children_count = 0;
-    main_work_grid.grid_row = 1;
-    main_work_grid.grid_col = 0;
-    main_work_grid.props.grid.rows_count = 1;
-    main_work_grid.props.grid.cols_count = 2;
-    main_work_grid.props.grid.row_definitions[0] = 100; // Вся высота рабочей зоны
-    main_work_grid.props.grid.col_definitions[0] = 70;  // 70% ширины под График
-    main_work_grid.props.grid.col_definitions[1] = 30;  // 30% ширины под цифры
-    root_grid.children[root_grid.children_count++] = &main_work_grid;
-
-    // 5. Сажаем спрайт Графика во вложенную сетку (0, 0) — левая часть
-    graph_node.type = UI_TYPE_TEXT_BLOCK;
-    graph_node.sprite = &graph_sprite;
-    graph_node.render_callback = Draw_Graph_Content;
-    graph_node.grid_row = 0;
-    graph_node.grid_col = 0;
-    main_work_grid.children[main_work_grid.children_count++] = &graph_node;
-
-    // 6. Настраиваем правую панель как STACK_PANEL (Вертикальный список)
-    digits_node.type = UI_TYPE_STACK_PANEL;
-    digits_node.sprite = &main_screen_sprite; 
-    digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
-    digits_node.props.stack.spacing = 2; // Небольшой зазор между элементами панели
-    digits_node.grid_row = 0; 
-    digits_node.grid_col = 1; 
-    digits_node.children_count = 0; 
-    main_work_grid.children[main_work_grid.children_count++] = &digits_node;
-
-    // ====================================================================
-    // 7. НАБИРАЕМ КОНТЕНТ ПОТОКОМ (Встраиваем ListBox внутрь StackPanel)
-    // ====================================================================
-    
-    // --- Строка 1 панели: Шапка ---
-    UIElement_t* el = GUI_Panel_AddString(&digits_node, "--ИЗМЕРЕНИЯ--");
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
-    el->vertical_alignment   = VERTICAL_ALIGN_CENTER;
-
-    // --- Строка 2 панели: Динамический вывод активного КСВ ---
-    ui_swr_row = GUI_Panel_AddString(&digits_node, "SWR: 1.00"); 
-    ui_swr_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    ui_swr_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
-    
-    // --- Строка 3 панели: Текстовый разделитель ---
-    el = GUI_Panel_AddString(&digits_node, "------------");
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
-    el->vertical_alignment   = VERTICAL_ALIGN_TOP;
-
-    // === ИСПРАВЛЕНО: ВОТ ТУТ МЫ ВСТАВЛЯЕМ НАШ ЦЕЛОСТНЫЙ LISTBOX ===
-    // Инициализируем узел как ListBox и привязываем его к физическому спрайту правой панели
-    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
-    
-    // ЗАДАЕМ ОГРАНИЧЕНИЕ ВЫСОТЫ: Если высота одной строки шрифта Arial9 + рамка около 16-18 пикселей,
-    // высота 72 пикселя позволит ListBox'у идеально отображать 4 строки одновременно!
-    ui_bands_listbox.h = 72; 
-    
-    // Наполняем внутренний список ListBox пунктами (они берутся из panel_rows автоматически)
-    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
-    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cm UHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
-    
-    // Сажаем ListBox как 4-го полноценного ребенка внутрь нашей StackPanel (digits_node)
-    digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
-    // ====================================================================
-
-    // --- Строка 5 панели (пойдет строго ПОД ListBox): Статус физических кнопок ---
-    ui_btn_row = GUI_Panel_AddString(&digits_node, "No btn");
-    ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
-    ui_btn_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
-
-    // --- Строка 6 панели: Динамический статус тачскрина ---
-    ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
-    ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
-
-    // 8. ЗАПУСК КОНТЕЙНЕРОВ: Расчет размеров по всему дереву компонентов
-    extern uint16_t Display_Width;
-    extern uint16_t Display_Height;
-    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-
-    // Принудительно очищаем правый видеобуфер черным перед первым кадром
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data != NULL) {
-        uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
-        memset(&main_screen_sprite.data, 0, total_pixels * 2); 
-    }
-
-    // 9. ЗАПУСК ОТРИСОВКИ: Полная валидация грязных зон и вывод дерева на экран
-    GUI_InvalidateAll(&root_grid);
-    UI_DrawTree(&root_grid);
-} */
-
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
     // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
@@ -275,39 +149,8 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
     el->vertical_alignment   = VERTICAL_ALIGN_TOP;
 
-    // Инициализируем ListBox. 
-    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
-    
-    UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
-    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cmUHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "5. 5.0 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "6. 6.4 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "7. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "8. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "9. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "10. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "11. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "12. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "13. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "14. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "15. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "16. 7.2 GHz");
 
-    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: используем ту же высоту строки, что и рендерер ListBox
-    //uint8_t items_count = ui_bands_listbox.children_count;
-    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
-    //ui_bands_listbox.h = items_count * item_h;
-    //Задаем жесткую высоту ListBox -----
-    uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
-    ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
-    
-
-    // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
-    digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
-
+    /////////////////////////////////////////////////////////////////////////
     // === Добавляем кнопки прокрутки (альтернатива скроллбару) ===
     // Кнопки создаются из того же пула panel_rows, чтобы экономить память
     if (panel_rows_count + 2 < MAX_PANEL_ROWS) {
@@ -347,6 +190,40 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
     ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+    /////////////////////////////////////////////////////////////////////////
+
+    // Инициализируем ListBox. 
+    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
+    
+    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: используем ту же высоту строки, что и рендерер ListBox
+    //uint8_t items_count = ui_bands_listbox.children_count;
+    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
+    //ui_bands_listbox.h = items_count * item_h;
+    //Задаем жесткую высоту ListBox -----
+    uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
+    //ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
+    ui_bands_listbox.h = 292;
+
+    UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
+    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cmUHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "5. 5.0 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "6. 6.4 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "7. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "8. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "9. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "10. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "11. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "12. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "13. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "14. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "15. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "16. 7.2 GHz");
+    // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
+    digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
+
     // ====================================================================
     // ЭТАП 3: ОБМЕР И АЛЛОКАЦИЯ ПАМЯТИ
     // ====================================================================
@@ -562,42 +439,92 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         }
     }
 
-    // ШАГ 3: Математика StackPanel
-    if (element->type == UI_TYPE_STACK_PANEL) {
-        int16_t cur_x = element->x, cur_y = element->y;
+    // ШАГ 3: Математика StackPanel (две фазы: сначала фиксированные, потом динамические)
+     if (element->type == UI_TYPE_STACK_PANEL) {
+        // --- ФАЗА 1: подсчёт высоты фиксированных элементов и динамических ===
+        uint16_t fixed_height_sum = 0;
+        uint8_t fixed_count = 0;
+        uint8_t dynamic_count = 0;
+
+        // Проходим дважды: один раз для анализа, второй — для разметки
+        for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            if (!child) continue;
+
+            // КРИТИЧЕСКИЙ ФИКС: проверяем, задана ли у ребенка своя кастомная высота (как h = 292 у ListBox).
+            if (child->h > 0) {
+                fixed_height_sum += child->h;
+                fixed_count++;
+            } else {
+                dynamic_count++;
+            }
+        }
+
         uint16_t default_font_h = (current_font != NULL) ? current_font->char_height : 16;
+        uint16_t remaining_h = element->h - fixed_height_sum - (element->children_count - 1) * element->props.stack.spacing;
+        if (remaining_h < 0) remaining_h = 0;
+
+        // Распределяем остаток поровну среди динамических (если есть)
+        uint16_t dynamic_h = (dynamic_count > 0) ? (remaining_h / dynamic_count) : 0;
+
+        // --- ФАЗА 2: реальная разметка ---
+        int16_t cur_x = element->x, cur_y = element->y;
+        uint8_t dynamic_index = 0;  // счётчик динамических элементов
 
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
-            
-            // КРИТИЧЕСКИЙ ФИКС: Проверяем, задана ли у ребенка своя кастомная высота (как h = 72 у ListBox).
-            // Если задана (child->h > 0) — используем её! Если не задана (равна 0) — берем стандартную высоту шрифта.
-            uint16_t child_h = (child->h > 0) ? child->h : default_font_h;
+            if (!child) continue;
 
-            // Передаем правильную вычисленную высоту в рекурсию для этого ребенка
+            uint16_t child_h;
+            if (child->h > 0) {
+                child_h = child->h; // фиксированный
+            } else {
+                child_h = dynamic_h; // динамический
+                dynamic_index++;
+
+                // 🔥 КРИТИЧЕСКИЙ ФИКС: если ListBox (или другой динамический элемент)
+                // оказался последним и высота родителя уже исчерпана — ограничиваем его!
+                if (child->type == UI_TYPE_LIST_BOX && child_h > remaining_h - dynamic_index * dynamic_h) {
+                    child_h = remaining_h - dynamic_index * dynamic_h;
+                    if (child_h < default_font_h) child_h = default_font_h;
+                }
+            }
+
+            // Если осталось меньше 0 — ставим минимум и выходим
+            if (remaining_h < child_h) {
+                child_h = (child_h > default_font_h) ? child_h : default_font_h;
+                remaining_h = 0;
+            } else {
+                remaining_h -= child_h + element->props.stack.spacing;
+            }
+
             UI_MeasureAndArrange(child, cur_x, cur_y, element->w, child_h);
-            
-            // Сдвигаем координату Y для следующего элемента на РЕАЛЬНУЮ высоту текущего ребенка + зазор
             cur_y += child_h + element->props.stack.spacing;
         }
-    }
-
-    // ШАГ 4: Математика ListBox (с учетом скролла и резерва под скроллбар)
+    } 
+   
+     // ШАГ 4: Математика ListBox (с учетом скролла и резерва под скроллбар)
     if (element->type == UI_TYPE_LIST_BOX) {
-        int16_t cur_y = element->y;
         uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
         uint16_t item_h = font_h + 6;
         
+        // 🔥 АВТОМАТИЧЕСКИЙ ЛИМИТ ВЫСОТЫ: если высота не задана — считаем её по количеству строк
+        // если задана (например, 192px), то используем только её
+        uint16_t list_h = (element->h > 0) ? element->h : (element->children_count * item_h);
+        // ⚠️ КРИТИЧЕСКИЙ ФИКС: не позволяем ListBox занимать больше, чем доступно у родителя!
+        // Это предотвращает "выталкивание" других элементов StackPanel за экран
+        if (list_h > element->h) list_h = element->h;
+
         uint8_t start = element->props.list_box.scroll_offset;
-        uint8_t visible = element->h / item_h;
-        
-        // Защита от деления на ноль, если высота контейнера почему-то оказалась мала
-        if (visible == 0) visible = 1; 
+        uint8_t visible = list_h / item_h;
+        if (visible == 0) visible = 1;
 
         // Ширина скроллбара (например, 10 пикселей). 
         // Если элементов меньше, чем влазит в экран, скроллбар не нужен — отступ 0
         uint16_t scrollbar_width = (element->children_count > visible) ? 10 : 0;
-        uint16_t item_w = element->w - scrollbar_width; // Сужаем пункты, освобождая место справа
+        uint16_t item_w = element->w - scrollbar_width;
+
+        int16_t cur_y = element->y;
 
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
@@ -612,38 +539,13 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
                 UI_MeasureAndArrange(child, 0, 0, 0, 0); 
             }
         }
+
+        // 🔥 ДОБАВЛЕНО: явно фиксируем размер ListBox по высоте контейнера (но не больше, чем доступно)
+        element->h = list_h;
+        element->w = element->w; // оставляем ширину как есть
     }
-
+    
     // ЕСЛИ ЭТО GRID
-    /* if (element->type == UI_TYPE_GRID) {
-        GridDefinition_t* grid = &element->props.grid;
-        uint16_t row_heights[MAX_GRID_CHILDREN] = {0};
-        uint16_t col_widths[MAX_GRID_CHILDREN] = {0};
-
-        uint8_t pixel_rows = 0, pixel_cols = 0;
-        uint16_t total_pixel_rows = 0, total_pixel_cols = 0;
-
-        for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
-            row_heights[r] = (element->h * grid->row_definitions[r]) / 100;
-        }
-        for (uint8_t c = 0; c < grid->cols_count && c < MAX_GRID_CHILDREN; c++) {
-            col_widths[c] = (element->w * grid->col_definitions[c]) / 100;
-        }
-
-        for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
-            UIElement_t* child = (UIElement_t*)element->children[i];
-            int16_t cell_x = element->x;
-            int16_t cell_y = element->y;
-            
-            for (uint8_t c = 0; c < child->grid_col && c < MAX_GRID_CHILDREN; c++) cell_x += col_widths[c];
-            for (uint8_t r = 0; r < child->grid_row && r < MAX_GRID_CHILDREN; r++) cell_y += row_heights[r];
-
-            uint16_t cell_w = col_widths[child->grid_col];
-            uint16_t cell_h = row_heights[child->grid_row];
-
-            UI_MeasureAndArrange(child, cell_x, cell_y, cell_w, cell_h);
-        }
-    } */
         if (element->type == UI_TYPE_GRID) {
         GridDefinition_t* grid = &element->props.grid;
         uint16_t row_heights[MAX_GRID_CHILDREN] = {0};
@@ -748,8 +650,6 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             UI_MeasureAndArrange(child, cell_x, cell_y, cell_w, cell_h);
         }
     }
-
-
 }
 
 void UI_DrawTree(UIElement_t* element) {
@@ -1431,6 +1331,10 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
     el->children_count = 0;
     el->props.list_box.selected_index = -1;
     el->props.list_box.scroll_offset = 0;
+
+    el->props.list_box.height_mode = 2;
+    el->props.list_box.visible_row_count = 4;  // можно переопределить позже
+    el->props.list_box.pixel_height = 292;     // можно переопределить позже
 }
 
 /**

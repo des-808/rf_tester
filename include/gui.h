@@ -67,6 +67,10 @@ typedef struct {
 typedef struct {
     int8_t selected_index; // Какой элемент выбран (-1 если никто)
     uint8_t scroll_offset; // Для прокрутки, если элементов много
+
+    uint8_t height_mode;         // 0: по строкам, 1: по пикселям, 2: fill remaining
+    uint8_t visible_row_count;   // используется, если height_mode == 0
+    uint16_t pixel_height;       // используется, если height_mode == 1
 } ListBoxProps_t;
 
 typedef enum {
