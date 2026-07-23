@@ -157,6 +157,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     //Задаем жесткую высоту ListBox -----
     //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
     //ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
+    ui_bands_listbox.type = UI_TYPE_LIST_BOX;
     ui_bands_listbox.h = 192;
 
     UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
@@ -276,8 +277,8 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
 
     // 5. 🔥 КРИТИЧЕСКИЙ ФИКС: Выставляем правильный тип С ПОДЧЁРКИВАНИЕМ.
     // Именно его ждёт функция UI_DrawTree, чтобы вызвать UI_RenderListBox!
-    ui_bands_listbox.type = UI_TYPE_LIST_BOX; 
-    ui_bands_listbox.render_callback = NULL; // Отрисовкой будет управлять встроенный UI_RenderListBox
+    //ui_bands_listbox.type = UI_TYPE_LIST_BOX; 
+    //ui_bands_listbox.render_callback = NULL; // Отрисовкой будет управлять встроенный UI_RenderListBox
 
     // 6. Активируем флаг рендеринга для всех трёх статических спрайтов-контейнеров,
     // иначе UI_DrawTree пропустит вызовы низкоуровневой отрисовки
