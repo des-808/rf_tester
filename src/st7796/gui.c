@@ -148,8 +148,36 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     el = GUI_Panel_AddString(&digits_node, "------------");
     el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
     el->vertical_alignment   = VERTICAL_ALIGN_TOP;
+// Инициализируем ListBox. 
+    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
+    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: используем ту же высоту строки, что и рендерер ListBox
+    //uint8_t items_count = ui_bands_listbox.children_count;
+    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
+    //ui_bands_listbox.h = items_count * item_h;
+    //Задаем жесткую высоту ListBox -----
+    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
+    //ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
+    ui_bands_listbox.h = 192;
 
-
+    UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
+    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cmUHF");
+    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "5. 5.0 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "6. 6.4 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "7. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "8. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "9. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "10. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "11. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "12. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "13. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "14. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "15. 7.2 GHz");
+    UI_ListBox_AddItem(&ui_bands_listbox, "16. 7.2 GHz");
+    // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
+    digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
     /////////////////////////////////////////////////////////////////////////
     // === Добавляем кнопки прокрутки (альтернатива скроллбару) ===
     // Кнопки создаются из того же пула panel_rows, чтобы экономить память
@@ -192,37 +220,9 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
     /////////////////////////////////////////////////////////////////////////
 
-    // Инициализируем ListBox. 
-    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
     
-    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: используем ту же высоту строки, что и рендерер ListBox
-    //uint8_t items_count = ui_bands_listbox.children_count;
-    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
-    //ui_bands_listbox.h = items_count * item_h;
-    //Задаем жесткую высоту ListBox -----
-    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
-    //ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
-    ui_bands_listbox.h = 292;
-
-    UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
-    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cmUHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "5. 5.0 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "6. 6.4 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "7. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "8. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "9. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "10. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "11. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "12. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "13. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "14. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "15. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "16. 7.2 GHz");
-    // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
-    digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
+    
+    
 
     // ====================================================================
     // ЭТАП 3: ОБМЕР И АЛЛОКАЦИЯ ПАМЯТИ
