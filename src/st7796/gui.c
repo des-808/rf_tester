@@ -185,6 +185,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         UIElement_t* up_btn = &panel_rows[panel_rows_count++];
         up_btn->type = UI_TYPE_BUTTON;
         up_btn->sprite = &main_screen_sprite;
+        up_btn->h = 26;
         up_btn->children_count = 0;
         up_btn->render_callback = NULL;
         up_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
@@ -199,6 +200,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         UIElement_t* down_btn = &panel_rows[panel_rows_count++];
         down_btn->type = UI_TYPE_BUTTON;
         down_btn->sprite = &main_screen_sprite;
+        down_btn->h = 26;
         down_btn->children_count = 0;
         down_btn->render_callback = NULL;
         down_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
