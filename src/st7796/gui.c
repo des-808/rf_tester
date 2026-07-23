@@ -38,7 +38,7 @@ uint8_t panel_rows_count = 0;
 // ====================================================================
 UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
-UIElement_t* ui_touch_row = NULL;
+UIElement_t* ui_touch_row = NULL; 
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
