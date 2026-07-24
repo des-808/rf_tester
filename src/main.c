@@ -33,6 +33,7 @@
 #include "gui.h"
 #include "bmi160_h7.h"
 #include "ds3231.h"
+#include "measurement/measurement.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -250,6 +251,9 @@ I2C_Scanner_Run(&i2c_scanner);
 lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
  GUI_ShowAdvancedMeasurementScreen(0);
+ // Инициализируем модуль измерений и запускаем его в неблокирующем режиме
+ //Measurement_Init();
+ //Measurement_Start();
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
@@ -425,10 +429,10 @@ if (bmi160_irq_received)
     // ====================================================================
     // 3. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
     // ====================================================================
-    // Вызывается непрерывно на каждой итерации. Благодаря нашей Dirty-Rect оптимизации,
-    // функция работает как пустышка (0% CPU), отправляя данные по SPI DMA только тогда,
-    // когда UI_SetText или Invalidate локально взвели флаг needs_render у конкретного окна.
-    UI_DrawTree(&root_grid); 
+    // Вызывается непрерывно на каждой итерации. Measurement_Handler обновляет данные в фоне.
+    Measurement_Handler();
+    // Функция отрисовки UI — отправляет изменившиеся спрайты по SPI DMA
+    UI_DrawTree(&root_grid);
 
     // Разгрузочная пауза для стабильной работы аппаратного DMA SPI и Watchdog
     HAL_Delay(10); 

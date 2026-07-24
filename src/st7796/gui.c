@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include "measurement/measurement.h"
 
 
 // Глобальные переменные сущностей интерфейса
@@ -39,6 +40,16 @@ uint8_t panel_rows_count = 0;
 UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
 UIElement_t* ui_touch_row = NULL; 
+
+static void gui_measurement_callback(const MeasurementResults* r) {
+    if (!r) return;
+    if (ui_swr_row != NULL) {
+        UI_SetText(ui_swr_row, "SWR: %.2f", r->swr);
+    }
+    // Пометим панели на перерисовку
+    if (digits_node.sprite != NULL) GUI_InvalidateSprite(digits_node.sprite);
+    if (graph_node.sprite != NULL) GUI_InvalidateSprite(graph_node.sprite);
+}
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
@@ -289,6 +300,9 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Сбрасываем флаги графических зон на полный размер окон и гоним дерево на экран
     GUI_InvalidateAll(&root_grid);
     UI_DrawTree(&root_grid);
+
+    // Подписываем GUI на обновления измерений (неблокирующий callback)
+    Measurement_Subscribe(gui_measurement_callback);
 }
 
 void UI_SetGridRowPixel(UIElement_t* grid_elem, uint8_t row_idx, uint8_t size_px) {
