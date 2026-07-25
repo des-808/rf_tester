@@ -4,7 +4,7 @@
 #include "stdint.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include "font.h"
+
 
 extern SPI_HandleTypeDef hspi4;
 uint8_t screen_rotation = 0;
@@ -24,7 +24,7 @@ uint8_t dma_buffer[320 * 2] __attribute__((section(".ram_d1"), aligned(32)));
 // Создаем один большой массив памяти строго в AXI SRAM. 
 // Максимальный размер: статус-бар (480*30) + экран (480*290) = 153 600 слов (307 200 байт)
 // Выравниваем сам массив по границе 32 байт для D-Cache
-#define MAX_HEAP_POOL 160000
+#define MAX_HEAP_POOL 160// 160000
 __attribute__((aligned(32))) uint16_t global_sprite_pool[MAX_HEAP_POOL];
 uint32_t pool_offset = 0;
 
@@ -81,7 +81,7 @@ static void ST7796_WriteDataByte(uint8_t data) {
     LCD_CS_HIGH;
 }
 
-static HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len) {
+HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len) {
     uint32_t size = (len + 31) & ~31;
     SCB_CleanDCache_by_Addr((uint32_t*)data, size);
     __DSB();
@@ -117,84 +117,6 @@ void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t x2, uint16_t y2) {
 }
 
 
-// ✅ Создание спрайта — выделяем буфер
-bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h, uint16_t x, uint16_t y, SpriteAnchor_t anchor) {
-    if (!s || w == 0 || h == 0) return false;
-    
-    s->x = x;
-    s->y = y;
-    s->w = w; 
-    s->h = h;
-    s->is_allocated = true;
-    s->anchor = anchor;
-    
-    // Выделяем память: ширина * высота * 2 байта (RGB565)
-    s->data = (uint16_t*)heap_caps_malloc(w * h * 2, 0);
-    
-    if (s->data != NULL) {
-        s->is_allocated = true;
-        return true;
-    }
-    
-    s->is_allocated = false;
-    return false;
-}
-
-// ✅ Уничтожение спрайта
-void Sprite_destroy(Sprite_t* s) {
-    if (!s || !s->is_allocated || !s->data) return;
-    heap_caps_free(s->data);
-    s->data = NULL;
-    s->is_allocated = false;
-}
-
-// ✅ Очистка спрайта
-void Sprite_fill(Sprite_t* s, uint16_t color) {
-    if (!s || !s->data) return;
-    uint32_t count = s->w * s->h;
-    for (uint32_t i = 0; i < count; i++) {
-        s->data[i] = color;
-    }
-}
-
-void ST7796_PushSprite(Sprite_t* s) {
-    if ((s->x + s->w) > Display_Width || (s->y + s->h) > Display_Height) {
-        return; 
-    }
-
-    ST7796_SetAddressWindow(s->x, s->y, s->x + s->w - 1, s->y + s->h - 1);
-
-    uint32_t total_bytes = (uint32_t)s->w * s->h * 2; // Полный размер буфера в байтах
-    
-    LCD_CS_LOW;
-    LCD_DC_DATA;
-
-    // 1. Очищаем D-Cache один раз для всего массива спрайта целиком
-    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (total_bytes + 31) & ~31);
-    __DSB();
-
-    // 2. Отправляем ВЕСЬ массив в DMA одной транзакцией без деления на кусочки по 320
-    // В STM32H7 счетчик данных DMA поддерживает передачу до 65535 или даже больше (в зависимости от регистра),
-    // но если HAL_SPI_Transmit_DMA принимает размер в байтах/словах, то H7 может отправить до 65535 элементов за раз.
-    // Если размер спрайта больше 65535, HAL разобьет его, либо отправляем частями:
-    
-    uint32_t sent_bytes = 0;
-    while (sent_bytes < total_bytes) {
-        // HAL_SPI_Transmit_DMA обычно принимает размер в штуках элементов (uint16_t в режиме 16-бит)
-        // или в байтах (в режиме 8-бит). Проверьте настройку вашего SPI!
-        // Предположим, передача идет порциями по 32768 байт максимум за вызов:
-        uint32_t chunk_bytes = (total_bytes - sent_bytes > 60000) ? 60000 : (total_bytes - sent_bytes);
-        
-        if (ST7796_TransmitDMA((uint8_t*)s->data + sent_bytes, chunk_bytes) != HAL_OK) break;
-        
-        // Ожидаем окончания отправки блока
-        while (HAL_SPI_GetState(&hspi4) != HAL_SPI_STATE_READY);
-        
-        sent_bytes += chunk_bytes;
-    }
-
-    LCD_CS_HIGH;
-}
 
 
 void ST7796_DrawPixel(int16_t x, int16_t y, uint16_t color) {
@@ -208,7 +130,6 @@ void ST7796_FillScreen(uint16_t color) {
     Sprite_t s;
     if (!Sprite_create_XY(&s, 320, 480,0,0,ANCHOR_FILL_REMAINING)) return;
     Sprite_fill(&s, color);
-    //Sprite_push(&s, 0, 0);
     ST7796_PushSprite(&s);
     Sprite_destroy(&s);
 }
@@ -240,7 +161,7 @@ void ST7796_Init(void) {
     ST7796_WriteCmd(ST7796_DISPON);
     HAL_Delay(10);
 
-    ST7796_FillScreen(RGB565_CYAN);
+    ///ST7796_FillScreen(RGB565_CYAN);
 }
 
 

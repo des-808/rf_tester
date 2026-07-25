@@ -90,7 +90,7 @@ DS3231_Status_t DS3231_GetAlarm(I2C_HandleTypeDef *hi2c, uint8_t alarm_id, DS323
 DS3231_Status_t DS3231_ClearAlarmFlag(I2C_HandleTypeDef *hi2c, uint8_t alarm_id);
 bool DS3231_IsOscillatorStopped(I2C_HandleTypeDef *hi2c);
 float DS3231_GetTemperature(I2C_HandleTypeDef *hi2c);
-DS3231_Status_t DS3231_EnableSquareWave(I2C_HandleTypeDef *hi2c, uint8_t frequency);
+DS3231_Status_t DS3231_EnableSquareWave(I2C_HandleTypeDef *hi2c, uint16_t frequency);
 DS3231_Status_t DS3231_DisableSquareWave(I2C_HandleTypeDef *hi2c);
 DS3231_Status_t DS3231_Enable32kHzOutput(I2C_HandleTypeDef *hi2c, bool enable);
 

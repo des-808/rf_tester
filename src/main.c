@@ -30,10 +30,10 @@
 #include "gpio.h"
 #include "flash.h"
 #include "ft6336u.h"
-#include "gui.h"
+#include "st7796.h"
 #include "bmi160_h7.h"
 #include "ds3231.h"
-#include "measurement/measurement.h"
+#include "lvgl_ui.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -43,13 +43,12 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-#include "font.h"
+
 
 #include "buttons.h"
-#include "i2c_scanner.h"
 #include "buzzer.h"
-//#include "font8x8_Arial.h"
 #include <string.h>
+#include <stdio.h>
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -79,18 +78,8 @@ void SystemClock_Config(void);
 void ST7796_Init(void);
 uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 DMA_HandleTypeDef hdma_spi4_tx;
-//extern void drawStatusBar(Sprite_t *sprite);
-extern Sprite_t* status_bar_sprite;
-extern Sprite_t* main_screen_sprite;
-extern Sprite_t* graph_sprite; // если нужен доступ к графику из main.c
-
-extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
-extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
-extern UIElement_t* ui_swr_row;   // Указатель на элемент КСВ из gui.c
-extern UIElement_t ui_bands_listbox; // Контейнер ListBox из gui.c
-
-uint16_t last_touch_x = 0;              // Координата X для логики меню
-uint16_t last_touch_y = 0;              // Координата Y для логики меню
+uint16_t last_touch_x = 0;
+uint16_t last_touch_y = 0;
 
 
 char debug_str[64] = "BMI160: Wait interrupt..."; // Строка для вывода на экран
@@ -170,22 +159,33 @@ void LED_Blink(uint32_t delay)
 	HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_RESET);
 	HAL_Delay(500-1);
 }
-// Глобальный флаг: true — отрисовать экран, false — ждать изменений
-bool ui_needs_refresh = true; 
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
- extern void ST7796_FillScreen(uint16_t color);
- extern Buttons_HandleTypeDef btn_s;
- I2C_Scanner_HandleTypeDef i2c_scanner;
- extern UIElement_t root_grid;
- extern UIElement_t digits_node;
- extern UIElement_t graph_node;
- uint8_t lastButtonState[8] = {0};
- void INIT_FT6336U(void);
+ //extern void ST7796_FillScreen(uint16_t color);
+extern uint16_t Display_Width;
+extern uint16_t Display_Height;
+extern Buttons_HandleTypeDef btn_s;
+void INIT_FT6336U(void);
+static void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
+    if (!out_x || !out_y) return;
+    uint16_t w = Display_Width;
+    uint16_t h = Display_Height;
+    uint16_t x = raw_x;
+    uint16_t y = raw_y;
+
+    if (w > 0 && h > 0) {
+        x = (uint16_t)((uint32_t)raw_x * w / 4096U);
+        y = (uint16_t)((uint32_t)raw_y * h / 4096U);
+    }
+
+    *out_x = x;
+    *out_y = y;
+}
+
 int main(void)
 {
   /* USER CODE BEGIN 1 */
@@ -239,21 +239,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
   ST7796_Init();
 
-  // Используем Segoe Print 12 по умолчанию
-  //lcd_set_font(&font_segoe_struct);
-  // Или Arial 9:
-   lcd_set_font(&font_arial_9_struct);
+  //lcd_set_font(&font_arial_9_struct);
 
-/* I2C_Scanner_Init(&i2c_scanner, &hi2c1);
-// Запуск сканирования
-I2C_Scanner_Run(&i2c_scanner);
-// Вывод на TFT (вызывайте после очистки экрана)
-lcd_clear_screen(0x0000);  // чёрный фон
-I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
- GUI_ShowAdvancedMeasurementScreen(0);
- // Инициализируем модуль измерений и запускаем его в неблокирующем режиме
- //Measurement_Init();
- //Measurement_Start();
+  LVGL_InitScreen();
+  LVGL_SetStatus("Ready");
+
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
@@ -261,181 +251,49 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   while (1)
   {
     /* USER CODE END WHILE */
-// ====================================================================
-    /* if (bmi160_irq_received) 
-    {
-      bmi160_irq_received = 0; // Сбрасываем флаг события EXTI
-      
-      // Вызываем упакованную функцию. Она сама решит, нужно ли менять экран
-      uint8_t task_reorient_display = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
-      
-      // Если функция вернула команду на смену режима (не 0)
-      if (task_reorient_display != 0) 
-      {
-        current_display_orientation = task_reorient_display;
-        
-        // Выполняем физический разворот дисплея ST7796
-        if (current_display_orientation == 1) {
-            // ST7796_SetRotation(1); // Альбомная
-        } else {
-            // ST7796_SetRotation(0); // Портретная
-        }
-        
-        // Пересчитываем сетку интерфейса rf_tester под новые размеры экрана
-        extern uint16_t Display_Width, Display_Height;
-        UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-        ui_needs_refresh = true; // Триггерим полную перерисовку UI дерева
-      }
-    }
- */
-if (bmi160_irq_received) 
-    {
-      bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
-      // Запрашиваем у датчика целевую ориентацию (0, 1, 2 или 3)
+
+    if (bmi160_irq_received) {
+      bmi160_irq_received = 0;
       uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
-      // Если положение устройства физически изменилось
-      if (next_orientation != current_display_orientation) 
-      {
+      if (next_orientation != current_display_orientation) {
         current_display_orientation = next_orientation;
-        GUI_ShowAdvancedMeasurementScreen(next_orientation);
+        char status[24];
+        snprintf(status, sizeof(status), "Orient:%u", current_display_orientation);
+        LVGL_SetStatus(status);
       }
     }
 
-    // ====================================================================
-    // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
-    // ====================================================================
     if (PCF8574_HasChanges(&pcf_handle)) {
-        Buttons_Update(&btn_s);
-        uint8_t btn = PCF8574_Read8(&pcf_handle);
-        
-        if (btn != 0xFF) {
-            UI_SetText(ui_btn_row, "Btn 0x%02X", btn);
-            Buzzer_Short();
-            
-            // Пробный тест прокрутки (скролла) по нажатию физической кнопки
-            // Если кнопка совпадает с кодом скролла — сдвигаем offset
-            if (btn == 0x7F) { 
-                if (digits_node.props.list_box.scroll_offset < (digits_node.children_count - 1)) {
-                    digits_node.props.list_box.scroll_offset++;
-                    
-                    // Пересчитываем геометрию StackPanel, так как видимые строки изменились
-                    extern uint16_t Display_Width, Display_Height;
-                    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-                    
-                    // Помечаем только правый спрайт грязным
-                    GUI_InvalidateSprite(digits_node.sprite);
-                }
-            }
-        }
-        else {
-            UI_SetText(ui_btn_row, "No btn");
-        }
-        
-        PCF8574_AcknowledgeChanges(&pcf_handle);
+      Buttons_Update(&btn_s);
+      uint8_t btn = PCF8574_Read8(&pcf_handle);
+
+      if (btn != 0xFF) {
+        char btn_text[24];
+        snprintf(btn_text, sizeof(btn_text), "Btn 0x%02X", btn);
+        LVGL_SetButton(btn_text);
+        Buzzer_Short();
+      } else {
+        LVGL_SetButton("Btn: none");
+      }
+
+      PCF8574_AcknowledgeChanges(&pcf_handle);
     }
 
-    // ====================================================================
-    // 2. ОБРАБОТКА ТАЧСКРИНА (Клик по строкам StackPanel / ListBox)
-    // ====================================================================
     if (ft6336u.has_touch) {
-        uint16_t raw_x, raw_y;
-        FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем аппаратную точку
+      uint16_t raw_x, raw_y;
+      FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
+      Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
 
-        // Конвертируем сырые координаты под текущий альбомный разворот экрана
-        Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-
-        // Обновляем текст тачскрина в его динамическом блоке
-        UI_SetText(ui_touch_row, "Touch:(%d,%d)", last_touch_x, last_touch_y);
-        
-        Buzzer_Short(); // Выдаем короткий писк подтверждения клика
-
-        // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условия has_touch!
-        int16_t local_x = 0, local_y = 0;
-        UIElement_t* hit_element = UI_FindElementAt(&root_grid, last_touch_x, last_touch_y, &local_x, &local_y);
-
-        if (hit_element != NULL) {
-          // Сначала обрабатываем кнопки прокрутки, если нажата одна из них
-          if (hit_element->type == UI_TYPE_BUTTON) {
-            if (strcmp(hit_element->text_content, "Up") == 0) {
-              if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
-                ui_bands_listbox.props.list_box.scroll_offset--;
-                extern uint16_t Display_Width, Display_Height;
-                UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-                GUI_InvalidateSprite(digits_node.sprite);
-              }
-            } else if (strcmp(hit_element->text_content, "Down") == 0) {
-              uint8_t max_offset = (ui_bands_listbox.children_count > 0) ? (ui_bands_listbox.children_count - 1) : 0;
-              if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
-                ui_bands_listbox.props.list_box.scroll_offset++;
-                extern uint16_t Display_Width, Display_Height;
-                UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-                GUI_InvalidateSprite(digits_node.sprite);
-              }
-            }
-          } else {
-            // Проверяем, попали ли на видимый элемент списка (ListBox children)
-            for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
-              if ((UIElement_t*)ui_bands_listbox.children[i] == hit_element) {
-                int8_t selected_index = UI_ListBox_ProcessTouch(&ui_bands_listbox, last_touch_x, last_touch_y);
-                if (selected_index >= 0) {
-                  UIElement_t* selected_item = (UIElement_t*)ui_bands_listbox.children[selected_index];
-                  if (selected_item != NULL) {
-                    UI_SetText(ui_swr_row, "BAND: %s", selected_item->text_content);
-                  }
-                  if (graph_node.sprite != NULL) {
-                    GUI_InvalidateSprite(graph_node.sprite);
-                  }
-                }
-                hit_element = NULL;
-                break;
-              }
-            }
-
-            // Если тач не был внутри конкретного пункта списка, но по-прежнему в панели — старая логика
-            if (hit_element != NULL && hit_element == &digits_node) {
-              uint16_t row_height = 22;
-              int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
-
-              if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
-                switch (clicked_row_idx) {
-                  case 0:
-                    break;
-                  case 1:
-                    UI_SetText(ui_swr_row, "SCANNING...");
-                    break;
-                  case 2:
-                    break;
-                  case 4:
-                    UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
-                    break;
-                  case 5:
-                    UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
-                    break;
-                  default:
-                    UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
-                    break;
-                }
-                if (graph_node.sprite != NULL) {
-                  GUI_InvalidateSprite(graph_node.sprite);
-                }
-              }
-            }
-          }
-        }
-
-        ft6336u.has_touch = false; // Обязательный сброс аппаратного флага тача!
+      LVGL_SetTouch(last_touch_x, last_touch_y);
+      LVGL_SetStatus("Touch");
+      Buzzer_Short();
+      ft6336u.has_touch = false;
     }
 
-    // ====================================================================
-    // 3. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
-    // ====================================================================
-    // Вызывается непрерывно на каждой итерации. Measurement_Handler обновляет данные в фоне.
-    Measurement_Handler();
-    // Функция отрисовки UI — отправляет изменившиеся спрайты по SPI DMA
-    UI_DrawTree(&root_grid);
+    LVGL_SetSWR(15.0);
+    LVGL_Tick();
 
-    // Разгрузочная пауза для стабильной работы аппаратного DMA SPI и Watchdog
-    HAL_Delay(10); 
+    HAL_Delay(10);
     
     /* USER CODE BEGIN 3 */
   }

@@ -28,7 +28,7 @@ typedef struct {
     int16_t dirty_y2;       // Нижняя граница изменений
 } Sprite_t;
 
-#include "font.h"
+//#include "font.h"
 
 // --- Константы дисплея ---
 #define ST7796_WIDTH  320
@@ -74,6 +74,7 @@ typedef struct {
 void* heap_caps_malloc(size_t size, uint32_t caps);
 void heap_caps_reset_pool(void);
 void heap_caps_free(void* ptr);
+HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len);
 //static void ST7796_WriteCmd(uint8_t cmd);
 //static void ST7796_WriteData(const uint8_t *data, size_t len);
 //static void ST7796_WriteDataByte(uint8_t data);
