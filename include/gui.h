@@ -130,7 +130,10 @@ typedef struct UIElement {
 
     // КРИТИЧЕСКИ ВАЖНО: Собственный текстовый буфер элемента
     char text_content[32]; 
-
+    
+    uint16_t background_color;
+    uint16_t foreground_color;
+    const Font_t* font;
     // КРИТИЧЕСКИ ВАЖНО: Добавляем свойство выравнивания
     HorizontalAlignment_t horizontal_alignment; 
     VerticalAlignment_t vertical_alignment; 

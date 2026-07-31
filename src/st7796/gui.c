@@ -17,11 +17,6 @@ UIElement_t ui_bands_listbox; // Сам контейнер ListBox
 // Флаг отладки: если true — рисуем границы и текстовые метки геометрии ListBox/scrollbar
 bool ui_debug_draw = true;
 
-/* // Реальные структуры спрайтов LovyanGFX/Си
-Sprite_t* status_bar_sprite     = NULL;
-Sprite_t* graph_sprite          = NULL;
-Sprite_t* main_screen_sprite    = NULL; */
-
 /* Глобальные объекты спрайтов для экранов интерфейса */
 Sprite_t status_bar_sprite;
 Sprite_t graph_sprite;
@@ -41,6 +36,8 @@ UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
 UIElement_t* ui_touch_row = NULL; 
 
+
+
 static void gui_measurement_callback(const MeasurementResults* r) {
     if (!r) return;
     if (ui_swr_row != NULL) {
@@ -51,15 +48,18 @@ static void gui_measurement_callback(const MeasurementResults* r) {
     if (graph_node.sprite != NULL) GUI_InvalidateSprite(graph_node.sprite);
 }
 
+
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
     // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
     // ====================================================================
     
-    // 1. Поворачиваем железо дисплея. Функция сама обновит Display_Width и Display_Height!
+    // 1. Поворачиваем железо дисплея
     ST7796_SetRotation(rotation);
     
     // Полностью очищаем прошлый пул памяти графики
+    // ВАЖНО: Это освобождает память, но не обнуляет данные в старых буферах, если они останутся.
+    // Однако, так как мы используем reset_pool, мы теряем доступ ко всем старым данным.
     heap_caps_reset_pool();
     
     // Принудительно зануляем указатели .data, чтобы движок понял, что память очищена!
@@ -72,236 +72,269 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_screen_sprite.is_allocated = false;
     
     // Сбрасываем счетчики строк и списка
+    // ВАЖНО: Мы обнуляем логику, но старый контент в буферах остается до перерисовки.
     GUI_Panel_ClearStrings(&digits_node);
     ui_bands_listbox.children_count = 0;
+    panel_rows_count = 0; 
+
+    // Сброс глобальных указателей на динамику, чтобы избежать использования "зombie" элементов
+    ui_swr_row = NULL;
+    ui_btn_row = NULL;
+    ui_touch_row = NULL;
 
     extern uint16_t Display_Width;
     extern uint16_t Display_Height;
 
-    // Настраиваем корневую сетку (Разделение по вертикали: 10% и 90%)
+    // --- НАСТРОЙКА КОРНЕВОЙ СЕТКИ ---
     root_grid.type = UI_TYPE_GRID;
     root_grid.children_count = 0;
     root_grid.props.grid.rows_count = 2;
     root_grid.props.grid.cols_count = 1;
 
-    // 🔥 СТРОКИ: строка 0 — фикс 30 px, строка 1 — 90% от остатка
-    UI_SetGridRowPixel(&root_grid, 0, 25);   // 30 пикселей под статус-бар
-    UI_SetGridRowPercent(&root_grid, 1, 90); // 90% от остатка под рабочую зону
+    UI_SetGridRowPixel(&root_grid, 0, 25);
+    UI_SetGridRowPercent(&root_grid, 1, 100);
+    UI_SetGridColPercent(&root_grid, 0, 100);
 
-    // Колонка: 100%
-    UI_SetGridColPercent(&root_grid, 0, 100); // 100% ширины
-
-    // Подключаем Статус-бар в ячейку (строка 0, column 0)
+    // --- СТАТУС-БАР ---
     status_bar_node.type = UI_TYPE_TEXT_BLOCK;
     status_bar_node.grid_row = 0;
     status_bar_node.grid_col = 0;
     status_bar_node.sprite = &status_bar_sprite; 
     status_bar_node.render_callback = Draw_StatusBar_Callback;
+    status_bar_node.background_color = RGB565_BLACK;
+    status_bar_node.horizontal_alignment = HORIZONTAL_ALIGN_LEFT; // Пример
+    status_bar_node.vertical_alignment   = VERTICAL_ALIGN_TOP;
     root_grid.children[root_grid.children_count++] = &status_bar_node;
 
-    // Создаем вложенную сетку для разделения Графика и Цифр
+    // --- ВЛОЖЕННАЯ СЕТКА (График + Панель) ---
     main_work_grid.type = UI_TYPE_GRID;
     main_work_grid.children_count = 0;
     main_work_grid.grid_row = 1;
     main_work_grid.grid_col = 0;
     main_work_grid.props.grid.rows_count = 1;
     main_work_grid.props.grid.cols_count = 2;
-    /* main_work_grid.props.grid.row_definitions[0] = 100; // Вся высота рабочей зоны
-    main_work_grid.props.grid.col_definitions[0] = 70;  // 70% ширины под График
-    main_work_grid.props.grid.col_definitions[1] = 30;  // 30% ширины под цифры */
-    // 🔥 КОЛОНКИ: колонка 0 = фикс 250 px, колонка 1 = 100% от остатка
-    UI_SetGridColPercent(&main_work_grid, 0, 65);   // 250 пикселей под График (фиксировано)
-    UI_SetGridColPercent(&main_work_grid, 1, 35); // Остаток — под цифры (100% от остатка)
+    
+    UI_SetGridColPixel(&main_work_grid, 0, 200); 
+    UI_SetGridColPercent(&main_work_grid, 1, 100); 
 
-    // Если нужно — можно задать и строку в пикселях, но пока у нас только 1 строка
-     //UI_SetGridRowPixel(&main_work_grid, 0, 300); // например, фикс 300 px высоты
     root_grid.children[root_grid.children_count++] = &main_work_grid;
 
-    // Сажаем График во вложенную сетку (0, 0) — левая часть
+    // --- ГРАФИК ---
     graph_node.type = UI_TYPE_TEXT_BLOCK;
     graph_node.grid_row = 0;
     graph_node.grid_col = 0;
     graph_node.sprite = &graph_sprite;
     graph_node.render_callback = Draw_Graph_Content;
+    graph_node.background_color = RGB565_BLACK;
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
 
-    // Настраиваем правую панель как STACK_PANEL (Вертикальный список)
+    // --- ПРАВАЯ ПАНЕЛЬ (STACK) ---
     digits_node.type = UI_TYPE_STACK_PANEL;
     digits_node.sprite = &main_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
-    digits_node.props.stack.spacing = 2; 
+    digits_node.props.stack.spacing = 4; 
     digits_node.grid_row = 0; 
     digits_node.grid_col = 1; 
     digits_node.children_count = 0; 
+    digits_node.background_color = RGB565_BLACK;
+    // Устанавливаем шрифт по умолчанию для всей панели (опционально, если он наследуется)
+    digits_node.font = &font_arial_9_struct; 
     main_work_grid.children[main_work_grid.children_count++] = &digits_node;
 
-    // ПЕРВЫЙ ОБМЕР: Выделяем память под 3 главных спрайта-контейнера
+    // ПЕРВЫЙ ОБМЕР: Определение доступного пространства
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-
-    // Очищаем буфер правой панели
-    if (main_screen_sprite.data != NULL) {
-        uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
-        memset(main_screen_sprite.data, 0, total_pixels * 2); 
-    }
 
     // ====================================================================
     // ЭТАП 2: НАПОЛНЕНИЕ КОНТЕНТОМ
     // ====================================================================
     
+    // Заголовок
     UIElement_t* el = GUI_Panel_AddString(&digits_node, "--ИЗМЕРЕНИЯ--");
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
-    el->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+    if(el) {
+        el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+        el->vertical_alignment   = HORIZONTAL_ALIGN_CENTER;
+        el->background_color = RGB565_BLACK;
+        el->h = 20;
+    }
 
+    // Динамические строки (Сохраняем в глобальные указатели)
     ui_swr_row = GUI_Panel_AddString(&digits_node, "SWR: 1.00"); 
-    ui_swr_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    ui_swr_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+    if(ui_swr_row) {
+        ui_swr_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+        ui_swr_row->vertical_alignment   = HORIZONTAL_ALIGN_CENTER;
+        ui_swr_row->background_color = RGB565_BLACK;
+        ui_swr_row->h = 20;
+    }
     
     el = GUI_Panel_AddString(&digits_node, "------------");
-    el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
-    el->vertical_alignment   = VERTICAL_ALIGN_TOP;
-// Инициализируем ListBox. 
-    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
-    // 4. 🔥 АВТОРАСЧЕТ ВЫСОТЫ: используем ту же высоту строки, что и рендерер ListBox
-    //uint8_t items_count = ui_bands_listbox.children_count;
-    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
-    //ui_bands_listbox.h = items_count * item_h;
-    //Задаем жесткую высоту ListBox -----
-    //uint16_t item_h = (current_font != NULL) ? (current_font->char_height + 6) : (16 + 6);
-    //ui_bands_listbox.h = 9 * item_h; // Показываем только 4 строки, остальное — скролл.
-    ui_bands_listbox.type = UI_TYPE_LIST_BOX;
-    ui_bands_listbox.h = 192;
+    if(el) {
+        el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+        el->vertical_alignment   = VERTICAL_ALIGN_TOP;
+        el->background_color = RGB565_BLACK;
+        el->h = 20;
+    }
 
-    UI_ListBox_AddItem(&ui_bands_listbox, "0. 433 MHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "1. HF Band");
-    UI_ListBox_AddItem(&ui_bands_listbox, "2. 2m VHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "3. 70cmUHF");
-    UI_ListBox_AddItem(&ui_bands_listbox, "4. 2.4 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "5. 5.0 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "6. 6.4 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "7. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "8. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "9. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "10. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "11. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "12. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "13. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "14. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "15. 7.2 GHz");
-    UI_ListBox_AddItem(&ui_bands_listbox, "16. 7.2 GHz");
-    // 5. Регистрируем ListBox как полноценного ребенка внутри StackPanel
+    // --- LISTBOX ---
+    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
+    ui_bands_listbox.type = UI_TYPE_LIST_BOX;
+    /* // Жесткая высота для расчетной фазы
+    ui_bands_listbox.h = 192; 
+    ui_bands_listbox.background_color = RGB565_BLACK; */
+
+    // ОГРАНИЧЕНИЕ: Вычисляем высоту динамически, но с запасом, чтобы не занять всё пространство
+    // В портретном режиме это критично, чтобы кнопки были видны.
+    // В альбомном можно позволить больше строк.
+    uint16_t max_lines_for_list = 10; 
+    if (rotation == 0 || rotation == 2) { // Portrait
+        max_lines_for_list = 8;
+    }
+     ui_bands_listbox.h = max_lines_for_list * 20; // Примерная оценка, будет пересчитана в Measure
+    //ui_bands_listbox.h = 0; // 0 означает "растянуть, но не больше доступного в MeasureAndArrange"
+    ui_bands_listbox.background_color = RGB565_BLACK;
+    
+    const char* bands[] = {
+        "0. 433 MHz", "1. HF Band", "2. 2m VHF", "3. 70cmUHF", "4. 2.4 GHz",
+        "5. 5.0 GHz", "6. 6.4 GHz", "7. 7.2 GHz", "8. 7.2 GHz", "9. 7.2 GHz",
+        "10. 7.2 GHz", "11. 7.2 GHz", "12. 7.2 GHz", "13. 7.2 GHz", "14. 7.2 GHz",
+        "15. 7.2 GHz", "16. 7.2 GHz"
+    };
+    
+    for (uint8_t i = 0; i < 17; i++) {
+        UI_ListBox_AddItem(&ui_bands_listbox, bands[i]);
+    }
+
     digits_node.children[digits_node.children_count++] = &ui_bands_listbox;
-    /////////////////////////////////////////////////////////////////////////
-    // === Добавляем кнопки прокрутки (альтернатива скроллбару) ===
-    // Кнопки создаются из того же пула panel_rows, чтобы экономить память
+
+    // --- КНОПКИ ПРОКРУТКИ ---
     if (panel_rows_count + 2 < MAX_PANEL_ROWS) {
+        // Up Button
         UIElement_t* up_btn = &panel_rows[panel_rows_count++];
+        memset(up_btn, 0, sizeof(UIElement_t)); // Чистим память
         up_btn->type = UI_TYPE_BUTTON;
         up_btn->sprite = &main_screen_sprite;
         up_btn->h = 26;
-        up_btn->children_count = 0;
         up_btn->render_callback = NULL;
         up_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
         up_btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
         up_btn->props.button.is_pressed = false;
-        up_btn->props.button.normal_color = 0x528A; // серо-синий
-        up_btn->props.button.press_color = 0x10A5; // синий при нажатии
+        up_btn->props.button.normal_color = 0x528A; 
+        up_btn->props.button.press_color = 0x10A5; 
+        up_btn->background_color = RGB565_RED;
         strncpy(up_btn->text_content, "Up", sizeof(up_btn->text_content)-1);
-        up_btn->text_content[sizeof(up_btn->text_content)-1] = '\0';
+        // Шрифт кнопки устанавливается в UI_RenderButton, но если нужна настройка:
+         up_btn->font = &font_arial_9_struct; 
+        // Флаг, что высота не фиксирована для авто-расчета (если бы мы хотели автоматизировать)
+        // Но так как мы задали h=26, они будут иметь этот размер.
         digits_node.children[digits_node.children_count++] = up_btn;
 
+        // Down Button
         UIElement_t* down_btn = &panel_rows[panel_rows_count++];
+        memset(down_btn, 0, sizeof(UIElement_t)); // Чистим память
         down_btn->type = UI_TYPE_BUTTON;
         down_btn->sprite = &main_screen_sprite;
         down_btn->h = 26;
-        down_btn->children_count = 0;
         down_btn->render_callback = NULL;
         down_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
         down_btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
         down_btn->props.button.is_pressed = false;
         down_btn->props.button.normal_color = 0x528A;
         down_btn->props.button.press_color = 0x10A5;
+        down_btn->background_color = RGB565_RED;
         strncpy(down_btn->text_content, "Down", sizeof(down_btn->text_content)-1);
-        down_btn->text_content[sizeof(down_btn->text_content)-1] = '\0';
+        // Шрифт кнопки устанавливается в UI_RenderButton, но если нужна настройка:
+        down_btn->font = &font_arial_9_struct;
         digits_node.children[digits_node.children_count++] = down_btn;
     }
 
     ui_btn_row = GUI_Panel_AddString(&digits_node, "No btn");
-    ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
-    ui_btn_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+    if(ui_btn_row) {
+        ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+        ui_btn_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+        ui_btn_row->background_color = RGB565_BLACK;
+    }
 
     ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
-    ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
-    /////////////////////////////////////////////////////////////////////////
-
-    
-    
-    
-
-    // ====================================================================
-    // ЭТАП 3: ОБМЕР И АЛЛОКАЦИЯ ПАМЯТИ
-    // ====================================================================
-    // 🔥 Теперь этот обмер увидит реальную автоматическую высоту ListBox (4 * 16 + 2 = 66 пикселей),
-    // заложит её в расчет StackPanel и выделит буфер памяти точного размера!
-    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-    
-    // 1. Временно снимаем холст со всех строк StackPanel
-    for (uint8_t i = 0; i < digits_node.children_count; i++) {
-        digits_node.children[i]->sprite = NULL;
+    if(ui_touch_row) {
+        ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+        ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
+        ui_touch_row->background_color = RGB565_BLACK;
     }
     
-    // 2. Убираем спрайт у каждого пункта внутри ListBox для защиты от while(1)
+    // ====================================================================
+    // ЭТАП 3: ОБМЕР И АЛЛОКАЦИЯ ПАМЯТИ (ВТОРОЙ ПРОГОН)
+    // ====================================================================
+    
+    // Отключаем спрайты у детей, чтобы MeasureAndArrange не пытался аллоцировать старые буферы
+    // или использовал неправильные размеры
+    for (uint8_t i = 0; i < digits_node.children_count; i++) {
+        if(digits_node.children[i]) {
+            digits_node.children[i]->sprite = NULL;
+        }
+    }
+    
     for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
-        if (ui_bands_listbox.children[i] != NULL) {
+        if(ui_bands_listbox.children[i]) {
             ui_bands_listbox.children[i]->sprite = NULL;
         }
     }
-    ui_bands_listbox.sprite = NULL; // Снимаем спрайт с самого списка
+    ui_bands_listbox.sprite = NULL; 
 
-    // ВТОРOЙ ОБМЕР: Считаем точные координаты элементов
+    // Второй обмер: реальный расчет размеров с учетом динамического контента
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
     // ====================================================================
-    // ВОССТАНОВЛЕНИЕ ДЛЯ ПОЛНОГО РЕНДЕРА
+    // ВОССТАНОВЛЕНИЕ И РЕНДЕР
     // ====================================================================
 
-    // 3. Возвращаем спрайт панели текстовым блокам
+    // Возвращаем спрайты
     for (uint8_t i = 0; i < digits_node.children_count; i++) {
-        digits_node.children[i]->sprite = &main_screen_sprite;
+        if(digits_node.children[i]) {
+            digits_node.children[i]->sprite = &main_screen_sprite;
+        }
     }
     
-    // 4. Возвращаем спрайт панели самому ListBox и его внутренним пунктам
     ui_bands_listbox.sprite = &main_screen_sprite;
     for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
-        if (ui_bands_listbox.children[i] != NULL) {
+        if(ui_bands_listbox.children[i]) {
             ui_bands_listbox.children[i]->sprite = &main_screen_sprite;
         }
     }
 
-    // 🔥 ФИНАЛЬНЫЙ СУПЕР-ФИКС:
+    // ------------------------------------------------------------------
+    // ФИКС 1: ОЧИСТКА ФОНА STACKPANEL
+    // Используем memset для скорости, так как это бинарный паттерн (0 = Black)
+    // ------------------------------------------------------------------
+    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
+        uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
+        memset(main_screen_sprite.data, 0x00, total_pixels * 2); // 0x0000 = Black in RGB565
+    }
+
+    // ------------------------------------------------------------------
+    // ФИКС 2: ПРЕДВАРИТЕЛЬНАЯ ОТРИСОВКА ЭЛЕМЕНТОВ LISTBOX
+    // ------------------------------------------------------------------
     for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
         UIElement_t* item = (UIElement_t*)ui_bands_listbox.children[i];
-        if (item && item->type == UI_TYPE_TEXT_BLOCK) {
-            Draw_GeneralText_Callback(item); // Отрисовка пунктов меню
+        if (item && item->sprite != NULL && item->sprite->data) {
+             // Рисуем текст элемента в общий буфер панели
+             // Убедимся, что у элемента есть координаты, назначенные MeasureAndArrange
+             if (item->w > 0 && item->h > 0) {
+                 Draw_GeneralText_Callback(item);
+             }
         }
     }
 
-    // 5. 🔥 КРИТИЧЕСКИЙ ФИКС: Выставляем правильный тип С ПОДЧЁРКИВАНИЕМ.
-    // Именно его ждёт функция UI_DrawTree, чтобы вызвать UI_RenderListBox!
-    //ui_bands_listbox.type = UI_TYPE_LIST_BOX; 
-    //ui_bands_listbox.render_callback = NULL; // Отрисовкой будет управлять встроенный UI_RenderListBox
-
-    // 6. Активируем флаг рендеринга для всех трёх статических спрайтов-контейнеров,
-    // иначе UI_DrawTree пропустит вызовы низкоуровневой отрисовки
+    // Активируем флаги рендеринга для всех основных блоков
     status_bar_sprite.needs_render = true;
     graph_sprite.needs_render = true;
     main_screen_sprite.needs_render = true;
 
-    // Сбрасываем флаги графических зон на полный размер окон и гоним дерево на экран
+    // Сбрасываем Dirty Rect на весь размер
     GUI_InvalidateAll(&root_grid);
+    
+    // Полная отрисовка
     UI_DrawTree(&root_grid);
 
-    // Подписываем GUI на обновления измерений (неблокирующий callback)
+    // Подписываем GUI на обновления измерений
     Measurement_Subscribe(gui_measurement_callback);
 }
 
@@ -468,8 +501,10 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             UIElement_t* child = (UIElement_t*)element->children[i];
             if (!child) continue;
 
-            // КРИТИЧЕСКИЙ ФИКС: проверяем, задана ли у ребенка своя кастомная высота (как h = 292 у ListBox).
-            if (child->h > 0) {
+            // КРИТИЧЕСКИЙ ФИКС: Проверяем, задана ли у ребенка своя кастомная высота.
+            // Также учитываем, что в портретном режиме ширина меньше, и элементы могут 
+            // автоматически уменьшаться в ширину, но высота должна считаться корректно.
+            if (child->h > 0 || element->props.stack.spacing == 0) {
                 fixed_height_sum += child->h;
                 fixed_count++;
             } else {
@@ -483,6 +518,8 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
 
         // Распределяем остаток поровну среди динамических (если есть)
         uint16_t dynamic_h = (dynamic_count > 0) ? (remaining_h / dynamic_count) : 0;
+        // Минимальная высота для динамических элементов, чтобы они были читаемы
+        if (dynamic_h < default_font_h + 4) dynamic_h = default_font_h + 4;
 
         // --- ФАЗА 2: реальная разметка ---
         int16_t cur_x = element->x, cur_y = element->y;
@@ -499,7 +536,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
                 child_h = dynamic_h; // динамический
                 dynamic_index++;
 
-                // 🔥 КРИТИЧЕСКИЙ ФИКС: если ListBox (или другой динамический элемент)
+            /*     // 🔥 КРИТИЧЕСКИЙ ФИКС: если ListBox (или другой динамический элемент)
                 // оказался последним и высота родителя уже исчерпана — ограничиваем его!
                 if (child->type == UI_TYPE_LIST_BOX && child_h > remaining_h - dynamic_index * dynamic_h) {
                     child_h = remaining_h - dynamic_index * dynamic_h;
@@ -513,7 +550,12 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
                 remaining_h = 0;
             } else {
                 remaining_h -= child_h + element->props.stack.spacing;
-            }
+            } */
+           // Если в портретном режиме доступная высота недостаточна, ограничиваем элементы
+             if (child_h > remaining_h && remaining_h > 0) {
+                child_h = remaining_h;
+            } 
+        }
 
             UI_MeasureAndArrange(child, cur_x, cur_y, element->w, child_h);
             cur_y += child_h + element->props.stack.spacing;
@@ -525,13 +567,23 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
         uint16_t item_h = font_h + 6;
         
-        // 🔥 АВТОМАТИЧЕСКИЙ ЛИМИТ ВЫСОТЫ: если высота не задана — считаем её по количеству строк
+        /* // 🔥 АВТОМАТИЧЕСКИЙ ЛИМИТ ВЫСОТЫ: если высота не задана — считаем её по количеству строк
         // если задана (например, 192px), то используем только её
         uint16_t list_h = (element->h > 0) ? element->h : (element->children_count * item_h);
         // ⚠️ КРИТИЧЕСКИЙ ФИКС: не позволяем ListBox занимать больше, чем доступно у родителя!
         // Это предотвращает "выталкивание" других элементов StackPanel за экран
         if (list_h > element->h) list_h = element->h;
-
+ */
+        // Если высота не задана (0), вычисляем её на основе доступного пространства, 
+        // но не более, чем позволяет родитель (StackPanel).
+        uint16_t list_h = element->h;
+        if (list_h == 0) {
+             // Логика: максимум 10 строк или оставшееся место в StackPanel
+             list_h = element->h; // Берем из родителя (уже рассчитанное StackPanel)
+             if (list_h == 0) list_h = 200; // Дефолт, если что-то пошло не так
+        }
+        
+        // Ограничиваем высоту ListBox доступным пространством родителя
         uint8_t start = element->props.list_box.scroll_offset;
         uint8_t visible = list_h / item_h;
         if (visible == 0) visible = 1;
@@ -781,7 +833,7 @@ void UI_DrawTree(UIElement_t* element) {
                 }
             }
 
-            // Если это StackPanel — принудительно просим всех детей (текстовые строки)
+            /* // Если это StackPanel — принудительно просим всех детей (текстовые строки)
             // нарисовать свои буквы в этот же открытый буфер ОЗУ
             if (element->type == UI_TYPE_STACK_PANEL) {
                 for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
@@ -791,7 +843,7 @@ void UI_DrawTree(UIElement_t* element) {
                         child->render_callback(child);
                     }
                 }
-            }
+            } */
 
             // ОТПРАВКА: Шлем в контроллер ST7796 строго грязный прямоугольник
             ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
@@ -810,12 +862,12 @@ void UI_DrawTree(UIElement_t* element) {
             UI_DrawTree((UIElement_t*)element->children[i]);
         }
     } 
-    /* else if (element->type == UI_TYPE_STACK_PANEL) {
+     else if (element->type == UI_TYPE_STACK_PANEL) {
         // Для стек-панели лимит расширенный (MAX_ELEMENT_CHILDREN, например 24)
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UI_DrawTree((UIElement_t*)element->children[i]);
         }
-    } */
+    } 
 }
 
 
@@ -1219,6 +1271,9 @@ UIElement_t* GUI_Panel_AddString(UIElement_t* parent, const char* initial_text) 
     new_node->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
     new_node->vertical_alignment = VERTICAL_ALIGN_CENTER;
 
+    // --- УСТАНОВКА ШРИФТА ПО УМОЛЧАНИЮ ---
+    new_node->font = &font_arial_9_struct; // Устанавливаем шрифт по умолчанию
+
     // 3. Безопасно копируем начальный текст
     strncpy(new_node->text_content, initial_text, sizeof(new_node->text_content) - 1);
     new_node->text_content[sizeof(new_node->text_content) - 1] = '\0';
@@ -1243,11 +1298,23 @@ void GUI_Panel_ClearStrings(UIElement_t* parent) {
 void Draw_GeneralText_Callback(UIElement_t* el) {
     if (!el || !el->sprite || el->w == 0 || el->h == 0) return;
     Sprite_t* s = el->sprite;
-    int16_t lx = el->x - s->x, ly = el->y - s->y;
+
+    //int16_t lx = el->x - s->x, ly = el->y - s->y;
     
     // 1. Вычисляем локальные координаты ячейки внутри физического спрайта
     int16_t local_x = el->x - s->x;
     int16_t local_y = el->y - s->y;
+
+    // КРИТИЧЕСКИЙ ФИКС 1: Очистка фона ячейки перед отрисовкой текста
+    // Это предотвращает "хвосты" от предыдущих длинных строк
+    for (int16_t y = local_y; y < local_y + el->h; y++) {
+        if (y >= s->h) break;
+        for (int16_t x = local_x; x < local_x + el->w; x++) {
+            if (x >= s->w) break;
+            s->data[y * s->w + x] = el->background_color;
+        }
+    }
+
 
     // 2. Очищаем пространство этой конкретной строки цветом фона (Dirty Rect)
    /*  for (int16_t y = local_y; y < local_y + el->h; y++) {
@@ -1256,10 +1323,11 @@ void Draw_GeneralText_Callback(UIElement_t* el) {
         }
     } */
    // КРИТИЧЕСКИЙ ФИКС 2: Не затираем фон черным! Определяем текущий цвет подложки.
-    uint16_t bg_color = s->data[ly * s->w + lx]; 
+    //uint16_t bg_color = s->data[ly * s->w + lx]; 
 
     // 3. Активируем шрифт
-    lcd_set_font(&font_arial_9_struct);
+    lcd_set_font(el->font);
+    //lcd_set_font(&font_arial_9_struct);
     
     // Получаем метрики строки и шрифта
     int str_w = lcd_get_str_width(el->text_content); // Текст берется из САМОГО элемента!
@@ -1299,7 +1367,7 @@ void Draw_GeneralText_Callback(UIElement_t* el) {
     if (text_y < local_y) text_y = local_y;
 
     // 7. Печатаем текст. Цвет делаем зеленым для динамики, белым для статики (по вашему желанию)
-    lcd_print_to_buffer(text_x, text_y, RGB565_GREEN, el->text_content, bg_color, s);
+    lcd_print_to_buffer(text_x, text_y, RGB565_GREEN, el->text_content, el->background_color, s);
 }
  
 
@@ -1324,6 +1392,7 @@ void UI_RenderBorder(UIElement_t* el) {
 }
 
 void UI_RenderButton(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
     Sprite_t* s = el->sprite;
     int16_t lx = el->x - s->x;
     int16_t ly = el->y - s->y;
@@ -1346,8 +1415,13 @@ void UI_RenderButton(UIElement_t* el) {
     }
 
     // 3. Печатаем текст кнопки по центру ячейки
-    lcd_set_font(&font_segoe_struct);
+    // Используем шрифт элемента, если он задан, иначе fallback
+    lcd_set_font((el->font) ? el->font : &font_segoe_struct);
     int str_w = lcd_get_str_width(el->text_content);
+    // current_font->char_height теперь корректен благодаря lcd_set_font выше,
+    // но лучше явно взять метрику из шрифта, который мы только что установили.
+    // Если lcd_get_str_width не использует текущий глобальный шрифт, передайте его явно:
+    // int str_w = lcd_get_str_width_font(el->text_content, el->font);
     int16_t tx = lx + (el->w - str_w) / 2;
     int16_t ty = ly + (el->h - current_font->char_height) / 2;
     lcd_print_to_buffer(tx, ty, RGB565_WHITE, el->text_content, bg_color, s);
@@ -1379,6 +1453,9 @@ void UI_RenderToggle(UIElement_t* el) {
         lcd_print_to_buffer(lx, ly - 2, RGB565_WHITE, el->props.toggle.is_checked ? "(O)" : "( )", RGB565_BLACK, s);
     }
 
+    // Выводим текст
+    // Шрифт для текста флажка тоже может быть задан, но часто это мелкий шрифт
+    lcd_set_font((el->font) ? el->font : &font_arial_9_struct);
     // Выводим сопровождающий текст справа от флажка
     lcd_print_to_buffer(lx + 16, ly, RGB565_WHITE, el->text_content, RGB565_BLACK, s);
 }
@@ -1398,6 +1475,8 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
     el->props.list_box.height_mode = 2;
     el->props.list_box.visible_row_count = 4;  // можно переопределить позже
     el->props.list_box.pixel_height = 292;     // можно переопределить позже
+    // Устанавливаем шрифт по умолчанию для ListBox
+    el->font = &font_arial_9_struct;
 }
 
 /**
@@ -1416,6 +1495,8 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
     item->h = 0;
     item->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
     item->vertical_alignment = VERTICAL_ALIGN_CENTER;
+    // Устанавливаем шрифт по умолчанию для ListBox
+    item->font = &font_arial_9_struct;
     strncpy(item->text_content, item_text, sizeof(item->text_content) - 1);
     item->text_content[sizeof(item->text_content) - 1] = '\0';
     listbox->children[listbox->children_count++] = item;

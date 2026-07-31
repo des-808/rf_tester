@@ -134,7 +134,7 @@ void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, i
 #define RGB565_DARK_RED     0x8000
  */
 
- #define RGB565_BLACK        0x0000
+#define RGB565_BLACK        0x0000
 #define RGB565_WHITE        0xFFFF
 #define RGB565_RED          0x00F8  // swapped from 0xF800
 #define RGB565_GREEN        0xE007  // swapped from 0x07E0
