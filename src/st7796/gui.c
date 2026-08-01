@@ -132,7 +132,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     digits_node.type = UI_TYPE_STACK_PANEL;
     digits_node.sprite = &main_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
-    digits_node.props.stack.spacing = 4; 
+    digits_node.props.stack.spacing = 2; 
     digits_node.grid_row = 0; 
     digits_node.grid_col = 1; 
     digits_node.children_count = 0; 
@@ -154,7 +154,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
         el->vertical_alignment   = HORIZONTAL_ALIGN_CENTER;
         el->background_color = RGB565_BLACK;
-        el->h = 20;
+        el->h = 16;
     }
 
     // Динамические строки (Сохраняем в глобальные указатели)
@@ -163,7 +163,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         ui_swr_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
         ui_swr_row->vertical_alignment   = HORIZONTAL_ALIGN_CENTER;
         ui_swr_row->background_color = RGB565_BLACK;
-        ui_swr_row->h = 20;
+        ui_swr_row->h = 16;
     }
     
     el = GUI_Panel_AddString(&digits_node, "------------");
@@ -171,7 +171,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
         el->vertical_alignment   = VERTICAL_ALIGN_TOP;
         el->background_color = RGB565_BLACK;
-        el->h = 20;
+        el->h = 16;
     }
 
     // --- LISTBOX ---
@@ -181,15 +181,9 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_bands_listbox.h = 192; 
     ui_bands_listbox.background_color = RGB565_BLACK; */
 
-    // ОГРАНИЧЕНИЕ: Вычисляем высоту динамически, но с запасом, чтобы не занять всё пространство
-    // В портретном режиме это критично, чтобы кнопки были видны.
-    // В альбомном можно позволить больше строк.
-    uint16_t max_lines_for_list = 10; 
-    if (rotation == 0 || rotation == 2) { // Portrait
-        max_lines_for_list = 8;
-    }
-     ui_bands_listbox.h = max_lines_for_list * 20; // Примерная оценка, будет пересчитана в Measure
-    //ui_bands_listbox.h = 0; // 0 означает "растянуть, но не больше доступного в MeasureAndArrange"
+    // ListBox не имеет фиксированной высоты по умолчанию; он будет занимать
+    // только доступное пространство, которое выдаст контейнер.
+    ui_bands_listbox.h = 0;
     ui_bands_listbox.background_color = RGB565_BLACK;
     
     const char* bands[] = {
@@ -212,7 +206,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         memset(up_btn, 0, sizeof(UIElement_t)); // Чистим память
         up_btn->type = UI_TYPE_BUTTON;
         up_btn->sprite = &main_screen_sprite;
-        up_btn->h = 26;
+        up_btn->h = 20;
         up_btn->render_callback = NULL;
         up_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
         up_btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
@@ -232,7 +226,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         memset(down_btn, 0, sizeof(UIElement_t)); // Чистим память
         down_btn->type = UI_TYPE_BUTTON;
         down_btn->sprite = &main_screen_sprite;
-        down_btn->h = 26;
+        down_btn->h = 20;
         down_btn->render_callback = NULL;
         down_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
         down_btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
@@ -251,6 +245,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         ui_btn_row->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
         ui_btn_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
         ui_btn_row->background_color = RGB565_BLACK;
+        ui_btn_row->h = 16;
     }
 
     ui_touch_row = GUI_Panel_AddString(&digits_node, "No touch");
@@ -258,6 +253,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         ui_touch_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
         ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
         ui_touch_row->background_color = RGB565_BLACK;
+        ui_touch_row->h = 16;
     }
     
     // ====================================================================
@@ -374,6 +370,18 @@ void UI_SetGridColPercent(UIElement_t* grid_elem, uint8_t col_idx, uint8_t perce
     g->col_is_pixel[col_idx] = false;
 }
 
+void UI_SetGridRowWeight(UIElement_t* grid_elem, uint8_t row_idx, uint8_t weight) {
+    if (!grid_elem || grid_elem->type != UI_TYPE_GRID) return;
+    if (row_idx >= MAX_GRID_CHILDREN) return;
+    grid_elem->props.grid.row_weights[row_idx] = weight;
+}
+
+void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight) {
+    if (!grid_elem || grid_elem->type != UI_TYPE_GRID) return;
+    if (col_idx >= MAX_GRID_CHILDREN) return;
+    grid_elem->props.grid.col_weights[col_idx] = weight;
+}
+
 /* void GUI_BuildProInterface(void) {
     // 1. Поворачиваем железо дисплея и сбрасываем статический пул памяти
     ST7796_SetRotation(1); // Ландшафтный режим
@@ -449,6 +457,8 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     if (!element) return;
 
     // Базовые координаты
+    uint16_t previous_h = element->h;
+
     element->x = parent_x; 
     element->y = parent_y;
     element->w = available_w; 
@@ -457,108 +467,124 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     // ШАГ 1 & 2: Выделение памяти (Leafs / Containers)
     if (element->children_count == 0 && element->sprite != NULL) {
         Sprite_t* s = element->sprite;
-        if (s->data == NULL) {
+        bool owns_own_buffer = (s != &main_screen_sprite);
+        if (owns_own_buffer) {
             s->x = element->x; s->y = element->y;
             s->w = element->w; s->h = element->h;
-            // Защита: не выделяем при нулевой ширине/высоте
-            if (s->w == 0 || s->h == 0) return;
-            size_t bytes = (size_t)s->w * (size_t)s->h * 2u;
-            s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
-            s->is_allocated = (s->data != NULL);
-            // Не делать бесконечный цикл при ошибке аллокации — просто вернуться
-            if (!s->is_allocated) {
-                return;
+            if (s->data == NULL || s->w != element->w || s->h != element->h || !s->is_allocated) {
+                if (s->data != NULL && s->is_allocated) {
+                    heap_caps_free(s->data);
+                }
+                s->data = NULL;
+                s->is_allocated = false;
+                // Защита: не выделяем при нулевой ширине/высоте
+                if (s->w == 0 || s->h == 0) return;
+                size_t bytes = (size_t)s->w * (size_t)s->h * 2u;
+                s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
+                s->is_allocated = (s->data != NULL);
+                // Не делать бесконечный цикл при ошибке аллокации — просто вернуться
+                if (!s->is_allocated) {
+                    return;
+                }
             }
         }
         return; 
     }
 
     if (element->type == UI_TYPE_STACK_PANEL || element->type == UI_TYPE_LIST_BOX) {
-        if (element->sprite != NULL && element->sprite->data == NULL) {
+        if (element->sprite != NULL) {
             Sprite_t* s = element->sprite;
             s->x = element->x; s->y = element->y;
-            s->w = element->w; s->h = element->h;
-            // Защита от нулевых размеров
-            if (s->w == 0 || s->h == 0) return;
-            size_t bytes = (size_t)s->w * (size_t)s->h * 2u;
-            s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
-            s->is_allocated = (s->data != NULL);
-            if (!s->is_allocated) {
-                return;
+
+            // Важный фикс: ListBox и кнопки/текст используют общий спрайт панели digits_node.
+            // Поэтому ListBox не должен менять размеры этого спрайта под себя — иначе
+            // весь стек элементов начинает рисоваться с неверной геометрией в альбомной ориентации.
+            bool should_resize_shared_sprite = (s != &main_screen_sprite) || (element->type == UI_TYPE_STACK_PANEL);
+            if (should_resize_shared_sprite) {
+                s->w = element->w; s->h = element->h;
+                if (s->data == NULL || s->w != element->w || s->h != element->h || !s->is_allocated) {
+                    if (s->data != NULL && s->is_allocated) {
+                        heap_caps_free(s->data);
+                    }
+                    s->data = NULL;
+                    s->is_allocated = false;
+                    // Защита от нулевых размеров
+                    if (s->w == 0 || s->h == 0) return;
+                    size_t bytes = (size_t)s->w * (size_t)s->h * 2u;
+                    s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
+                    s->is_allocated = (s->data != NULL);
+                    if (!s->is_allocated) {
+                        return;
+                    }
+                }
             }
         }
     }
 
-    // ШАГ 3: Математика StackPanel (две фазы: сначала фиксированные, потом динамические)
+    // ШАГ 3: Математика StackPanel (фиксированные размеры сохраняются,
+    // элементы без явной высоты делят остаток автоматически по весу)
      if (element->type == UI_TYPE_STACK_PANEL) {
-        // --- ФАЗА 1: подсчёт высоты фиксированных элементов и динамических ===
         uint16_t fixed_height_sum = 0;
-        uint8_t fixed_count = 0;
         uint8_t dynamic_count = 0;
+        uint16_t total_spacing = 0;
+        uint32_t total_weight = 0;
 
-        // Проходим дважды: один раз для анализа, второй — для разметки
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             if (!child) continue;
 
-            // КРИТИЧЕСКИЙ ФИКС: Проверяем, задана ли у ребенка своя кастомная высота.
-            // Также учитываем, что в портретном режиме ширина меньше, и элементы могут 
-            // автоматически уменьшаться в ширину, но высота должна считаться корректно.
-            if (child->h > 0 || element->props.stack.spacing == 0) {
+            if (child->h > 0) {
                 fixed_height_sum += child->h;
-                fixed_count++;
             } else {
                 dynamic_count++;
+                total_weight += (child->layout_weight > 0) ? child->layout_weight : 1;
             }
         }
 
-        uint16_t default_font_h = (current_font != NULL) ? current_font->char_height : 16;
-        uint16_t remaining_h = element->h - fixed_height_sum - (element->children_count - 1) * element->props.stack.spacing;
+        if (element->children_count > 1) {
+            total_spacing = (uint16_t)(element->children_count - 1) * element->props.stack.spacing;
+        }
+
+        int32_t remaining_h = (int32_t)element->h - (int32_t)fixed_height_sum - (int32_t)total_spacing;
         if (remaining_h < 0) remaining_h = 0;
 
-        // Распределяем остаток поровну среди динамических (если есть)
-        uint16_t dynamic_h = (dynamic_count > 0) ? (remaining_h / dynamic_count) : 0;
-        // Минимальная высота для динамических элементов, чтобы они были читаемы
-        if (dynamic_h < default_font_h + 4) dynamic_h = default_font_h + 4;
+        uint16_t default_font_h = (current_font != NULL) ? current_font->char_height : 16;
+        uint16_t min_dynamic_h = (default_font_h > 16) ? default_font_h : 16;
 
-        // --- ФАЗА 2: реальная разметка ---
-        int16_t cur_x = element->x, cur_y = element->y;
-        uint8_t dynamic_index = 0;  // счётчик динамических элементов
+        int16_t cur_x = element->x;
+        int16_t cur_y = element->y;
+        int32_t remaining_for_dynamic = remaining_h;
+        uint8_t remaining_dynamic_count = dynamic_count;
 
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             if (!child) continue;
 
-            uint16_t child_h;
+            uint16_t child_h = 0;
             if (child->h > 0) {
-                child_h = child->h; // фиксированный
+                child_h = child->h;
+            } else if (remaining_dynamic_count == 0) {
+                child_h = 0;
             } else {
-                child_h = dynamic_h; // динамический
-                dynamic_index++;
-
-            /*     // 🔥 КРИТИЧЕСКИЙ ФИКС: если ListBox (или другой динамический элемент)
-                // оказался последним и высота родителя уже исчерпана — ограничиваем его!
-                if (child->type == UI_TYPE_LIST_BOX && child_h > remaining_h - dynamic_index * dynamic_h) {
-                    child_h = remaining_h - dynamic_index * dynamic_h;
-                    if (child_h < default_font_h) child_h = default_font_h;
+                uint32_t weight = (child->layout_weight > 0) ? child->layout_weight : 1;
+                uint32_t share = (total_weight > 0) ? ((remaining_for_dynamic * weight) / total_weight) : 0;
+                if (share < min_dynamic_h && remaining_for_dynamic > 0) {
+                    share = (remaining_for_dynamic < min_dynamic_h) ? (uint32_t)remaining_for_dynamic : min_dynamic_h;
                 }
+                if (share > (uint32_t)remaining_for_dynamic) share = (uint32_t)remaining_for_dynamic;
+                child_h = (uint16_t)share;
+                remaining_dynamic_count--;
             }
 
-            // Если осталось меньше 0 — ставим минимум и выходим
-            if (remaining_h < child_h) {
-                child_h = (child_h > default_font_h) ? child_h : default_font_h;
-                remaining_h = 0;
-            } else {
-                remaining_h -= child_h + element->props.stack.spacing;
-            } */
-           // Если в портретном режиме доступная высота недостаточна, ограничиваем элементы
-             if (child_h > remaining_h && remaining_h > 0) {
-                child_h = remaining_h;
-            } 
-        }
+            if (child_h > remaining_for_dynamic) {
+                child_h = (uint16_t)remaining_for_dynamic;
+            }
 
             UI_MeasureAndArrange(child, cur_x, cur_y, element->w, child_h);
             cur_y += child_h + element->props.stack.spacing;
+            if (child->h == 0) {
+                remaining_for_dynamic -= child_h;
+            }
         }
     } 
    
@@ -566,46 +592,60 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     if (element->type == UI_TYPE_LIST_BOX) {
         uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
         uint16_t item_h = font_h + 6;
-        
-        /* // 🔥 АВТОМАТИЧЕСКИЙ ЛИМИТ ВЫСОТЫ: если высота не задана — считаем её по количеству строк
-        // если задана (например, 192px), то используем только её
-        uint16_t list_h = (element->h > 0) ? element->h : (element->children_count * item_h);
-        // ⚠️ КРИТИЧЕСКИЙ ФИКС: не позволяем ListBox занимать больше, чем доступно у родителя!
-        // Это предотвращает "выталкивание" других элементов StackPanel за экран
-        if (list_h > element->h) list_h = element->h;
- */
-        // Если высота не задана (0), вычисляем её на основе доступного пространства, 
-        // но не более, чем позволяет родитель (StackPanel).
-        uint16_t list_h = element->h;
-        if (list_h == 0) {
-             // Логика: максимум 10 строк или оставшееся место в StackPanel
-             list_h = element->h; // Берем из родителя (уже рассчитанное StackPanel)
-             if (list_h == 0) list_h = 200; // Дефолт, если что-то пошло не так
+        uint16_t parent_h = element->h;
+
+        // Высота ListBox должна быть привязана к высоте, которую выделил родитель.
+        // Если родитель не дал высоту, берём либо явную pixel_height, либо размер по
+        // количеству видимых строк. Это предотвращает нежелательное сжатие при скролле.
+        uint16_t list_h = parent_h;
+        if (element->props.list_box.height_mode == UI_LISTBOX_HEIGHT_FIXED) {
+            if (element->props.list_box.pixel_height > 0) {
+                list_h = element->props.list_box.pixel_height;
+            } else if (list_h == 0) {
+                list_h = (element->props.list_box.visible_row_count > 0 ? element->props.list_box.visible_row_count : 4) * item_h;
+            }
+        } else {
+            if (list_h == 0) {
+                if (element->props.list_box.pixel_height > 0) {
+                    list_h = element->props.list_box.pixel_height;
+                } else {
+                    list_h = (element->props.list_box.visible_row_count > 0 ? element->props.list_box.visible_row_count : 4) * item_h;
+                }
+            }
         }
+
+        if (list_h == 0) {
+            if (previous_h > 0) {
+                list_h = previous_h;
+            } else {
+                list_h = 120;
+            }
+        }
+        if (parent_h > 0 && list_h > parent_h) list_h = parent_h;
         
         // Ограничиваем высоту ListBox доступным пространством родителя
         uint8_t start = element->props.list_box.scroll_offset;
-        uint8_t visible = list_h / item_h;
+        uint8_t visible = (list_h + item_h - 1) / item_h;
         if (visible == 0) visible = 1;
 
         // Ширина скроллбара (например, 10 пикселей). 
         // Если элементов меньше, чем влазит в экран, скроллбар не нужен — отступ 0
         uint16_t scrollbar_width = (element->children_count > visible) ? 10 : 0;
         uint16_t item_w = element->w - scrollbar_width;
-
-        int16_t cur_y = element->y;
+        if (item_w > element->w) item_w = element->w;
+        if (item_w < 8) item_w = (element->w > 8) ? (element->w - 8) : element->w;
 
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             if (!child) continue;
 
             if (i >= start && i < (start + visible)) {
-                // Передаем урезанную ширину item_w, чтобы не затереть скроллбар
-                UI_MeasureAndArrange(child, element->x, cur_y, item_w, item_h);
-                cur_y += item_h;
+                int16_t item_y = element->y + (int16_t)((i - start) * item_h);
+                UI_MeasureAndArrange(child, element->x, item_y, item_w, item_h);
             } else {
-                // Скрытые элементы сбрасываем в 0
-                UI_MeasureAndArrange(child, 0, 0, 0, 0); 
+                UI_MeasureAndArrange(child, element->x, element->y + element->h + 16, 0, 0);
+                child->w = 0;
+                child->h = 0;
             }
         }
 
@@ -643,27 +683,31 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             }
         }
 
-        // --- ШАГ 2: Остаток распределяем по процентам ---
+        // --- ШАГ 2: Остаток распределяем по процентам и весам ---
         uint16_t remaining_w = (element->w > total_pixel_cols) ? (element->w - total_pixel_cols) : 1;
         uint16_t remaining_h = (element->h > total_pixel_rows) ? (element->h - total_pixel_rows) : 1;
 
         uint32_t percent_sum_h = 0, percent_sum_w = 0;
+        uint32_t weight_sum_h = 0, weight_sum_w = 0;
         for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
             if (!grid->row_is_pixel[r]) {
                 percent_sum_h += grid->row_definitions[r];
+                weight_sum_h += (grid->row_weights[r] > 0) ? grid->row_weights[r] : 1;
             }
         }
         for (uint8_t c = 0; c < grid->cols_count && c < MAX_GRID_CHILDREN; c++) {
             if (!grid->col_is_pixel[c]) {
                 percent_sum_w += grid->col_definitions[c];
+                weight_sum_w += (grid->col_weights[c] > 0) ? grid->col_weights[c] : 1;
             }
         }
 
-        // Расчет процентных размеров
         for (uint8_t r = 0; r < grid->rows_count && r < MAX_GRID_CHILDREN; r++) {
             if (!grid->row_is_pixel[r]) {
-                if (percent_sum_h > 0) {
+                if (percent_sum_h > 0 && grid->row_definitions[r] > 0) {
                     row_heights[r] = (uint16_t)((uint32_t)remaining_h * grid->row_definitions[r] / percent_sum_h);
+                } else if (weight_sum_h > 0) {
+                    row_heights[r] = (uint16_t)((uint32_t)remaining_h * (grid->row_weights[r] > 0 ? grid->row_weights[r] : 1) / weight_sum_h);
                 } else {
                     row_heights[r] = remaining_h / (grid->rows_count - pixel_rows);
                 }
@@ -671,8 +715,10 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         }
         for (uint8_t c = 0; c < grid->cols_count && c < MAX_GRID_CHILDREN; c++) {
             if (!grid->col_is_pixel[c]) {
-                if (percent_sum_w > 0) {
+                if (percent_sum_w > 0 && grid->col_definitions[c] > 0) {
                     col_widths[c] = (uint16_t)((uint32_t)remaining_w * grid->col_definitions[c] / percent_sum_w);
+                } else if (weight_sum_w > 0) {
+                    col_widths[c] = (uint16_t)((uint32_t)remaining_w * (grid->col_weights[c] > 0 ? grid->col_weights[c] : 1) / weight_sum_w);
                 } else {
                     col_widths[c] = remaining_w / (grid->cols_count - pixel_cols);
                 }
@@ -1472,9 +1518,9 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
     el->props.list_box.selected_index = -1;
     el->props.list_box.scroll_offset = 0;
 
-    el->props.list_box.height_mode = 2;
+    el->props.list_box.height_mode = UI_LISTBOX_HEIGHT_AUTO;
     el->props.list_box.visible_row_count = 4;  // можно переопределить позже
-    el->props.list_box.pixel_height = 292;     // можно переопределить позже
+    el->props.list_box.pixel_height = 192;     // можно переопределить позже
     // Устанавливаем шрифт по умолчанию для ListBox
     el->font = &font_arial_9_struct;
 }
@@ -1514,7 +1560,9 @@ void UI_RenderListBox(UIElement_t* el) {
 
     // 1. Очистка фона ListBox и отрисовка серой рамки по краям
     for (int16_t y = ly; y < ly + el->h; y++) {
+        if (y < 0 || y >= s->h) continue;
         for (int16_t x = lx; x < lx + el->w; x++) {
+            if (x < 0 || x >= s->w) continue;
             s->data[y * s->w + x] = (y == ly || y == ly + el->h - 1 || x == lx || x == lx + el->w - 1) ? 0x7BEF : RGB565_BLACK;
         }
     }
@@ -1522,7 +1570,8 @@ void UI_RenderListBox(UIElement_t* el) {
     lcd_set_font(&font_arial_9_struct);
     uint16_t item_h = current_font->char_height + 6;
     uint8_t start = el->props.list_box.scroll_offset;
-    uint8_t visible_count = el->h / item_h;
+    uint8_t visible_count = (el->h + item_h - 1) / item_h;
+    if (visible_count == 0) visible_count = 1;
 
     // Ширина зарезервированной зоны скроллбара (макс 10px), видима для логики отрисовки текста
     uint8_t scrollbar_w = 10;
@@ -1533,12 +1582,10 @@ void UI_RenderListBox(UIElement_t* el) {
         if (i >= start && i < (start + visible_count)) {
             UIElement_t* child = (UIElement_t*)el->children[i];
             
-            // Вычисляем локальные координаты пункта относительно спрайта панели!
-            // Внимание: берем координаты child, которые посчитал менеджер разметки
-            int16_t clx = child->x - s->x;
-            int16_t cly = child->y - s->y;
+            int16_t row_y = el->y + (int16_t)((i - start) * item_h);
+            int16_t clx = el->x - s->x;
+            int16_t cly = row_y - s->y;
             
-            // Определяем цвет фона: синий для выбранного, черный для обычных
             uint16_t bg = (i == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
 
             // Вычисляем ширину контента так, чтобы она не пересекалась со скроллбаром справа
@@ -1552,9 +1599,10 @@ void UI_RenderListBox(UIElement_t* el) {
             }
             if (content_w < 8) content_w = (el->w > 4) ? (el->w - 4) : el->w;
 
-            // Обновляем размеры дочернего элемента, чтобы другие части движка видели корректную ширину
             child->w = content_w;
             child->h = item_h;
+            child->x = el->x;
+            child->y = row_y;
 
             // Заливаем прямоугольник элемента выбранным цветом фона, только в области content_w
             for (int16_t y = cly; y < cly + child->h; y++) {
@@ -1631,6 +1679,9 @@ void UI_RenderListBox(UIElement_t* el) {
     }
 }
 
+static bool g_listbox_drag_active = false;
+static int16_t g_listbox_drag_last_y = -1;
+
 static bool UI_PointInElement(const UIElement_t* el, uint16_t tx, uint16_t ty) {
     if (!el) return false;
     return (tx >= (uint16_t)el->x && tx < (uint16_t)(el->x + el->w) &&
@@ -1646,14 +1697,15 @@ static UIElement_t* UI_FindElementRecursive(UIElement_t* element, uint16_t tx, u
         uint16_t item_h = font_h + 6;
         int16_t local_y = ty - element->y;
         uint8_t start = element->props.list_box.scroll_offset;
-        uint8_t visible = element->h / item_h;
+        uint8_t visible = (element->h + item_h - 1) / item_h;
+        if (visible == 0) visible = 1;
 
         if (local_y >= 0 && local_y < (int16_t)(visible * item_h)) {
             uint8_t index = start + (local_y / item_h);
             if (index < element->children_count) {
                 UIElement_t* child = (UIElement_t*)element->children[index];
                 if (child) {
-                    if (out_local_x) *out_local_x = tx - (element->x);
+                    //if (out_local_x) *out_local_x = tx - element->x;
                     if (out_local_y) *out_local_y = local_y - ((index - start) * item_h);
                     return child;
                 }
@@ -1688,22 +1740,27 @@ UIElement_t* UI_FindElementAt(UIElement_t* root, uint16_t tx, uint16_t ty, int16
 }
 
 //Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
-int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
+/* int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
     if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
-    if (tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) return -1;
+    if (tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) {
+        g_listbox_drag_active = false;
+        g_listbox_drag_last_y = -1;
+        return -1;
+    }
 
     uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
     uint16_t item_h = font_h + 6;
     int16_t local_y = ty - listbox->y;
     if (local_y < 0 || local_y >= listbox->h) return -1;
 
+    uint8_t visible = (listbox->h + item_h - 1) / item_h;
+    if (visible == 0) visible = 1;
+
     // Обработка клика по области скроллбара (правая полоса)
-    uint8_t scrollbar_w = 10; // резервируем до 10 пикселей справа под скроллбар
+    uint8_t scrollbar_w = 10;
     if (scrollbar_w > listbox->w - 2) scrollbar_w = (listbox->w > 2) ? (listbox->w - 2) : 0;
     if (scrollbar_w > 0 && tx >= (listbox->x + listbox->w - scrollbar_w)) {
-        // Клик по треку — вычисляем новый scroll_offset по вертикали
         uint8_t children = listbox->children_count;
-        uint8_t visible = listbox->h / item_h;
         if (children <= visible) return -1;
 
         uint8_t max_offset = (children > visible) ? (children - visible) : 0;
@@ -1727,6 +1784,125 @@ int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
         return -1;
     }
 
+    if (!g_listbox_drag_active) {
+        g_listbox_drag_active = true;
+        g_listbox_drag_last_y = ty;
+        int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
+        if (target < 0 || target >= listbox->children_count) return -1;
+        if (listbox->props.list_box.selected_index != target) {
+            listbox->props.list_box.selected_index = target;
+            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
+        }
+        return target;
+    }
+
+    int16_t delta_y = ty - g_listbox_drag_last_y;
+    g_listbox_drag_last_y = ty;
+    if (delta_y != 0) {
+        uint8_t max_offset = (listbox->children_count > visible) ? (listbox->children_count - visible) : 0;
+        if (max_offset > 0) {
+            int8_t step = delta_y / (int16_t)item_h;
+            if (step != 0) {
+                int16_t new_offset = (int16_t)listbox->props.list_box.scroll_offset - step;
+                if (new_offset < 0) new_offset = 0;
+                if (new_offset > (int16_t)max_offset) new_offset = max_offset;
+                if ((uint8_t)new_offset != listbox->props.list_box.scroll_offset) {
+                    listbox->props.list_box.scroll_offset = (uint8_t)new_offset;
+                    GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
+                }
+            }
+        }
+    }
+    return -1;
+} */
+
+//Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
+int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
+    if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
+    if (tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) {
+        g_listbox_drag_active = false;
+        g_listbox_drag_last_y = -1;
+        return -1;
+    }
+
+    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+    uint16_t item_h = font_h + 6;
+    int16_t local_y = ty - listbox->y;
+    if (local_y < 0 || local_y >= listbox->h) return -1;
+
+    // Обработка клика по области скроллбара (правая полоса)
+    uint8_t scrollbar_w = 10; // резервируем до 10 пикселей справа под скроллбар
+    if (scrollbar_w > listbox->w - 2) scrollbar_w = (listbox->w > 2) ? (listbox->w - 2) : 0;
+    if (scrollbar_w > 0 && tx >= (listbox->x + listbox->w - scrollbar_w)) {
+        uint8_t children = listbox->children_count;
+        uint8_t visible = listbox->h / item_h;
+        if (visible == 0) visible = 1;
+        if (children <= visible) return -1;
+
+        uint8_t max_offset = (children > visible) ? (children - visible) : 0;
+        uint16_t thumb_h = (uint16_t)visible * listbox->h / children;
+        if (thumb_h < 12) thumb_h = 12;
+        if (thumb_h > listbox->h) thumb_h = listbox->h;
+
+        int16_t rel_y = ty - listbox->y;
+        int32_t track_span = (int32_t)listbox->h - (int32_t)thumb_h;
+        if (track_span <= 0) return -1;
+
+        int32_t pos = rel_y - (thumb_h / 2);
+        if (pos < 0) pos = 0;
+        if (pos > track_span) pos = track_span;
+
+        uint8_t new_offset = (uint8_t)((pos * max_offset + track_span/2) / track_span);
+        if (new_offset != listbox->props.list_box.scroll_offset) {
+            listbox->props.list_box.scroll_offset = new_offset;
+            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
+        }
+        return -1;
+    }
+
+    if (g_listbox_drag_last_y < 0) {
+        g_listbox_drag_last_y = ty;
+        int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
+        if (target < 0 || target >= listbox->children_count) return -1;
+        if (listbox->props.list_box.selected_index != target) {
+            listbox->props.list_box.selected_index = target;
+            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
+        }
+        return target;
+    }
+
+    if (!g_listbox_drag_active) {
+        int16_t delta_y = ty - g_listbox_drag_last_y;
+        if (delta_y < 0) delta_y = -delta_y;
+        if (delta_y > (int16_t)item_h / 2) {
+            g_listbox_drag_active = true;
+        }
+    }
+
+    if (g_listbox_drag_active) {
+        int16_t delta_y = ty - g_listbox_drag_last_y;
+        g_listbox_drag_last_y = ty;
+        if (delta_y != 0) {
+            uint8_t visible = (listbox->h / item_h);
+            if (visible == 0) visible = 1;
+            uint8_t max_offset = (listbox->children_count > visible) ? (listbox->children_count - visible) : 0;
+            if (max_offset > 0) {
+                int8_t step = delta_y / (int16_t)item_h;
+                if (step != 0) {
+                    int16_t new_offset = (int16_t)listbox->props.list_box.scroll_offset - step;
+                    if (new_offset < 0) new_offset = 0;
+                    if (new_offset > (int16_t)max_offset) new_offset = max_offset;
+                    if ((uint8_t)new_offset != listbox->props.list_box.scroll_offset) {
+                        listbox->props.list_box.scroll_offset = (uint8_t)new_offset;
+                        GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    g_listbox_drag_last_y = ty;
     int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
     if (target < 0 || target >= listbox->children_count) return -1;
 

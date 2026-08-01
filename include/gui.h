@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 
-#define MAX_PANEL_ROWS 18
+#define MAX_PANEL_ROWS 64
 #define MAX_GRID_CHILDREN  8   // Для сеток и панелей этого более чем достаточно
 #define MAX_LISTBOX_ITEMS  24  // Столько пунктов теперь может быть в меню/списках
 
@@ -30,6 +30,17 @@ typedef enum {
     UI_TYPE_RADIO_BUTTON, // Переключатель (О)
     UI_TYPE_LIST_BOX      // Список элементов с прокруткой
 } UIType_t;
+
+typedef enum {
+    UI_LAYOUT_SIZE_AUTO = 0,
+    UI_LAYOUT_SIZE_FIXED = 1,
+    UI_LAYOUT_SIZE_STRETCH = 2
+} UILayoutSizeMode_t;
+
+typedef enum {
+    UI_LISTBOX_HEIGHT_AUTO = 0,
+    UI_LISTBOX_HEIGHT_FIXED = 1
+} UIListBoxHeightMode_t;
 
 // --- Свойства для TextBlock ---
 typedef struct {
@@ -68,7 +79,7 @@ typedef struct {
     int8_t selected_index; // Какой элемент выбран (-1 если никто)
     uint8_t scroll_offset; // Для прокрутки, если элементов много
 
-    uint8_t height_mode;         // 0: по строкам, 1: по пикселям, 2: fill remaining
+    uint8_t height_mode;         // 0: auto, 1: fixed
     uint8_t visible_row_count;   // используется, если height_mode == 0
     uint16_t pixel_height;       // используется, если height_mode == 1
 } ListBoxProps_t;
@@ -101,6 +112,8 @@ typedef struct {
     // 🔥 НОВОЕ: массивы флагов — false = процент, true = пиксели
     bool row_is_pixel[MAX_GRID_CHILDREN];
     bool col_is_pixel[MAX_GRID_CHILDREN];
+    uint8_t row_weights[MAX_GRID_CHILDREN];
+    uint8_t col_weights[MAX_GRID_CHILDREN];
 } GridDefinition_t;
 
 // Структура для StackPanel (последовательное расположение)
@@ -134,6 +147,10 @@ typedef struct UIElement {
     uint16_t background_color;
     uint16_t foreground_color;
     const Font_t* font;
+
+    UILayoutSizeMode_t width_mode;
+    UILayoutSizeMode_t height_mode;
+    uint8_t layout_weight;
     // КРИТИЧЕСКИ ВАЖНО: Добавляем свойство выравнивания
     HorizontalAlignment_t horizontal_alignment; 
     VerticalAlignment_t vertical_alignment; 
@@ -164,6 +181,8 @@ void UI_SetGridRowPixel(UIElement_t* grid_elem, uint8_t row_idx, uint8_t size_px
 void UI_SetGridColPixel(UIElement_t* grid_elem, uint8_t col_idx, uint8_t size_px);
 void UI_SetGridRowPercent(UIElement_t* grid_elem, uint8_t row_idx, uint8_t percent);
 void UI_SetGridColPercent(UIElement_t* grid_elem, uint8_t col_idx, uint8_t percent);
+void UI_SetGridRowWeight(UIElement_t* grid_elem, uint8_t row_idx, uint8_t weight);
+void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight);
 
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
 static void UI_RenderChildElement(void* child_ptr);

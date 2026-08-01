@@ -315,14 +315,13 @@ if (bmi160_irq_received)
             // Пробный тест прокрутки (скролла) по нажатию физической кнопки
             // Если кнопка совпадает с кодом скролла — сдвигаем offset
             if (btn == 0x7F) { 
-                if (digits_node.props.list_box.scroll_offset < (digits_node.children_count - 1)) {
-                    digits_node.props.list_box.scroll_offset++;
-                    
-                    // Пересчитываем геометрию StackPanel, так как видимые строки изменились
-                    extern uint16_t Display_Width, Display_Height;
-                    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-                    
-                    // Помечаем только правый спрайт грязным
+                uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+                uint16_t item_h = font_h + 6;
+                uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
+                if (visible == 0) visible = 1;
+                uint8_t max_offset = (ui_bands_listbox.children_count > visible) ? (uint8_t)(ui_bands_listbox.children_count - visible) : 0;
+                if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
+                    ui_bands_listbox.props.list_box.scroll_offset++;
                     GUI_InvalidateSprite(digits_node.sprite);
                 }
             }
@@ -359,16 +358,16 @@ if (bmi160_irq_received)
             if (strcmp(hit_element->text_content, "Up") == 0) {
               if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
                 ui_bands_listbox.props.list_box.scroll_offset--;
-                extern uint16_t Display_Width, Display_Height;
-                UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
                 GUI_InvalidateSprite(digits_node.sprite);
               }
             } else if (strcmp(hit_element->text_content, "Down") == 0) {
-              uint8_t max_offset = (ui_bands_listbox.children_count > 0) ? (ui_bands_listbox.children_count - 1) : 0;
+              uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+              uint16_t item_h = font_h + 6;
+              uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
+              if (visible == 0) visible = 1;
+              uint8_t max_offset = (ui_bands_listbox.children_count > visible) ? (uint8_t)(ui_bands_listbox.children_count - visible) : 0;
               if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
                 ui_bands_listbox.props.list_box.scroll_offset++;
-                extern uint16_t Display_Width, Display_Height;
-                UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
                 GUI_InvalidateSprite(digits_node.sprite);
               }
             }
