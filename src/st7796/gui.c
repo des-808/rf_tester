@@ -4,7 +4,6 @@
 #include <string.h>
 #include "measurement/measurement.h"
 
-
 // Глобальные переменные сущностей интерфейса
 UIElement_t root_grid;
 UIElement_t status_bar_node;
@@ -36,8 +35,6 @@ UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
 UIElement_t* ui_touch_row = NULL; 
 
-
-
 static void gui_measurement_callback(const MeasurementResults* r) {
     if (!r) return;
     if (ui_swr_row != NULL) {
@@ -47,7 +44,6 @@ static void gui_measurement_callback(const MeasurementResults* r) {
     if (digits_node.sprite != NULL) GUI_InvalidateSprite(digits_node.sprite);
     if (graph_node.sprite != NULL) GUI_InvalidateSprite(graph_node.sprite);
 }
-
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
@@ -114,8 +110,10 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.props.grid.rows_count = 1;
     main_work_grid.props.grid.cols_count = 2;
     
-    UI_SetGridColPixel(&main_work_grid, 0, 200); 
-    UI_SetGridColPercent(&main_work_grid, 1, 100); 
+    /* UI_SetGridColPixel(&main_work_grid, 0, 200); 
+    UI_SetGridColPercent(&main_work_grid, 1, 100);  */
+    UI_SetGridColPercent(&main_work_grid, 0, 65); 
+    UI_SetGridColPercent(&main_work_grid, 1, 35); 
 
     root_grid.children[root_grid.children_count++] = &main_work_grid;
 
@@ -496,7 +494,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             Sprite_t* s = element->sprite;
             s->x = element->x; s->y = element->y;
 
-            // Важный фикс: ListBox и кнопки/текст используют общий спрайт панели digits_node.
+            // ListBox и кнопки/текст используют общий спрайт панели digits_node.
             // Поэтому ListBox не должен менять размеры этого спрайта под себя — иначе
             // весь стек элементов начинает рисоваться с неверной геометрией в альбомной ориентации.
             bool should_resize_shared_sprite = (s != &main_screen_sprite) || (element->type == UI_TYPE_STACK_PANEL);
@@ -849,17 +847,12 @@ void UI_DrawTree(UIElement_t* element) {
                         UI_RenderListBox(element); // Отрисовка фона/рамки [1.1]
                         break;
 
-                    // КРИТИЧЕСКИЙ ФИКС: Если это контейнеры, и они затребовали рендер,
+                    // Если это контейнеры, и они затребовали рендер,
                     // принудительно заставляем всех их детей перерисовать себя в ОЗУ!
                     case UI_TYPE_GRID:
                         // Для GRID лимит 8 СТРОГИЙ, так как массивы геометрии сетки ограничены 8
                         for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
                             UI_RenderChildElement(element->children[i]);
-                            /*UIElement_t* child = (UIElement_t*)element->children[i];
-                             if (child->type == UI_TYPE_TEXT_BLOCK) { Draw_GeneralText_Callback(child);
-                            } else if (child->render_callback != NULL) {
-                                child->render_callback(child);
-                            } */
                         }
                         break;
 
@@ -867,29 +860,12 @@ void UI_DrawTree(UIElement_t* element) {
                         // Для STACK_PANEL лимит равен максимальному числу детей, которое вы заложили в структуру (например, 24)
                         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
                             UI_RenderChildElement(element->children[i]);
-                            /* UIElement_t* child = (UIElement_t*)element->children[i];
-                            if (child->type == UI_TYPE_TEXT_BLOCK) { Draw_GeneralText_Callback(child);
-                            } else if (child->render_callback != NULL) {
-                                child->render_callback(child);
-                            } */
                         }
                         break;
 
                     default: break;
                 }
             }
-
-            /* // Если это StackPanel — принудительно просим всех детей (текстовые строки)
-            // нарисовать свои буквы в этот же открытый буфер ОЗУ
-            if (element->type == UI_TYPE_STACK_PANEL) {
-                for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
-                    UIElement_t* child = (UIElement_t*)element->children[i];
-                    // Одной компактной строчкой проверяем и сам элемент, и его колбэк
-                    if (child && child->render_callback != NULL) {
-                        child->render_callback(child);
-                    }
-                }
-            } */
 
             // ОТПРАВКА: Шлем в контроллер ST7796 строго грязный прямоугольник
             ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
@@ -951,7 +927,7 @@ void Draw_StatusBar_Callback(UIElement_t* el) {
 
     // 2. Отрисовка ВРЕМЕНИ (слева, отступ 5 пикселей)
     lcd_set_font(&font_segoe_struct);
-    char timeBuf[6];
+    char timeBuf[8];
     snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
     lcd_print_to_buffer(5, 4, RGB565_WHITE, timeBuf, RGB565_DARK_GRAY, sprite);
 
@@ -1146,7 +1122,7 @@ extern uint8_t screen_rotation; // Берем текущий поворот из
 extern uint16_t Display_Width;  // объявлены/устанавливаются в st7796.c при SetRotation
 extern uint16_t Display_Height;
 
-void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
+/* void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
     // Используем реальные размеры дисплея и корректно считаем пределы [0..W-1]/[0..H-1]
     uint16_t w = (Display_Width > 0) ? Display_Width : 320;
     uint16_t h = (Display_Height > 0) ? Display_Height : 480;
@@ -1176,7 +1152,66 @@ void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, 
             *out_y = raw_y;
             break;
     }
+} */
+void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
+    // FT6336U обычно выдает координаты в диапазоне:
+    // X: 0..480 (или 0..320 в зависимости от калибровки драйвера)
+    // Y: 0..800 (или 0..240)
+    // Но наш драйвер FT6336U_GetTouchPoint уже вернул нам сырые значения.
+    // Если ваш драйвер возвращает значения в пределах физических размеров экрана (0..320 и 0..240),
+    // то нужно просто переставить оси и инвертировать одну из них при повороте.
+    
+    extern uint8_t screen_rotation;
+    extern uint16_t Display_Width;  // Например, 320
+    extern uint16_t Display_Height; // Например, 240
+
+    uint16_t w = Display_Width;
+    uint16_t h = Display_Height;
+
+    // Безопасность: если драйвер выдает "странные" большие числа (режим 480/800), 
+    // нужно масштабировать. Но обычно для простых задач считают, что 0..MaxSensor == 0..Screen.
+    // Если вы видите, что координаты "улетают", добавьте масштабирование:
+    // raw_x = (uint32_t)raw_x * w / 480; (если сенсор 480)
+    
+    // ОСНОВНАЯ ЛОГИКА ПОВОРОТА
+    switch (screen_rotation) {
+        case 0: // Portrait (Вертикально)
+            // Сенсор X -> Экран X
+            // Сенсор Y -> Экран Y
+            *out_x = raw_x;
+            *out_y = raw_y;
+            break;
+
+        case 1: // Landscape (Горизонтально, поворот на 90 град)
+            // При повороте экрана на 90 градусов:
+            // Новый X (горизонталь) = Физический Y (вертикаль сенсора)
+            // Новый Y (вертикаль) = (Ширина экрана - 1) - Физический X (горизонталь сенсора)
+            // Инверсия X нужна, потому что в Landscape 0 слева, а сенсорный 0 часто соответствует "верху" экрана
+            *out_x = raw_y;
+            *out_y = w - 1 - raw_x;
+            break;
+
+        case 2: // Portrait Inverted (Перевёрнутая вертикаль)
+            *out_x = w - 1 - raw_x;
+            *out_y = h - 1 - raw_y;
+            break;
+
+        case 3: // Landscape Inverted (Перевёрнутая горизонталь)
+            *out_x = h - 1 - raw_y;
+            *out_y = raw_x;
+            break;
+
+        default:
+            *out_x = raw_x;
+            *out_y = raw_y;
+            break;
+    }
+
+    // Финальная защита от выхода за границы (на всякий случай)
+    if (*out_x >= w) *out_x = w - 1;
+    if (*out_y >= h) *out_y = h - 1;
 }
+
 
 /**
  * @brief Помечает конкретный спрайт грязным ЦЕЛИКОМ (на весь его размер)
