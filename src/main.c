@@ -250,6 +250,7 @@ I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
+Menu_Init();
  GUI_ShowAdvancedMeasurementScreen(0);
  // Инициализируем модуль измерений и запускаем его в неблокирующем режиме
  //Measurement_Init();
@@ -302,37 +303,90 @@ if (bmi160_irq_received)
     }
 
     // ====================================================================
-    // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
+    // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574) -> АВТОМАТИЗИРОВАННАЯ
     // ====================================================================
-    if (PCF8574_HasChanges(&pcf_handle)) {
-        Buttons_Update(&btn_s);
-        uint8_t btn = PCF8574_Read8(&pcf_handle);
-        
-        if (btn != 0xFF) {
-            UI_SetText(ui_btn_row, "Btn 0x%02X", btn);
-            Buzzer_Short();
-            
-            // Пробный тест прокрутки (скролла) по нажатию физической кнопки
-            // Если кнопка совпадает с кодом скролла — сдвигаем offset
-            if (btn == 0x7F) { 
-                uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-                uint16_t item_h = font_h + 6;
-                uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
-                if (visible == 0) visible = 1;
-                uint8_t max_offset = (ui_bands_listbox.children_count > visible) ? (uint8_t)(ui_bands_listbox.children_count - visible) : 0;
-                if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
-                    ui_bands_listbox.props.list_box.scroll_offset++;
-                    GUI_InvalidateSprite(digits_node.sprite);
+    
+    // Обновляем внутреннее состояние кнопок (тайминги, дребезг)
+    Buttons_Update(&btn_s);
+
+    // Получаем информацию о текущем физическом состоянии для отладки (опционально)
+    uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
+    if (btn_raw != 0xFF) {
+        UI_SetText(ui_btn_row, "Btn 0x%02X", btn_raw);
+         Buzzer_Short(); // Раскомментируйте, если хотите звук на любое нажатие
+    } else {
+        UI_SetText(ui_btn_row, "No btn");
+    }
+    PCF8574_AcknowledgeChanges(&pcf_handle);
+
+    // --- Обработка короткого нажатия (Клик) ---
+    MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
+    if (key_short != KEY_NONE) {
+        switch (key_short) {
+            case KEY_UP:
+                // Логика прокрутки ВВЕРХ
+                {
+                    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+                    uint16_t item_h = font_h + 6;
+                    uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
+                    if (visible == 0) visible = 1;
+                    uint8_t max_offset = (ui_bands_listbox.children_count > visible) 
+                                         ? (uint8_t)(ui_bands_listbox.children_count - visible) 
+                                         : 0;
+                    
+                    if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
+                        ui_bands_listbox.props.list_box.scroll_offset--;
+                        GUI_InvalidateSprite(digits_node.sprite);
+                    }
                 }
-            }
+                break;
+
+            case KEY_DOWN:
+                // Логика прокрутки ВНИЗ
+                {
+                    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+                    uint16_t item_h = font_h + 6;
+                    uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
+                    if (visible == 0) visible = 1;
+                    uint8_t max_offset = (ui_bands_listbox.children_count > visible) 
+                                         ? (uint8_t)(ui_bands_listbox.children_count - visible) 
+                                         : 0;
+                    
+                    if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
+                        ui_bands_listbox.props.list_box.scroll_offset++;
+                        GUI_InvalidateSprite(digits_node.sprite);
+                    }
+                }
+                break;
+                
+            case KEY_ENTER:
+                // Пример: действие по Enter
+                UI_SetText(ui_btn_row, "Enter Pressed");
+                break;
+                
+            case KEY_CANCEL:
+                // Пример: действие по Cancel
+                UI_SetText(ui_btn_row, "Cancel Pressed");
+                break;
+
+            default:
+                break;
         }
-        else {
-            UI_SetText(ui_btn_row, "No btn");
-        }
-        
-        PCF8574_AcknowledgeChanges(&pcf_handle);
     }
 
+    // --- Обработка длинного нажатия (Hold) ---
+    // Если нужно, чтобы скролл работал, пока кнопка зажата, или для другого действия
+    MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
+    if (key_hold != KEY_NONE) {
+        // Можно повести аналогичную логику прокрутки для длительного нажатия,
+        // либо оставить только для кликов, если нужно.
+        // Пример для скролла по удержанию:
+        if (key_hold == KEY_UP) {
+             // Увеличиваем счетчик (логика аналогична клику)
+        } else if (key_hold == KEY_DOWN) {
+             // Уменьшаем счетчик
+        }
+    }
     // ====================================================================
     // 2. ОБРАБОТКА ТАЧСКРИНА (Клик по строкам StackPanel / ListBox)
     // ====================================================================

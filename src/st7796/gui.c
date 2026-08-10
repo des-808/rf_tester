@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "menu.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -17,9 +18,20 @@ UIElement_t ui_bands_listbox; // Сам контейнер ListBox
 bool ui_debug_draw = true;
 
 /* Глобальные объекты спрайтов для экранов интерфейса */
-Sprite_t status_bar_sprite;
+//Sprite_t status_bar_sprite;
 Sprite_t graph_sprite;
 Sprite_t main_screen_sprite;
+
+
+// Новые спрайты для частей статус-бара
+// Предположим, статус-бар разделен на 3 зоны:
+// 1. Левая: Часы
+// 2. Центр: Доп. информация (Bluetooth, USB и т.д.)
+// 3. Правая: Иконки (Батарея, Сеть)
+Sprite_t* status_bar_clock_sprite = NULL;   // Для часов (обновляется часто)
+Sprite_t* status_bar_icons_sprite = NULL;   // Для иконок (обновляется редко)
+Sprite_t* status_bar_batery_sprite = NULL;   // Для правой части (если есть)
+
 
 // Пул элементов для строк (выделяем память статически внутри gui.c, чтобы не плодить глобальные имена)
 
@@ -34,6 +46,11 @@ uint8_t panel_rows_count = 0;
 UIElement_t* ui_swr_row   = NULL;
 UIElement_t* ui_btn_row   = NULL;
 UIElement_t* ui_touch_row = NULL; 
+
+
+extern UIElement_t* current_menu_listbox;
+extern MenuItem_t* current_menu_items;
+extern uint8_t current_menu_count;
 
 static void gui_measurement_callback(const MeasurementResults* r) {
     if (!r) return;
@@ -59,11 +76,11 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     heap_caps_reset_pool();
     
     // Принудительно зануляем указатели .data, чтобы движок понял, что память очищена!
-    status_bar_sprite.data = NULL;
+    //status_bar_sprite.data = NULL;
     graph_sprite.data = NULL;
     main_screen_sprite.data = NULL;
     
-    status_bar_sprite.is_allocated = false;
+    //status_bar_sprite.is_allocated = false;
     graph_sprite.is_allocated = false;
     main_screen_sprite.is_allocated = false;
     
@@ -252,6 +269,37 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         ui_touch_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
         ui_touch_row->background_color = RGB565_BLACK;
         ui_touch_row->h = 16;
+    }
+
+    // Создаем ListBox для меню
+    if (digits_node.children_count < MAX_ELEMENT_CHILDREN) {
+        UIElement_t* menu_lb = &panel_rows[panel_rows_count++];
+        memset(menu_lb, 0, sizeof(UIElement_t));
+        
+        // Инициализируем как ListBox
+        menu_lb->type = UI_TYPE_LIST_BOX;
+        menu_lb->sprite = &main_screen_sprite; // Общий спрайт панели
+        menu_lb->font = &font_arial_9_struct;
+        
+        // Настройки высоты: можно сделать фиксированной или авто
+        menu_lb->props.list_box.height_mode = UI_LISTBOX_HEIGHT_FIXED;
+        menu_lb->props.list_box.pixel_height = 140; // Высота блока меню
+        
+        digits_node.children[digits_node.children_count++] = menu_lb;
+        
+        // Устанавливаем глобальный указатель
+        current_menu_listbox = menu_lb;
+        
+         // Мы НЕ вызываем Menu_Draw с передачей массива.
+        // Мы вызываем Menu_Draw, используя текущие глобальные данные меню (current_menu_items).
+        // Но перед этим нужно убедиться, что current_menu_items указывает на mainMenu.
+        
+        // Либо, если вы хотите жестко привязать главное меню здесь:
+        // Предположим, в menu.h есть extern MenuItem_t* current_menu_items;
+        // И в menu.c в Menu_Init() мы уже установили current_menu_items = mainMenu;
+        
+        // Вызываем отрисовку, используя то, что сейчас "активно" в меню
+        Menu_Draw(menu_lb, current_menu_items, current_menu_count);
     }
     
     // ====================================================================
@@ -980,6 +1028,55 @@ void Draw_StatusBar_Callback(UIElement_t* el) {
     // Движок UI сам вызовет отправку по SPI после завершения сборки дерева.
 }
 
+/**
+ * @brief Функция перерисовки статус-бара с разделением на области
+ */
+void GUI_DrawStatusBar(StatusBar_t* sb_area) {
+    if (!sb_area) return;
+
+    uint16_t y = 0; // y координата статус-бара
+    uint16_t width = sb_area->width;
+    uint16_t height = STATUS_BAR_HEIGHT;
+
+
+    // 1. Отрисовка часов (спрайт 1)
+    if (update_flags & UPDATE_FLAGS_CLOCK) {
+        if (status_bar_clock_sprite) {
+            // Очищаем область в спрайте часов
+            GUI_ClearRect(status_bar_clock_sprite, 0, 0, status_bar_clock_sprite->w, status_bar_clock_sprite->h);
+            // Рисуем текущее время
+            char time_str[16];
+            RTC_GetTime(time_str); // Пример функции получения времени
+            GUI_DrawText(status_bar_clock_sprite, time_str, width/2, 2, lcd_current_font, STATUS_BAR_BG_COLOR, LCD_WHITE);
+            // Помечаем спрайт часов для отправки
+            GUI_InvalidateSprite(status_bar_clock_sprite);
+        }
+    }
+    // 2. Отрисовка иконок (спрайт 2)
+    if (update_flags & UPDATE_FLAGS_ICONS) {
+        if (status_bar_icons_sprite) {
+            // Очищаем область в спрайте иконок
+            GUI_ClearRect(status_bar_icons_sprite, 0, 0, status_bar_icons_sprite->w, status_bar_icons_sprite->h);
+            // Рисуем иконки в спрайте иконок
+            drawBatteryIcon(status_bar_icons_sprite, 5, 2);
+            drawNetworkIcon(status_bar_icons_sprite, 20, 2);
+            // Помечаем спрайт для отправки по SPI
+            GUI_InvalidateSprite(status_bar_icons_sprite);
+        }
+    }
+    // 3. Отрисовка правой части (спрайт 3) - если нужна
+    if(update_flags & UPDATE_FLAGS_BATERY)
+        if (status_bar_batery_sprite) {
+            // Очищаем область в спрайте иконок
+            GUI_ClearRect(status_bar_batery_sprite, 0, 0, status_bar_batery_sprite->w, status_bar_batery_sprite->h);
+            // Рисуем иконки в спрайте иконок
+            drawBatteryIcon(status_bar_batery_sprite, 5, 2);
+            drawNetworkIcon(status_bar_batery_sprite, 20, 2);
+            // Помечаем спрайт для отправки по SPI
+            GUI_InvalidateSprite(status_bar_batery_sprite);
+        }
+}
+
 
 
 /**
@@ -1053,7 +1150,7 @@ uint16_t HUE_to_RGB565(uint16_t hue_deg) {
     return ((color & 0xFF) << 8) | ((color >> 8) & 0xFF); // SWAP
 }
 
-//#define M_PI 3.14
+#define M__PI 3.14159265358979323846
 // Функция для отрисовки сетки графика
 void Draw_Graph_Content(UIElement_t* el) {
     if ( !graph_sprite.data) return;
@@ -1076,26 +1173,52 @@ void Draw_Graph_Content(UIElement_t* el) {
     }
 
     // Перед циклом добавьте:
-/* const float frequency = 0.4f;               // частота синуса: 0.4
-const float period_length = 2.0f * M_PI / frequency; // ~15.708
-const uint8_t hue_step_per_period = 20; // градусов на период */
+     const float frequency = 0.8f;               // частота синуса: 0.4
+    const float period_length = 30.0f * M__PI / frequency; // ~15.708
+    const uint8_t hue_step_per_period = 20; // градусов на период 
 
     // 3. РИСУЕМ ЖИВУЮ КРИВУЮ ИЗМЕРЕНИЙ (Пример: синусоида или массив точек КСВ)
     // Пробегаем по всей ширине окна графика шаг за шагом
     int16_t prev_x = 10;
     int16_t prev_y = graph_sprite.h / 2; // Стартовая точка по центру
 
-    for (int16_t x = 11; x < graph_sprite.w - 10; x++) {
+    for (int16_t x = 10; x < graph_sprite.w - 10; x++) {
         // Имитируем график: вычисляем Y (в реальном коде тут будет значение из массива SWR_Array[x])
         // Переводим значение КСВ в пиксели высоты спрайта
-        int16_t y = (graph_sprite.h / 2) + (int16_t)(sinf(x * 0.4f) * 65.0f); 
-
-        // ✅ Генерируем цвет: каждый шаг — +3 градуса (360/120 = 3)
-/*     uint16_t period_index = (x - 11) / (uint16_t)period_length;
-uint16_t hue = (period_index * hue_step_per_period) % 360;
-uint16_t color = HUE_to_RGB565(hue); */
-uint16_t color = RGB565_RED;
+        int16_t y = (graph_sprite.h / 2) + (int16_t)(cosf(x * frequency) * (uint16_t)period_length); 
+        uint16_t color = RGB565_RED;
         // Соединяем прошлую точку с текущей быстрой линией Брезенхема!
+        Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, color);
+
+        prev_x = x;
+        prev_y = y;
+    }
+   // Параметры квадратной волны
+    const uint16_t period_x = 40;          // Длина одного периода в пикселях (ширина «блока»)
+    const int16_t max_amplitude = (graph_sprite.h / 4) - 10; // Амплитуда (отступ от центра до края)
+    const int16_t center_y = graph_sprite.h / 2;             // Центр графика по вертикали
+
+    prev_x = 10;
+    prev_y = center_y; // Начинаем с центра или с нижней точки
+
+    for (int16_t x = 10; x < graph_sprite.w - 10; x++) {
+        // Логика квадратной волны:
+        // 1. Определяем, в какой части периода мы находимся (0..period_x)
+        // 2. Если половина периода — сигнал высокий, иначе низкий (или наоборот)
+        
+        float phase = fmodf(x, (float)period_x); // Текущая фаза внутри периода
+        int16_t y;
+        
+        // Пример: Высокий уровень на первой половине периода, низкий на второй
+        if (phase < (period_x / 2.0f)) {
+            y = center_y - max_amplitude; // Верхняя линия
+        } else {
+            y = center_y + max_amplitude; // Нижняя линия
+        }
+
+        uint16_t color = RGB565_GREEN; // Можно сделать цвет линии другим
+        
+        // Соединяем точки линией (она будет диагональной при переходе фаз, но визуально это будет "квадрат")
         Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, color);
 
         prev_x = x;
@@ -1116,13 +1239,12 @@ uint16_t color = RGB565_RED;
     for (uint16_t y = 25; y < graph_sprite.h - 5; y++) graph_sprite.data[y * graph_sprite.w + (graph_sprite.w - 5)] = 0x7BEF;
 }
 
-
 extern uint8_t screen_rotation; // Берем текущий поворот из st7796.c
 
 extern uint16_t Display_Width;  // объявлены/устанавливаются в st7796.c при SetRotation
 extern uint16_t Display_Height;
 
-/* void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
+void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
     // Используем реальные размеры дисплея и корректно считаем пределы [0..W-1]/[0..H-1]
     uint16_t w = (Display_Width > 0) ? Display_Width : 320;
     uint16_t h = (Display_Height > 0) ? Display_Height : 480;
@@ -1137,14 +1259,14 @@ extern uint16_t Display_Height;
         case 1: // Landscape (rotate 90°)
             // X = raw_y, Y = (width-1) - raw_x
             *out_x = raw_y;
-            *out_y = w1 - raw_x;
+            *out_y = h1 - raw_x;
             break;
         case 2: // Portrait inverted (180°)
             *out_x = w1 - raw_x;
             *out_y = h1 - raw_y;
             break;
         case 3: // Landscape inverted (270°)
-            *out_x = h1 - raw_y;
+            *out_x = w1 - raw_y;
             *out_y = raw_x;
             break;
         default:
@@ -1152,66 +1274,7 @@ extern uint16_t Display_Height;
             *out_y = raw_y;
             break;
     }
-} */
-void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
-    // FT6336U обычно выдает координаты в диапазоне:
-    // X: 0..480 (или 0..320 в зависимости от калибровки драйвера)
-    // Y: 0..800 (или 0..240)
-    // Но наш драйвер FT6336U_GetTouchPoint уже вернул нам сырые значения.
-    // Если ваш драйвер возвращает значения в пределах физических размеров экрана (0..320 и 0..240),
-    // то нужно просто переставить оси и инвертировать одну из них при повороте.
-    
-    extern uint8_t screen_rotation;
-    extern uint16_t Display_Width;  // Например, 320
-    extern uint16_t Display_Height; // Например, 240
-
-    uint16_t w = Display_Width;
-    uint16_t h = Display_Height;
-
-    // Безопасность: если драйвер выдает "странные" большие числа (режим 480/800), 
-    // нужно масштабировать. Но обычно для простых задач считают, что 0..MaxSensor == 0..Screen.
-    // Если вы видите, что координаты "улетают", добавьте масштабирование:
-    // raw_x = (uint32_t)raw_x * w / 480; (если сенсор 480)
-    
-    // ОСНОВНАЯ ЛОГИКА ПОВОРОТА
-    switch (screen_rotation) {
-        case 0: // Portrait (Вертикально)
-            // Сенсор X -> Экран X
-            // Сенсор Y -> Экран Y
-            *out_x = raw_x;
-            *out_y = raw_y;
-            break;
-
-        case 1: // Landscape (Горизонтально, поворот на 90 град)
-            // При повороте экрана на 90 градусов:
-            // Новый X (горизонталь) = Физический Y (вертикаль сенсора)
-            // Новый Y (вертикаль) = (Ширина экрана - 1) - Физический X (горизонталь сенсора)
-            // Инверсия X нужна, потому что в Landscape 0 слева, а сенсорный 0 часто соответствует "верху" экрана
-            *out_x = raw_y;
-            *out_y = w - 1 - raw_x;
-            break;
-
-        case 2: // Portrait Inverted (Перевёрнутая вертикаль)
-            *out_x = w - 1 - raw_x;
-            *out_y = h - 1 - raw_y;
-            break;
-
-        case 3: // Landscape Inverted (Перевёрнутая горизонталь)
-            *out_x = h - 1 - raw_y;
-            *out_y = raw_x;
-            break;
-
-        default:
-            *out_x = raw_x;
-            *out_y = raw_y;
-            break;
-    }
-
-    // Финальная защита от выхода за границы (на всякий случай)
-    if (*out_x >= w) *out_x = w - 1;
-    if (*out_y >= h) *out_y = h - 1;
 }
-
 
 /**
  * @brief Помечает конкретный спрайт грязным ЦЕЛИКОМ (на весь его размер)
