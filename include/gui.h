@@ -28,7 +28,8 @@ typedef enum {
     UI_TYPE_BORDER,       // Рамка вокруг вложенного элемента
     UI_TYPE_CHECK_BOX,    // Флажок [X]
     UI_TYPE_RADIO_BUTTON, // Переключатель (О)
-    UI_TYPE_LIST_BOX      // Список элементов с прокруткой
+    UI_TYPE_LIST_BOX,      // Список элементов с прокруткой
+    UI_TYPE_SPRITE
 } UIType_t;
 
 typedef enum {
@@ -199,6 +200,10 @@ void Draw_Clock_Callback(UIElement_t* el);
 // Колбэк отрисовки ТОЛЬКО ИКОНОК И БАТАРЕИ
 void Draw_Icons_Callback(UIElement_t* el);
 
+void Draw_Icon_Battery_Callback(UIElement_t* el);
+void Draw_Icon_Bluetooth_Callback(UIElement_t* el);
+void Draw_Icon_WiFi_Callback(UIElement_t* el);
+
 void Draw_StatusBar_Callback(UIElement_t* el);
 void Draw_Graph_Content(UIElement_t* els);
 
@@ -230,4 +235,6 @@ void UI_RenderListBox(UIElement_t* el);
 // Включить/выключить отладочную отрисовку геометрии элементов и скроллбара
 extern bool ui_debug_draw;
 
+
+void GUI_BuildModularStatusBar(UIElement_t* parent_grid);
 #endif // GUI_H
