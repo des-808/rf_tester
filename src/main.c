@@ -77,6 +77,7 @@ FT6336U_HandleTypeDef ft6336u;
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 void ST7796_Init(void);
+static void Scroll_ListBox(int8_t direction);
 uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 DMA_HandleTypeDef hdma_spi4_tx;
 //extern void drawStatusBar(Sprite_t *sprite);
@@ -325,38 +326,12 @@ if (bmi160_irq_received)
         switch (key_short) {
             case KEY_UP:
                 // Логика прокрутки ВВЕРХ
-                {
-                    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-                    uint16_t item_h = font_h + 6;
-                    uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
-                    if (visible == 0) visible = 1;
-                    uint8_t max_offset = (ui_bands_listbox.children_count > visible) 
-                                         ? (uint8_t)(ui_bands_listbox.children_count - visible) 
-                                         : 0;
-                    
-                    if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
-                        ui_bands_listbox.props.list_box.scroll_offset--;
-                        GUI_InvalidateSprite(digits_node.sprite);
-                    }
-                }
+                Scroll_ListBox(-1); // Вверх
                 break;
 
             case KEY_DOWN:
                 // Логика прокрутки ВНИЗ
-                {
-                    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-                    uint16_t item_h = font_h + 6;
-                    uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
-                    if (visible == 0) visible = 1;
-                    uint8_t max_offset = (ui_bands_listbox.children_count > visible) 
-                                         ? (uint8_t)(ui_bands_listbox.children_count - visible) 
-                                         : 0;
-                    
-                    if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
-                        ui_bands_listbox.props.list_box.scroll_offset++;
-                        GUI_InvalidateSprite(digits_node.sprite);
-                    }
-                }
+                Scroll_ListBox(1);  // Вниз
                 break;
                 
             case KEY_ENTER:
@@ -393,15 +368,11 @@ if (bmi160_irq_received)
     if (ft6336u.has_touch) {
         uint16_t raw_x, raw_y;
         FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем аппаратную точку
-
         // Конвертируем сырые координаты под текущий альбомный разворот экрана
         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-
         // Обновляем текст тачскрина в его динамическом блоке
         UI_SetText(ui_touch_row, "Touch:(%d,%d)", last_touch_x, last_touch_y);
-        
         Buzzer_Short(); // Выдаем короткий писк подтверждения клика
-
         // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условия has_touch!
         int16_t local_x = 0, local_y = 0;
         UIElement_t* hit_element = UI_FindElementAt(&root_grid, last_touch_x, last_touch_y, &local_x, &local_y);
@@ -411,19 +382,12 @@ if (bmi160_irq_received)
           if (hit_element->type == UI_TYPE_BUTTON) {
             if (strcmp(hit_element->text_content, "Up") == 0) {
               if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
-                ui_bands_listbox.props.list_box.scroll_offset--;
-                GUI_InvalidateSprite(digits_node.sprite);
+                /* ui_bands_listbox.props.list_box.scroll_offset--;
+                GUI_InvalidateSprite(digits_node.sprite); */
+                Scroll_ListBox(-1);
               }
             } else if (strcmp(hit_element->text_content, "Down") == 0) {
-              uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-              uint16_t item_h = font_h + 6;
-              uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
-              if (visible == 0) visible = 1;
-              uint8_t max_offset = (ui_bands_listbox.children_count > visible) ? (uint8_t)(ui_bands_listbox.children_count - visible) : 0;
-              if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
-                ui_bands_listbox.props.list_box.scroll_offset++;
-                GUI_InvalidateSprite(digits_node.sprite);
-              }
+             Scroll_ListBox(1);  // Вниз
             }
           } else {
             // Проверяем, попали ли на видимый элемент списка (ListBox children)
@@ -493,6 +457,39 @@ if (bmi160_irq_received)
     /* USER CODE BEGIN 3 */
   }
 }
+
+static void Scroll_ListBox(int8_t direction) {
+    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+    uint16_t item_h = font_h + 6;
+    uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
+    if (visible == 0) visible = 1;
+    
+    uint8_t max_offset = (ui_bands_listbox.children_count > visible) 
+                         ? (uint8_t)(ui_bands_listbox.children_count - visible) 
+                         : 0;
+    
+    bool changed = false;
+
+    if (direction == -1) {
+        // Скролл вверх (уменьшаем offset)
+        if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
+            ui_bands_listbox.props.list_box.scroll_offset--;
+            changed = true;
+        }
+    } else if (direction == 1) {
+        // Скролл вниз (увеличиваем offset)
+        if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
+            ui_bands_listbox.props.list_box.scroll_offset++;
+            changed = true;
+        }
+    }
+
+    // Инвалидируем спрайт только если позиция реально изменилась
+    if (changed) {
+        GUI_InvalidateSprite(digits_node.sprite);
+    }
+}
+
 
 void INIT_FT6336U(void){
     // 1. Сброс FT6336U

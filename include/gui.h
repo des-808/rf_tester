@@ -184,11 +184,20 @@ void UI_SetGridColPercent(UIElement_t* grid_elem, uint8_t col_idx, uint8_t perce
 void UI_SetGridRowWeight(UIElement_t* grid_elem, uint8_t row_idx, uint8_t weight);
 void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight);
 
+void UI_SetGridRowsCount(UIElement_t* grid_elem, uint8_t rows);
+void UI_SetGridColsCount(UIElement_t* grid_elem, uint8_t cols);
+void UI_SetGridColProportional(UIElement_t* grid_elem,uint8_t col_1, uint8_t col_2);
+
+
+
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
 static void UI_RenderChildElement(void* child_ptr);
 void UI_DrawTree(UIElement_t* element);
 
-
+// Колбэк отрисовки ТОЛЬКО ЧАСОВ
+void Draw_Clock_Callback(UIElement_t* el);
+// Колбэк отрисовки ТОЛЬКО ИКОНОК И БАТАРЕИ
+void Draw_Icons_Callback(UIElement_t* el);
 
 void Draw_StatusBar_Callback(UIElement_t* el);
 void Draw_Graph_Content(UIElement_t* els);

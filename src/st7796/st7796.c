@@ -9,11 +9,7 @@
 extern SPI_HandleTypeDef hspi4;
 uint8_t screen_rotation = 0;
 
-bool bluetoothEnabled = true;
-bool wifiEnabled = true;
-bool ntpSyncEnabled = true;
-bool buzzerOnOff = true;
-bool bluetoothMode = true;
+
 
 uint16_t Display_Width = ST7796_WIDTH;   // Изначально 320
 uint16_t Display_Height = ST7796_HEIGHT; // Изначально 480

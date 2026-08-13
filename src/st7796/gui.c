@@ -17,24 +17,26 @@ UIElement_t ui_bands_listbox; // Сам контейнер ListBox
 // Флаг отладки: если true — рисуем границы и текстовые метки геометрии ListBox/scrollbar
 bool ui_debug_draw = true;
 
+bool bluetoothEnabled = true;
+bool wifiEnabled = true;
+bool ntpSyncEnabled = true;
+bool buzzerOnOff = true;
+bool bluetoothMode = true;
+
+static UIElement_t status_bar_grid;
+static UIElement_t status_clock_node;
+static UIElement_t status_space_node;
+static UIElement_t status_icons_node;
+
+// Отдельные маленькие спрайты
+static Sprite_t status_clock_sprite;
+static Sprite_t status_icons_sprite;
 /* Глобальные объекты спрайтов для экранов интерфейса */
-//Sprite_t status_bar_sprite;
+Sprite_t status_bar_sprite;
 Sprite_t graph_sprite;
 Sprite_t main_screen_sprite;
 
-
-// Новые спрайты для частей статус-бара
-// Предположим, статус-бар разделен на 3 зоны:
-// 1. Левая: Часы
-// 2. Центр: Доп. информация (Bluetooth, USB и т.д.)
-// 3. Правая: Иконки (Батарея, Сеть)
-Sprite_t* status_bar_clock_sprite = NULL;   // Для часов (обновляется часто)
-Sprite_t* status_bar_icons_sprite = NULL;   // Для иконок (обновляется редко)
-Sprite_t* status_bar_batery_sprite = NULL;   // Для правой части (если есть)
-
-
 // Пул элементов для строк (выделяем память статически внутри gui.c, чтобы не плодить глобальные имена)
-
 static UIElement_t panel_rows[MAX_PANEL_ROWS];
 uint8_t panel_rows_count = 0;
 
@@ -76,11 +78,11 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     heap_caps_reset_pool();
     
     // Принудительно зануляем указатели .data, чтобы движок понял, что память очищена!
-    //status_bar_sprite.data = NULL;
+    status_bar_sprite.data = NULL;
     graph_sprite.data = NULL;
     main_screen_sprite.data = NULL;
     
-    //status_bar_sprite.is_allocated = false;
+    status_bar_sprite.is_allocated = false;
     graph_sprite.is_allocated = false;
     main_screen_sprite.is_allocated = false;
     
@@ -109,15 +111,100 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     UI_SetGridColPercent(&root_grid, 0, 100);
 
     // --- СТАТУС-БАР ---
-    status_bar_node.type = UI_TYPE_TEXT_BLOCK;
+    /* status_bar_node.type = UI_TYPE_TEXT_BLOCK;
     status_bar_node.grid_row = 0;
     status_bar_node.grid_col = 0;
-    //status_bar_node.sprite = &status_bar_sprite; 
+    status_bar_node.sprite = &status_bar_sprite; 
     status_bar_node.render_callback = Draw_StatusBar_Callback;
     status_bar_node.background_color = RGB565_BLACK;
     status_bar_node.horizontal_alignment = HORIZONTAL_ALIGN_LEFT; // Пример
     status_bar_node.vertical_alignment   = VERTICAL_ALIGN_TOP;
-    root_grid.children[root_grid.children_count++] = &status_bar_node;
+    root_grid.children[root_grid.children_count++] = &status_bar_node; */
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // ==========================================
+// 1. ИНИЦИАЛИЗАЦИЯ СЕТКИ СТАТУС-БАРА
+// ==========================================
+// Пересоздаем status_bar_node как сетку
+    status_bar_node.type = UI_TYPE_GRID;
+    status_bar_node.horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+    status_bar_node.vertical_alignment   = VERTICAL_ALIGN_TOP;
+    status_bar_node.children_count = 0;
+    status_bar_node.sprite = NULL; // У контейнера нет общего спрайта
+    status_bar_node.grid_row = 0;
+    status_bar_node.grid_col = 0;
+ // Настраиваем сетку для статус-бара
+    UI_SetGridRowsCount(&status_bar_node, 1);
+    UI_SetGridRowPixel(&status_bar_node, 0, 25); // Высота 25px
+    
+    UI_SetGridColsCount(&status_bar_node, 2); // 2 колонки: Часы и Иконки
+    // Колонка 0: Фиксированная (например, 60px)
+    UI_SetGridColPixel(&status_bar_node, 0, 60);
+    // Колонка 1: Остальное место (через веса или проценты, но так как фиксирована 1, то 2-я займет остаток)
+    // В вашей реализации UI_SetGridColPercent/Proportional может не работать для "остатка".
+    // Лучше использовать веса или просто задать ширину второй колонки как остаток в MeasureAndArrange.
+    // Для простоты, давайте сделаем 1 колонку для часов и 1 для иконок, и будем позиционировать вручную в колбэках, 
+    // если сетка сложная.
+
+
+// Добавляем сетку статус-бара как дочерний элемент в root_grid
+root_grid.children[root_grid.children_count++] = (UIElement_t*)&status_bar_node;
+
+// ==========================================
+// 2. ДОБАВЛЕНИЕ ЭЛЕМЕНТА "ЧАСЫ" (Колонка 0)
+// ==========================================
+status_clock_node.type = UI_TYPE_TEXT_BLOCK;
+status_clock_node.grid_row = 0;
+status_clock_node.grid_col = 0;
+status_clock_node.background_color = RGB565_BLACK;
+status_clock_node.render_callback = Draw_Clock_Callback; // Свой отдельный колбэк!
+
+// Выделяем память под маленький спрайт часов (60x25)
+status_clock_sprite.w = 60;
+status_clock_sprite.h = 25;
+status_clock_sprite.data = (uint16_t*)heap_caps_malloc(60 * 25 * 2, 0);
+status_clock_sprite.is_allocated = (status_clock_sprite.data != NULL);
+status_clock_node.sprite = &status_clock_sprite;
+
+if (!status_clock_sprite.is_allocated) {
+        // TODO: Обработка ошибки выделения памяти
+        while(true){}
+    }
+
+status_bar_node.children[status_bar_node.children_count++] = &status_clock_node;
+
+// ==========================================
+// 3. ДОБАВЛЕНИЕ ПУСТОГОПРОСТРАНСТВА (Колонка 1)
+// ==========================================
+status_space_node.type = UI_TYPE_TEXT_BLOCK;
+status_space_node.grid_row = 0;
+status_space_node.grid_col = 1;
+status_space_node.background_color = RGB565_BLACK;
+status_space_node.sprite = NULL; // Ему спрайт не нужен, просто зальется фоном сетки
+status_bar_node.children[status_bar_node.children_count++] = &status_space_node;
+
+// ==========================================
+// 4. ДОБАВЛЕНИЕ ЭЛЕМЕНТА "ИКОНКИ" (Колонка 2)
+// ==========================================
+status_icons_node.type = UI_TYPE_TEXT_BLOCK;
+status_icons_node.grid_row = 0;
+status_icons_node.grid_col = 2;
+status_icons_node.background_color = RGB565_BLACK;
+status_icons_node.render_callback = Draw_Icons_Callback; // Свой отдельный колбэк!
+
+// Выделяем память под маленький спрайт иконок (120x25)
+status_icons_sprite.w = 120;
+status_icons_sprite.h = 25;
+status_icons_sprite.data = (uint16_t*)heap_caps_malloc(120 * 25 * 2, 0);
+status_icons_sprite.is_allocated = (status_icons_sprite.data != NULL);
+status_icons_node.sprite = &status_icons_sprite;
+
+if (!status_icons_sprite.is_allocated) {
+        // TODO: Обработка ошибки
+        while(true){}
+    }
+
+status_bar_node.children[status_bar_node.children_count++] = &status_icons_node;
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // --- ВЛОЖЕННАЯ СЕТКА (График + Панель) ---
     main_work_grid.type = UI_TYPE_GRID;
@@ -159,6 +246,24 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ПЕРВЫЙ ОБМЕР: Определение доступного пространства
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
+
+
+
+    // Принудительно пометим спрайты как требующие обновления, чтобы убедиться, что они отрисуются
+    if (status_clock_sprite.data) {
+        status_clock_sprite.dirty_x1 = 0;
+        status_clock_sprite.dirty_y1 = 0;
+        status_clock_sprite.dirty_x2 = status_clock_sprite.w - 1;
+        status_clock_sprite.dirty_y2 = status_clock_sprite.h - 1;
+        status_clock_sprite.needs_render = true;
+    }
+    if (status_icons_sprite.data) {
+        status_icons_sprite.dirty_x1 = 0;
+        status_icons_sprite.dirty_y1 = 0;
+        status_icons_sprite.dirty_x2 = status_icons_sprite.w - 1;
+        status_icons_sprite.dirty_y2 = status_icons_sprite.h - 1;
+        status_icons_sprite.needs_render = true;
+    }
     // ====================================================================
     // ЭТАП 2: НАПОЛНЕНИЕ КОНТЕНТОМ
     // ====================================================================
@@ -366,7 +471,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     }
 
     // Активируем флаги рендеринга для всех основных блоков
-    //status_bar_sprite.needs_render = true;
+    status_bar_sprite.needs_render = true;
     graph_sprite.needs_render = true;
     main_screen_sprite.needs_render = true;
 
@@ -940,7 +1045,63 @@ void UI_DrawTree(UIElement_t* element) {
     } 
 }
 
+uint8_t currentHour = 07;
+uint8_t currentMinute = 05;
+uint8_t battery_Level = 100;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Колбэк отрисовки ТОЛЬКО ЧАСОВ
+void Draw_Clock_Callback(UIElement_t* el) {
+    if (!el || !el->sprite) return;
+    Sprite_t* sprite = el->sprite;
 
+    // Стираем старые часы внутри маленького буфера
+    Sprite_fill(sprite, RGB565_BLACK);
+    
+    lcd_set_font(&font_segoe_struct);
+    char timeBuf[8];
+    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
+    
+    // Рисуем в локальных координатах спрайта (0, 0)
+    lcd_print_to_buffer(2, 4, RGB565_WHITE, timeBuf, RGB565_BLACK, sprite);
+    
+    // Помечаем, что весь этот мини-спрайт изменился
+    sprite->dirty_x1 = 0; sprite->dirty_y1 = 0;
+    sprite->dirty_x2 = sprite->w - 1; sprite->dirty_y2 = sprite->h - 1;
+    sprite->needs_render = true;
+}
+
+// Колбэк отрисовки ТОЛЬКО ИКОНОК И БАТАРЕИ
+void Draw_Icons_Callback(UIElement_t* el) {
+    if (!el || !el->sprite) return;
+    Sprite_t* sprite = el->sprite;
+
+    Sprite_fill(sprite, RGB565_BLACK);
+    lcd_set_font(&font_arial_9_struct);
+    
+    int16_t curX = sprite->w - 5; // Начинаем от правого края спрайта (120)
+    
+    // Текст батареи
+    char batBuf[8];
+    snprintf(batBuf, sizeof(batBuf), "%d%%", battery_Level);
+    curX -= lcd_get_str_width(batBuf);
+    lcd_print_to_buffer(curX, 4, RGB565_WHITE, batBuf, RGB565_BLACK, sprite);
+    
+    // Иконка батареи
+    curX -= 18;
+    Draw_Bitmap_To_Sprite(sprite, curX, 4, icon_battery_16_16_bits, 16, 16, RGB565_WHITE);
+    
+    // Иконка Bluetooth
+    if (bluetoothEnabled) {
+        curX -= 14;
+        Draw_Bitmap_To_Sprite(sprite, curX, 4, icon_bluetooth_bits, 12, 16, RGB565_BLUE);
+    }
+    
+    // Помечаем весь мини-спрайт иконок грязным
+    sprite->dirty_x1 = 0; sprite->dirty_y1 = 0;
+    sprite->dirty_x2 = sprite->w - 1; sprite->dirty_y2 = sprite->h - 1;
+    sprite->needs_render = true;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 extern int batteryLevel;
@@ -957,16 +1118,14 @@ extern const uint8_t icon_buzzer_on_bits[];
 extern const uint8_t icon_buzzer_off_bits[];
 extern const uint8_t icon_rs485ToBt_bits[];
 
-uint8_t currentHour = 07;
-uint8_t currentMinute = 05;
-uint8_t battery_Level = 100;
-static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8_t* bitmap, uint16_t bmp_w, uint16_t bmp_h, uint16_t color);
+
+//static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8_t* bitmap, uint16_t bmp_w, uint16_t bmp_h, uint16_t color);
 /**
  * @brief Полностью инвариантный render_callback для статус-бара
  * // Функция для отрисовки контента внутри статус-бара
  */
 void Draw_StatusBar_Callback(UIElement_t* el) {
-   /*  if (!el || !el->sprite || !el->sprite->data) return;
+    if (!el || !el->sprite || !el->sprite->data) return;
     // Извлекаем физический спрайт из элемента
     Sprite_t* sprite = el->sprite; // Достаем физический спрайт из элемента
 
@@ -1025,136 +1184,14 @@ void Draw_StatusBar_Callback(UIElement_t* el) {
     }
 
     // ВНИМАНИЕ: ST7796_PushSprite(sprite) отсюда УДАЛЕН. 
-    // Движок UI сам вызовет отправку по SPI после завершения сборки дерева. */
-
-    // Перенаправляем отрисовку на покомпонентные спрайты
-    GUI_DrawStatusBar(true); 
+    // Движок UI сам вызовет отправку по SPI после завершения сборки дерева.
 }
-
-/**
- * @brief Функция покомпонентной отрисовки и обновления статус-бара
- * @param force_redraw Если true — принудительно перерисовывает все зоны (например, при смене экрана)
- */
-void GUI_DrawStatusBar(bool force_redraw) {
-    // 1. Проверяем, настроен ли узел статус-бара и заданы ли его размеры
-    if (status_bar_node.w == 0 || status_bar_node.h == 0) return;
-
-    uint16_t sb_w = status_bar_node.w;
-    uint16_t sb_h = status_bar_node.h;
-    
-    // Фиксированные размеры для под-зон
-    uint16_t clock_w = 60;  // Достаточно для шрифта "00:00"
-    uint16_t icons_w = 120; // Достаточно для 3-4 иконок и текста батареи
-
-    // 2. Инициализация и выделение памяти для спрайта ЧАСОВ (если еще не сделано)
-    if (status_bar_clock_sprite == NULL) {
-        status_bar_clock_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), 0);
-        if (status_bar_clock_sprite) {
-            memset(status_bar_clock_sprite, 0, sizeof(Sprite_t));
-            status_bar_clock_sprite->w = clock_w;
-            status_bar_clock_sprite->h = sb_h;
-            status_bar_clock_sprite->data = (uint16_t*)heap_caps_malloc(clock_w * sb_h * 2, 0);
-            status_bar_clock_sprite->is_allocated = (status_bar_clock_sprite->data != NULL);
-        }
-    }
-
-    // 3. Инициализация и выделение памяти для спрайта ИКОНОК
-    if (status_bar_icons_sprite == NULL) {
-        status_bar_icons_sprite = (Sprite_t*)heap_caps_malloc(sizeof(Sprite_t), 0);
-        if (status_bar_icons_sprite) {
-            memset(status_bar_icons_sprite, 0, sizeof(Sprite_t));
-            status_bar_icons_sprite->w = icons_w;
-            status_bar_icons_sprite->h = sb_h;
-            status_bar_icons_sprite->data = (uint16_t*)heap_caps_malloc(icons_w * sb_h * 2, 0);
-            status_bar_icons_sprite->is_allocated = (status_bar_icons_sprite->data != NULL);
-        }
-    }
-
-    // Защита от утечки памяти: если аллокация не удалась, выходим
-    if (!status_bar_clock_sprite->is_allocated || !status_bar_icons_sprite->is_allocated) return;
-
-    // Привязываем абсолютные координаты под-спрайтов к координатам родительской сетки статус-бара
-    status_bar_clock_sprite->x = status_bar_node.x;
-    status_bar_clock_sprite->y = status_bar_node.y;
-    
-    status_bar_icons_sprite->x = status_bar_node.x + sb_w - icons_w;
-    status_bar_icons_sprite->y = status_bar_node.y;
-
-    // Счетаем статические флаги изменения состояния (пример логики)
-    static uint8_t last_min = 0xFF;
-    static int last_bat = -1;
-    static bool last_ble = false;
-
-    bool clock_dirty = force_redraw || (currentMinute != last_min);
-    bool icons_dirty = force_redraw || (battery_Level != last_bat) || (bluetoothEnabled != last_ble);
-
-    // ==========================================
-    // ЗОНА 1: ОТРИСОВКА ЧАСОВ (ЛЕВАЯ ЧАСТЬ)
-    // ==========================================
-    if (clock_dirty) {
-        last_min = currentMinute;
-        
-        // Очищаем буфер часов черным цветом
-        Sprite_fill(status_bar_clock_sprite, RGB565_BLACK);
-        
-        // Отрисовка времени во внутренний буфер спрайта (координаты локальные: 0, 0)
-        lcd_set_font(&font_segoe_struct);
-        char timeBuf[8];
-        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
-        lcd_print_to_buffer(2, 4, RGB565_WHITE, timeBuf, RGB565_BLACK, status_bar_clock_sprite);
-        
-        // Подаем команду контроллеру обновить строго эту область экрана
-        ST7796_PushSpriteRect(status_bar_clock_sprite, 0, 0, status_bar_clock_sprite->w - 1, status_bar_clock_sprite->h - 1);
-    }
-
-    // ==========================================
-    // ЗОНА 2: ОТРИСОВКА ИКОНОК (ПРАВАЯ ЧАСТЬ)
-    // ==========================================
-    if (icons_dirty) {
-        last_bat = battery_Level;
-        last_ble = bluetoothEnabled;
-
-        Sprite_fill(status_bar_icons_sprite, RGB565_BLACK);
-        lcd_set_font(&font_arial_9_struct);
-
-        // Инвариантный маркер для локальной прокрутки внутри правого спрайта
-        int16_t localX = status_bar_icons_sprite->w - 2;
-
-        // 1. Отрисовка текста батареи "100%"
-        char batBuf[8];
-        snprintf(batBuf, sizeof(batBuf), "%d%%", battery_Level);
-        int batWidth = lcd_get_str_width(batBuf);
-        localX -= (batWidth + 2);
-        lcd_print_to_buffer(localX, 4, RGB565_WHITE, batBuf, RGB565_BLACK, status_bar_icons_sprite);
-
-        // 2. Отрисовка иконки батареи (16x16)
-        localX -= 18; // 16 пикселей иконка + 2 зазор
-        Draw_Bitmap_To_Sprite(status_bar_icons_sprite, localX, 4, icon_battery_16_16_bits, 16, 16, RGB565_WHITE);
-
-        // 3. Отрисовка иконки Bluetooth (если активен)
-        if (bluetoothEnabled) {
-            localX -= 14; // Предположим, ширина иконки BLE 12 пикселей
-            Draw_Bitmap_To_Sprite(status_bar_icons_sprite, localX, 4, icon_bluetooth_bits, 12, 16, RGB565_BLUE);
-        }
-
-        // Выталкиваем обновленный правый спрайт на дисплей
-        ST7796_PushSpriteRect(status_bar_icons_sprite, 0, 0, status_bar_icons_sprite->w - 1, status_bar_icons_sprite->h - 1);
-    }
-    
-    // Если это была полная перерисовка, обновляем черную "пустоту" между часами и иконками
-    if (force_redraw) {
-         // Тут можно выполнить заливку центральной области дисплея напрямую, 
-         // либо нарисовать стильную разделительную линию под статус-баром.
-         //ST7796_DrawLine(status_bar_node.x, status_bar_node.y + sb_h - 1, status_bar_node.x + sb_w - 1, status_bar_node.y + sb_h - 1, RGB565_DARK_GRAY);
-    }
-}
-
 
 
 /**
  * @brief Безопасная инвариантная прорисовка битмапа внутрь спрайта
  */
-static void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8_t* bitmap, uint16_t bmp_w, uint16_t bmp_h, uint16_t color) {
+ void Draw_Bitmap_To_Sprite(Sprite_t* s, int16_t x, int16_t y, const uint8_t* bitmap, uint16_t bmp_w, uint16_t bmp_h, uint16_t color) {
     if (!s || !s->data || !bitmap) return;
 
     for (uint16_t h = 0; h < bmp_h; h++) {
@@ -2084,3 +2121,10 @@ int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
 }
 
 
+void UI_SetGridRowsCount(UIElement_t* grid_elem, uint8_t rows){}
+void UI_SetGridColsCount(UIElement_t* grid_elem, uint8_t cols){}
+void UI_SetGridColProportional(UIElement_t* grid_elem,uint8_t col_1, uint8_t col_2){}
+
+/* UI_SetGridRowsCount(&status_bar_grid, 1);
+UI_SetGridColsCount(&status_bar_grid, 3);
+UI_SetGridColProportional(&status_bar_grid, 1, 1); */
