@@ -2117,7 +2117,7 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
 /**
  * @brief Добавляет строку (пункт списка) внутрь ListBox
  */
-UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
+/* UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
     if (panel_rows_count >= MAX_PANEL_ROWS || listbox->children_count >= MAX_PANEL_ROWS) return NULL;
     UIElement_t* item = &panel_rows[panel_rows_count++];
     item->type = UI_TYPE_TEXT_BLOCK;
@@ -2135,6 +2135,42 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
     strncpy(item->text_content, item_text, sizeof(item->text_content) - 1);
     item->text_content[sizeof(item->text_content) - 1] = '\0';
     listbox->children[listbox->children_count++] = item;
+    return item;
+} */
+UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
+    if (!listbox_elem || listbox_elem->type != UI_TYPE_LIST_BOX) return NULL;
+    
+    // 1. Проверяем жесткий лимит на максимальное количество детей у одного контейнера
+    if (listbox_elem->children_count >= MAX_ELEMENT_CHILDREN) {
+        return NULL; 
+    }
+    
+    // 2. Проверяем глобальный лимит нашего статического пула строк panel_rows
+    if (panel_rows_count >= MAX_PANEL_ROWS) {
+        return NULL; 
+    }
+    
+    // 3. Берем свободный элемент из статического пула строк
+    UIElement_t* item = &panel_rows[panel_rows_count++];
+    
+    // 4. Гарантированно зануляем память элемента перед инициализацией
+    memset(item, 0, sizeof(UIElement_t));
+    
+    // 5. Заполняем поля дочернего элемента строки
+    item->type = UI_TYPE_TEXT_BLOCK;
+    item->sprite = listbox_elem->sprite; // Наследуем спрайт от родителя (если он уже задан)
+    item->font = listbox_elem->font;     // Наследуем шрифт от родительского ListBox
+    item->background_color = listbox_elem->background_color;
+    item->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+    item->vertical_alignment = VERTICAL_ALIGN_CENTER;
+    
+    // Безопасно копируем текст строки, защищаясь от переполнения буфера text_content
+    strncpy(item->text_content, text, sizeof(item->text_content) - 1);
+    item->text_content[sizeof(item->text_content) - 1] = '\0'; // Гарантируем нуль-терминатор
+    
+    // 6. Регистрируем элемент в массиве детей ListBox
+    listbox_elem->children[listbox_elem->children_count++] = item;
+    
     return item;
 }
 
