@@ -201,7 +201,7 @@ void Menu_Init(void) {
     Menu_SetMainMenu(); // Инициализируем указатели на начало
 }
 
-void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
+/* void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
     if (!listbox_container || !items) return;
 
     // Очищаем старые элементы (здесь должен быть цикл удаления старых children,
@@ -224,6 +224,34 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
     current_menu_count = count;
 
     GUI_InvalidateSprite(listbox_container->sprite); // Просим GUI перерисовать всё с учетом новых иконок
+} */
+void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
+    if (!listbox_container || !items) return;
+
+    // --- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ---
+    // Не используем free(), так как panel_rows — это статический пул из gui.c.
+    // Просто сбрасываем количество детей. Старые указатели будут перезаписаны новыми.
+    for (uint8_t i = 0; i < listbox_container->children_count; i++) {
+        // Если у вас где-то выделяется память под кастомные данные children, освобождайте её здесь.
+        // Для обычных строковых пунктов этого делать не нужно.
+    }
+    listbox_container->children_count = 0;
+    
+    listbox_container->props.list_box.scroll_offset = 0;
+    listbox_container->props.list_box.selected_index = 0;
+
+    // --- ВКЛЮЧАЕМ ИКОНКИ ---
+    // Раскомментируем передачу icon_id
+    for (uint8_t i = 0; i < count; i++) {
+        // Передаем текст и индекс иконки из структуры меню
+        //UI_ListBox_AddItem(listbox_container, items[i].text, items[i].icon_id);
+        UI_ListBox_AddItem(listbox_container, items[i].text);
+    }
+
+    current_menu_items = items;
+    current_menu_count = count;
+
+    GUI_InvalidateSprite(listbox_container->sprite);
 }
 
 // Хелпер для изменения значения
@@ -235,15 +263,75 @@ static void AdjustValue(void* ptr, int min, int max, int step, int direction) {
     *(int*)ptr = val;
 }
 
+/**
+ * @brief Выполняет действие для выбранного пункта меню.
+ * Вызывается как из Menu_ProcessInput (по кнопкам), так и из Menu_ProcessTouch.
+ */
+static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index) 
+{
+    if (!listbox || !current_menu_items) return;
+    if (selected_index >= current_menu_count) return;
+
+    MenuItem_t* item = &current_menu_items[selected_index];
+    UIElement_t* ui_item = NULL;
+    
+    // Безопасное получение визуального элемента строки
+    if ((uint8_t)selected_index < listbox->children_count) {
+        ui_item = (UIElement_t*)listbox->children[selected_index];
+    }
+
+    switch (item->type) {
+        case ITEM_TYPE_ACTION:
+            if (item->data.action_func) {
+                item->data.action_func();
+            }
+            break;
+
+        case ITEM_TYPE_VALUE: {
+            int old_val = *(int*)item->data.ptr_value;
+            
+            AdjustValue(item->data.ptr_value, 
+                        item->data.value_limits.min_val, 
+                        item->data.value_limits.max_val, 
+                        item->data.value_limits.step, 
+                        1); // direction = +1 (Enter/Tap всегда увеличивает)
+
+            if (*(int*)item->data.ptr_value != old_val && ui_item) {
+                Update_MenuItem_Text(ui_item, item);
+                
+                // Оптимизация перерисовки: обновляем только строку, если ListBox это поддерживает
+                // GUI_InvalidateRect(... конкретная строка ...); 
+                // Пока используем полную перерисовку списка:
+                GUI_InvalidateSprite(listbox->sprite); 
+            }
+            break;
+        }
+
+        case ITEM_TYPE_SUBMENU:
+            if (item->data.submenu_items && item->data_count > 0) { // Используем вынесенное поле data_count
+                listbox->touch_state.drag_last_y = -1;
+                listbox->touch_state.drag_active = false;
+                
+                // Очистка глобальных ссылок перед сменой контекста не требуется,
+                // так как Menu_Draw сделает listbox_container->children_count = 0
+                Menu_Draw(listbox, item->data.submenu_items, item->data_count);
+            }
+            break;
+
+        case ITEM_TYPE_INFO:
+            // Можно вызвать showNC() здесь, если нужно поведение как у кнопки
+            break;
+    }
+}
+
 void Menu_ProcessInput(uint8_t key) {
     if (!current_menu_listbox || !current_menu_items) return;
 
     UIElement_t* lb = current_menu_listbox;
     uint8_t idx = lb->props.list_box.selected_index;
-    
-    if (idx >= current_menu_count) return;
-    
-    MenuItem_t* item = &current_menu_items[idx];
+
+    // Защита от выхода за границы массива данных при пустом списке
+    if (idx >= current_menu_count) return; 
 
     switch (key) {
         case KEY_UP:
@@ -254,86 +342,20 @@ void Menu_ProcessInput(uint8_t key) {
             break;
 
         case KEY_DOWN:
-            if (lb->props.list_box.selected_index < lb->children_count - 1) {
+            if (lb->props.list_box.selected_index < current_menu_count - 1) {
                 lb->props.list_box.selected_index++;
                 GUI_InvalidateSprite(lb->sprite);
             }
             break;
 
-        case KEY_ENTER: { // Это действие "выбора" (Enter или Tap)
-            switch (item->type) {
-                case ITEM_TYPE_ACTION:
-                    if (item->data.action_func) {
-                        item->data.action_func();
-                    }
-                    break;
-
-                case ITEM_TYPE_VALUE:
-                    // При нажатии на значение — меняем его (или открываем редактор)
-                    // Для простоты: +/- при повторном нажатии или на разных кнопках?
-                    // Давайте сделаем так: UP/DOWN меняют значение, ENTER - фиксирует/следующий шаг?
-                    // Или: UP/DOWN меняют выделение, ENTER/SELECT - действие.
-                    // Если это VALUE, то Enter меняет значение на +step?
-                    // Или добавим KEY_INC/DEC.
-                    // Пока сделаем: Enter меняет значение на +step.
-                    // А UP/DOWN в контексте VALUE?
-                    
-                    // Альтернатива: 
-                    // UP/Down - навигация.
-                    // Enter - если ACTION, то вызов. Если VALUE, то шаг +1.
-                    // shift+Enter (или другая кнопка) шаг -1.
-                    
-                    // Давайте добавим обработку INC/DEC в вашем main.c к этой функции.
-                    // Но здесь, для отклика на SELECT:
-                    AdjustValue(item->data.ptr_value, 
-                                item->data.value_limits.min_val, 
-                                item->data.value_limits.max_val, 
-                                item->data.value_limits.step, 
-                                1);
-                    // Обновляем текст элемента в ListBox?
-                    // UI_ListBox_AddItem создал текстовый блок. Нужно его обновить.
-                    UIElement_t* ui_item = (UIElement_t*)lb->children[idx];
-                    if (ui_item) {
-                        // Форматируем значение обратно в текст
-                        char buf[32];
-                        // Упрощенная отрисовка: просто перерисуем ListBox, а UI_RenderListBox возьмет текст из ui_item?
-                        // Нет, UI_ListBox_AddItem скопировал строку в ui_item->text_content.
-                        // Нам нужно обновить ui_item->text_content.
-                        // Но мы не знаем формат! 
-                        // Решение: При каждом рендере или обновлении значения вызывать UI_SetText?
-                        // Но UI_SetText обновляет только текст.
-                        
-                        // Лучшее решение: При изменении значения вызывать функцию перерисовки конкретного элемента
-                        // Но у нас нет прямого доступа к формату.
-                        // Поэтому в ITEM_TYPE_VALUE лучше хранить указатель на функцию обновления текста?
-                        // Или просто сохранять старый текст и паттерн замены?
-                        
-                        // Для простоты примера: оставим как есть. В реальном коде нужно обновлять строку в ui_item.
-                        // Например:
-                        snprintf(buf, sizeof(buf), "%s: %d", item->text, *(int*)item->data.ptr_value);
-                        strncpy(ui_item->text_content, buf, 31);
-                        // Но это сложно универсализировать.
-                        // Давайте просто отметим, что нужно перерисовать.
-                    }
-                    GUI_InvalidateSprite(lb->sprite);
-                    break;
-
-                case ITEM_TYPE_SUBMENU:
-                    if (item->data.submenu_items) {
-                        Menu_Draw(lb, item->data.submenu_items, item->data.submenu_count);
-                    }
-                    break;
-                    
-                case ITEM_TYPE_INFO:
-                    break;
-            }
+        case KEY_ENTER:
+            // Делегируем выполнение общей функции
+            Menu_ExecuteSelected(lb, lb->props.list_box.selected_index);
             break;
-        }
-        
+
         case KEY_CANCEL:
-            // Реализовать возврат к предыдущему меню.
-            // Нужно хранить стек меню. Сейчас упростим: выход в mainMenu
-            Menu_Draw(lb, mainMenu, sizeof(mainMenu)/sizeof(mainMenu[0]));
+            // Возврат к главному меню
+            Menu_Draw(lb, mainMenu, sizeof(mainMenu) / sizeof(mainMenu[0]));
             break;
     }
 }
@@ -343,31 +365,25 @@ void Menu_ProcessInput(uint8_t key) {
  *        Так как UI_ListBox_AddItem копирует строку в ui_item->text_content,
  *        нам нужно переформатировать её, если это тип ITEM_TYPE_VALUE.
  */
-static void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
+ void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
     if (!ui_item || !menu_item || menu_item->type != ITEM_TYPE_VALUE) return;
 
-    // Для типов, зависящих от значений, нужно пересобрать строку.
-    // Поскольку у нас разные типы данных (uint16_t, int, enum), 
-    // мы делаем простую логику: берем базовый текст и добавляем значение.
-    // Это упрощение. В продакшене лучше использовать форматирование.
-    
-    // Базовая строка (например "Sys:")
     const char* label = menu_item->text;
-    
-    // Читаем значение
-    int val = 0;
-    if (menu_item->data.ptr_value) {
-        val = *(int*)menu_item->data.ptr_value;
+    int val = *(int*)menu_item->data.ptr_value;
+    char new_text[64];
+
+    // Улучшенное форматирование для разных типов настроек
+    if (strcmp(label, "BT") == 0 || strcmp(label, "WiFi") == 0 || 
+        strcmp(label, "NTP Auto") == 0 || strcmp(label, "Buzzer") == 0) {
+        
+        snprintf(new_text, sizeof(new_text), "%s: %s", label, (val ? "On" : "Off"));
+    } else if (strcmp(label, "Light") == 0) {
+        snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
+    } else {
+        // Универсальный вариант для Sys, Room, Freq и т.д.
+        snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
     }
 
-    // Формируем новую строку
-    // ВАЖНО: text_content в UIElement_t обычно имеет фиксированный размер (например 32 или 64 байта).
-    // Убедитесь, что ваш UIElement_t позволяет такое обновление.
-    // В gui.h: char text_content[64]; (или больше)
-    
-    char new_text[64];
-    snprintf(new_text, sizeof(new_text), "%s %d", label, val);
-    
     strncpy(ui_item->text_content, new_text, sizeof(ui_item->text_content) - 1);
     ui_item->text_content[sizeof(ui_item->text_content) - 1] = '\0';
 }
@@ -376,97 +392,34 @@ void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
     if (!current_menu_listbox || !current_menu_items) return;
 
     UIElement_t* lb = current_menu_listbox;
-    
-    // КРИТИЧЕСКИ ВАЖНО: Игнорируем выбор, если сейчас идет активное инерционное скроллирование.
-    // Это предотвращает случайные клики при пролистывании.
+
+    // Игнорируем нажатия во время инерционной прокрутки
     if (lb->touch_state.drag_active) {
         return;
     }
 
     int8_t selected = UI_ListBox_ProcessTouch(lb, tx, ty);
 
-    // Индекс -1 означает промах, клик по скроллбару или начало драг-жеста.
-    // Нас интересует только фактический выбор элемента (OnSelect / OnClick).
-    if (selected < 0) {
-        return;
-    }
-
-    // Защита от выхода за границы массива данных
-    if ((uint8_t)selected >= current_menu_count) {
-        return;
-    }
-
-    MenuItem_t* item = &current_menu_items[selected];
-    
-    // Безопасное получение UI-элемента (защита от рассинхрона data vs view)
-    UIElement_t* ui_item = NULL;
-    if ((uint8_t)selected < lb->children_count) {
-        ui_item = (UIElement_t*)lb->children[selected];
-    }
-
-    // Актуализируем текст значений (ползунки, переключатели), чтобы они отображали текущее состояние системы
-    if (item->type == ITEM_TYPE_VALUE && ui_item) {
-        Update_MenuItem_Text(ui_item, item);
-    }
-
-    // Выполняем действие выбранного пункта
-    switch (item->type) {
-        case ITEM_TYPE_ACTION:
-            if (item->data.action_func) {
-                item->data.action_func();
-            }
-            break;
-
-        case ITEM_TYPE_VALUE: {
-            // Убираем дублирование кода, используя вспомогательную переменную-флаг
-            bool needs_redraw = false;
-            
-            if (ui_item) {
-                AdjustValue(item->data.ptr_value, 
-                            item->data.value_limits.min_val, 
-                            item->data.value_limits.max_val, 
-                            item->data.value_limits.step, 
-                            1);
-                Update_MenuItem_Text(ui_item, item);
-                needs_redraw = true; // Перерисуем только конкретный дочерний элемент
-            } else {
-                 AdjustValue(item->data.ptr_value, 
-                            item->data.value_limits.min_val, 
-                            item->data.value_limits.max_val, 
-                            item->data.value_limits.step, 
-                            1);
-                 needs_redraw = true;
-            }
-
-            if (needs_redraw) {
-                // Вместо перерисовки всего спрайта листа, эффективнее пометить конкретную строку
-                uint16_t font_h = (lb->font != NULL) ? lb->font->char_height : font_arial_9_struct.char_height;
-                uint16_t item_h = font_h + 6;
-                
-                GUI_InvalidateRect(lb->sprite, 
-                                   lb->x, 
-                                   lb->y + (selected - lb->props.list_box.scroll_offset) * item_h, 
-                                   lb->w, 
-                                   item_h);
-            }
-            break;
+    // Если был произведен выбор конкретного элемента (не скроллбар и не промах)
+    if (selected >= 0 && (uint8_t)selected < current_menu_count) {
+        
+        // Обновление текста VALUE-элементов сразу после клика по ним
+        MenuItem_t* item = &current_menu_items[selected];
+        UIElement_t* ui_item = NULL;
+        if ((uint8_t)selected < lb->children_count) {
+            ui_item = (UIElement_t*)lb->children[selected];
         }
 
-        case ITEM_TYPE_SUBMENU:
-            if (item->data.submenu_items) {
-                // Перед передачей управления убеждаемся, что старое состояние сброшено
-                lb->touch_state.drag_last_y = -1;
-                lb->touch_state.drag_active = false;
-                
-                Menu_Draw(lb, item->data.submenu_items, item->data.submenu_count);
-            }
-            break;
-            
-        case ITEM_TYPE_INFO:
-            // Можно добавить звуковую обратную связь (Tick) для информативности
-            break;
+        if (item->type == ITEM_TYPE_VALUE && ui_item) {
+            Update_MenuItem_Text(ui_item, item);
+        }
+
+        // Выполняем то же самое действие, что и кнопка ENTER
+        Menu_ExecuteSelected(lb, (uint8_t)selected);
     }
 }
+
+
 
 
 

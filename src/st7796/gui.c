@@ -2926,7 +2926,9 @@ int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty)
         ts->drag_active = false;
 
         // Мертвая зона по горизонтали (5% ширины), чтобы отличать свайп от клика
-        uint16_t dead_zone_x = listbox->w / 20;
+        //uint16_t dead_zone_x = listbox->w / 20;
+        // Стало: уменьшаем зону до 2% или задаем константу
+        uint16_t dead_zone_x = 10; // Фиксированные 10 пикселей вместо процентов
         if (dead_zone_x < 5) dead_zone_x = 5;
         if (tx < listbox->x + dead_zone_x || tx >= listbox->x + listbox->w - dead_zone_x) return -1;
 

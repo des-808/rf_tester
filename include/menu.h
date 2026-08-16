@@ -26,6 +26,7 @@ typedef struct MenuItem {
     const char* text;
     uint16_t icon_id;           // Индекс иконки (0 = нет иконки)
     MenuItemType_t type;
+    uint8_t data_count;         
     
     // Данные в зависимости от типа
     union {
@@ -75,5 +76,7 @@ void Menu_Init(void);
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count);
 void Menu_ProcessInput(uint8_t key);
 void Menu_ProcessTouch(uint16_t tx, uint16_t ty);
+
+void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item);
 
 #endif

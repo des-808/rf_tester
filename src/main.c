@@ -335,10 +335,11 @@ if (bmi160_irq_received)
         FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем аппаратную точку
         // Конвертируем сырые координаты под текущую ориентацию экрана
         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-        Buzzer_Short(); // Выдаем короткий писк подтверждения клика
-        Menu_ProcessTouch(last_touch_x, last_touch_y);
+      
 
         ft6336u.has_touch = false; // Обязательный сброс аппаратного флага тача!
+        Buzzer_Short(); // Выдаем короткий писк подтверждения клика
+        Menu_ProcessTouch(last_touch_x, last_touch_y);
     }
 
     // ====================================================================
