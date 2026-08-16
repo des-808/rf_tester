@@ -4,8 +4,7 @@
 #include <stdint.h>
 #include "gui.h" // Для UIElement_t и типов
 
-#include <stdint.h>
-#include "gui.h"
+#include "buttons.h"
 
 // === ТИПЫ ПУНКТОВ МЕНЮ ===
 typedef enum {
@@ -43,13 +42,13 @@ typedef struct MenuItem {
 } MenuItem_t;
 
 
-enum MenuKey {
+/* enum MenuKey {
     KEY_NONE,
     KEY_UP,
     KEY_DOWN,
     KEY_ENTER,
     KEY_CANCEL
-};
+}; */
 
 // Глобальные переменные состояния
 extern UIElement_t* current_menu_listbox;

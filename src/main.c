@@ -33,7 +33,8 @@
 #include "gui.h"
 #include "bmi160_h7.h"
 #include "ds3231.h"
-#include "measurement/measurement.h"
+#include "menu.h"
+//#include "measurement/measurement.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -98,7 +99,7 @@ char debug_str[64] = "BMI160: Wait interrupt..."; // Строка для выв�
 volatile uint32_t exti_counter = 0;               // Счетчик прерываний для проверки физики
 
 volatile uint8_t bmi160_irq_received = 0;
-uint8_t current_display_orientation = 1; // 1 - Альбомная по умолчанию
+uint8_t current_display_orientation = 0; // 0 - Книжная по умолчанию
 /* USER CODE END PFP */
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
@@ -251,8 +252,9 @@ I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
-Menu_Init();
- GUI_ShowAdvancedMeasurementScreen(0);
+  Menu_Init();
+  //GUI_ShowAdvancedMeasurementScreen(current_display_orientation);
+  GUI_ShowMenuAdvancedMeasurementScreen(current_display_orientation);
  // Инициализируем модуль измерений и запускаем его в неблокирующем режиме
  //Measurement_Init();
  //Measurement_Start();
@@ -299,7 +301,8 @@ if (bmi160_irq_received)
       if (next_orientation != current_display_orientation) 
       {
         current_display_orientation = next_orientation;
-        GUI_ShowAdvancedMeasurementScreen(next_orientation);
+        //GUI_ShowAdvancedMeasurementScreen(next_orientation);
+        GUI_ShowMenuAdvancedMeasurementScreen(next_orientation);
       }
     }
 
@@ -326,22 +329,26 @@ if (bmi160_irq_received)
         switch (key_short) {
             case KEY_UP:
                 // Логика прокрутки ВВЕРХ
-                Scroll_ListBox(-1); // Вверх
+                //Scroll_ListBox(-1); // Вверх
+                Menu_ProcessInput(KEY_UP);
                 break;
 
             case KEY_DOWN:
                 // Логика прокрутки ВНИЗ
-                Scroll_ListBox(1);  // Вниз
+                //Scroll_ListBox(1);  // Вниз
+                Menu_ProcessInput(KEY_DOWN);
                 break;
                 
             case KEY_ENTER:
                 // Пример: действие по Enter
-                UI_SetText(ui_btn_row, "Enter Pressed");
+                //UI_SetText(ui_btn_row, "Enter Pressed");
+                Menu_ProcessInput(KEY_ENTER);
                 break;
                 
             case KEY_CANCEL:
                 // Пример: действие по Cancel
-                UI_SetText(ui_btn_row, "Cancel Pressed");
+                //UI_SetText(ui_btn_row, "Cancel Pressed");
+                Menu_ProcessInput(KEY_CANCEL);
                 break;
 
             default:
@@ -351,7 +358,7 @@ if (bmi160_irq_received)
 
     // --- Обработка длинного нажатия (Hold) ---
     // Если нужно, чтобы скролл работал, пока кнопка зажата, или для другого действия
-    MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
+    /* MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
     if (key_hold != KEY_NONE) {
         // Можно повести аналогичную логику прокрутки для длительного нажатия,
         // либо оставить только для кликов, если нужно.
@@ -361,7 +368,7 @@ if (bmi160_irq_received)
         } else if (key_hold == KEY_DOWN) {
              // Уменьшаем счетчик
         }
-    }
+    } */
     // ====================================================================
     // 2. ОБРАБОТКА ТАЧСКРИНА (Клик по строкам StackPanel / ListBox)
     // ====================================================================
@@ -371,19 +378,22 @@ if (bmi160_irq_received)
         // Конвертируем сырые координаты под текущий альбомный разворот экрана
         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
         // Обновляем текст тачскрина в его динамическом блоке
-        UI_SetText(ui_touch_row, "Touch:(%d,%d)", last_touch_x, last_touch_y);
+        //UI_SetText(ui_touch_row, "Touch:(%d,%d)", last_touch_x, last_touch_y);
         Buzzer_Short(); // Выдаем короткий писк подтверждения клика
-        // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условия has_touch!
-        int16_t local_x = 0, local_y = 0;
-        UIElement_t* hit_element = UI_FindElementAt(&root_grid, last_touch_x, last_touch_y, &local_x, &local_y);
 
-        if (hit_element != NULL) {
+        Menu_ProcessTouch(last_touch_x, last_touch_y);
+
+        // КРИТИЧЕСКИЙ ФИКС: Обработку тача по элементам выполняем СТРОГО внутри условия has_touch!
+        //int16_t local_x = 0, local_y = 0;
+        //UIElement_t* hit_element = UI_FindElementAt(&root_grid, last_touch_x, last_touch_y, &local_x, &local_y);
+
+         /* if (hit_element != NULL) {
           // Сначала обрабатываем кнопки прокрутки, если нажата одна из них
           if (hit_element->type == UI_TYPE_BUTTON) {
             if (strcmp(hit_element->text_content, "Up") == 0) {
               if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
-                /* ui_bands_listbox.props.list_box.scroll_offset--;
-                GUI_InvalidateSprite(digits_node.sprite); */
+                // ui_bands_listbox.props.list_box.scroll_offset--;
+                //GUI_InvalidateSprite(digits_node.sprite); 
                 Scroll_ListBox(-1);
               }
             } else if (strcmp(hit_element->text_content, "Down") == 0) {
@@ -408,38 +418,38 @@ if (bmi160_irq_received)
               }
             }
 
-            // Если тач не был внутри конкретного пункта списка, но по-прежнему в панели — старая логика
-            if (hit_element != NULL && hit_element == &digits_node) {
-              uint16_t row_height = 22;
-              int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
+             // Если тач не был внутри конкретного пункта списка, но по-прежнему в панели — старая логика
+            // if (hit_element != NULL && hit_element == &digits_node) {
+            //   uint16_t row_height = 22;
+            //   int8_t clicked_row_idx = (last_touch_y - digits_node.y) / row_height;
 
-              if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
-                switch (clicked_row_idx) {
-                  case 0:
-                    break;
-                  case 1:
-                    UI_SetText(ui_swr_row, "SCANNING...");
-                    break;
-                  case 2:
-                    break;
-                  case 4:
-                    UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
-                    break;
-                  case 5:
-                    UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
-                    break;
-                  default:
-                    UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
-                    break;
-                }
-                if (graph_node.sprite != NULL) {
-                  GUI_InvalidateSprite(graph_node.sprite);
-                }
-              }
-            }
-          }
-        }
-
+            //   if (clicked_row_idx >= 0 && clicked_row_idx < digits_node.children_count) {
+            //     switch (clicked_row_idx) {
+            //       case 0:
+            //         break;
+            //       case 1:
+            //         UI_SetText(ui_swr_row, "SCANNING...");
+            //         break;
+            //       case 2:
+            //         break;
+            //       case 4:
+            //         UI_SetText(ui_swr_row, "BAND: HF (1.8-30M)");
+            //         break;
+            //       case 5:
+            //         UI_SetText(ui_swr_row, "BAND: 2m (144MHz)");
+            //         break;
+            //       default:
+            //         UI_SetText(ui_swr_row, "Row ID %d clicked", clicked_row_idx);
+            //         break;
+            //     }
+            //     if (graph_node.sprite != NULL) {
+            //       GUI_InvalidateSprite(graph_node.sprite);
+            //     }
+            //   }
+            // } 
+          } 
+        }*/
+ 
         ft6336u.has_touch = false; // Обязательный сброс аппаратного флага тача!
     }
 
@@ -447,7 +457,7 @@ if (bmi160_irq_received)
     // 3. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
     // ====================================================================
     // Вызывается непрерывно на каждой итерации. Measurement_Handler обновляет данные в фоне.
-    Measurement_Handler();
+    //Measurement_Handler();
     // Функция отрисовки UI — отправляет изменившиеся спрайты по SPI DMA
     UI_DrawTree(&root_grid);
 

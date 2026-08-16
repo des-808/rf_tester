@@ -16,6 +16,11 @@
 #define SHRIFT_HEIGHT 18
 #define SHRIFT_OTSTUP_TOP_BOTTOM 4
 
+// Layout параметры для dynamic ListBox
+#define LISTBOX_MIN_ITEM_HEIGHT 16   // мин. высота одного пункта (шрифт + padding)
+#define LISTBOX_MAX_VISIBLE_ITEMS 6  // макс. видимых строк для dynamic height
+#define LISTBOX_DYNAMIC_MARGIN 4     // отступы сверху/снизу внутри ListBox
+
 #define UI_GRID_DIMENSION_PERCENT 100  // обычный процент
 #define UI_GRID_DIMENSION_PIXEL   0xFFFF  // специальный код: пиксельный размер
 
@@ -40,7 +45,8 @@ typedef enum {
 
 typedef enum {
     UI_LISTBOX_HEIGHT_AUTO = 0,
-    UI_LISTBOX_HEIGHT_FIXED = 1
+    UI_LISTBOX_HEIGHT_FIXED = 1,
+    UI_LISTBOX_HEIGHT_DYNAMIC = 2  // Автоматически подстраивается под контент с учётом макс. видимых строк
 } UIListBoxHeightMode_t;
 
 // --- Свойства для TextBlock ---
@@ -123,6 +129,11 @@ typedef struct {
     uint16_t spacing;           // Зазор между элементами в пикселях
 } StackPanelDefinition_t;
 
+typedef struct {
+     bool drag_active;
+     int16_t drag_last_y;
+ } Touch_State_t;
+
 // Универсальная сущность UI (Элемент)
 typedef struct UIElement {
     UIType_t type;
@@ -156,6 +167,9 @@ typedef struct UIElement {
     HorizontalAlignment_t horizontal_alignment; 
     VerticalAlignment_t vertical_alignment; 
 
+    Touch_State_t touch_state;
+
+
     // СЮДА УПАКОВЫВАЕМ ВСЕ СВОЙСТВА НОВЫХ КОНТЕНЕРОВ И КОМПОНЕНТОВ
     union {
         GridDefinition_t grid;
@@ -176,6 +190,7 @@ typedef struct UIElement {
 #define HEAP_CAP_DEFAULT 0
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation);
+void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation);
 
 //Хелперы для работы с элементами интерфейса Grid
 void UI_SetGridRowPixel(UIElement_t* grid_elem, uint8_t row_idx, uint8_t size_px);

@@ -3,11 +3,11 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-#include "measurement/measurement.h"
+//#include "measurement/measurement.h"
 
 
-#define MAX_GRID_ROWS 10
-#define MAX_GRID_COLS 10
+#define MAX_GRID_ROWS 20
+#define MAX_GRID_COLS 20
 // Глобальные переменные сущностей интерфейса
 UIElement_t root_grid;
 
@@ -25,6 +25,7 @@ bool wifiEnabled = true;
 bool ntpSyncEnabled = true;
 bool buzzerOnOff = true;
 bool bluetoothMode = true;
+bool rs485toBt = true;
 
 // Глобальные объекты для статус-бара
 static UIElement_t status_bar_node;      // Контейнер Grid
@@ -39,6 +40,7 @@ static Sprite_t status_icon_wifi_sprite;
 static Sprite_t status_icon_ntp_sprite;
 static Sprite_t status_icon_buzzer_sprite;
 static Sprite_t status_icon_mode_sprite;
+static Sprite_t status_spacer_sprite;
 
 // Узлы иконок
 static UIElement_t status_icon_battery_node;
@@ -47,6 +49,7 @@ static UIElement_t status_icon_wifi_node;
 static UIElement_t status_icon_ntp_node;
 static UIElement_t status_icon_buzzer_node;
 static UIElement_t status_icon_mode_node;
+static UIElement_t status_icon_spacer_node;
 
 // Размеры
 #define STATUS_BAR_HEIGHT 25
@@ -75,7 +78,7 @@ extern UIElement_t* current_menu_listbox;
 extern MenuItem_t* current_menu_items;
 extern uint8_t current_menu_count;
 
-static void gui_measurement_callback(const MeasurementResults* r) {
+/* static void gui_measurement_callback(const MeasurementResults* r) {
     if (!r) return;
     if (ui_swr_row != NULL) {
         UI_SetText(ui_swr_row, "SWR: %.2f", r->swr);
@@ -83,7 +86,7 @@ static void gui_measurement_callback(const MeasurementResults* r) {
     // Пометим панели на перерисовку
     if (digits_node.sprite != NULL) GUI_InvalidateSprite(digits_node.sprite);
     if (graph_node.sprite != NULL) GUI_InvalidateSprite(graph_node.sprite);
-}
+} */
 
 void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
@@ -130,6 +133,9 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     
     status_icon_mode_sprite.data = NULL;
     status_icon_mode_sprite.is_allocated = false;
+
+    status_spacer_sprite.data = NULL;
+    status_spacer_sprite.is_allocated = false;
 
     // Сбрасываем счетчики строк и списка
     GUI_Panel_ClearStrings(&digits_node);
@@ -218,7 +224,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     UIElement_t* el = GUI_Panel_AddString(&digits_node, "--ИЗМЕРЕНИЯ--");
     if(el) {
         el->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
-        el->vertical_alignment   = HORIZONTAL_ALIGN_CENTER;
+        el->vertical_alignment   = VERTICAL_ALIGN_CENTER;
         el->background_color = RGB565_BLACK;
         el->h = 16;
     }
@@ -227,7 +233,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     ui_swr_row = GUI_Panel_AddString(&digits_node, "SWR: 1.00"); 
     if(ui_swr_row) {
         ui_swr_row->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-        ui_swr_row->vertical_alignment   = HORIZONTAL_ALIGN_CENTER;
+        ui_swr_row->vertical_alignment   = VERTICAL_ALIGN_CENTER;
         ui_swr_row->background_color = RGB565_BLACK;
         ui_swr_row->h = 16;
     }
@@ -239,6 +245,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         el->background_color = RGB565_BLACK;
         el->h = 16;
     }
+
 
     // --- LISTBOX ---
     UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
@@ -360,17 +367,19 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Отключаем спрайты у детей, чтобы MeasureAndArrange не пытался аллоцировать старые буферы
     // или использовал неправильные размеры
     // Проставляем спрайты элементам перед обмером
-    for (uint8_t i = 0; i < digits_node.children_count; i++) {
+    /* for (uint8_t i = 0; i < digits_node.children_count; i++) {
         if (digits_node.children[i]) {
             digits_node.children[i]->sprite = &main_screen_sprite;//= NULL;
+            //digits_node.children[i]->sprite = NULL;
         }
     }
     ui_bands_listbox.sprite = &main_screen_sprite;
     for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
         if (ui_bands_listbox.children[i]) {
             ui_bands_listbox.children[i]->sprite = &main_screen_sprite;//= NULL;
+            //ui_bands_listbox.children[i]->sprite = NULL;
         }
-    }
+    } */
     ui_bands_listbox.sprite = NULL; 
 
     // Второй обмер: реальный расчет размеров с учетом динамического контента
@@ -381,7 +390,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
 
     // Возвращаем спрайты
-    for (uint8_t i = 0; i < digits_node.children_count; i++) {
+     for (uint8_t i = 0; i < digits_node.children_count; i++) {
         if(digits_node.children[i]) {
             digits_node.children[i]->sprite = &main_screen_sprite;
         }
@@ -392,7 +401,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
         if(ui_bands_listbox.children[i]) {
             ui_bands_listbox.children[i]->sprite = &main_screen_sprite;
         }
-    }
+    } 
 
     // ------------------------------------------------------------------
     // ФИКС 1: ОЧИСТКА ФОНА STACKPANEL
@@ -406,7 +415,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ------------------------------------------------------------------
     // ФИКС 2: ПРЕДВАРИТЕЛЬНАЯ ОТРИСОВКА ЭЛЕМЕНТОВ LISTBOX
     // ------------------------------------------------------------------
-    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+    /* for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
         UIElement_t* item = (UIElement_t*)ui_bands_listbox.children[i];
         if (item && item->sprite != NULL && item->sprite->data) {
              // Рисуем текст элемента в общий буфер панели
@@ -415,12 +424,23 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
                  Draw_GeneralText_Callback(item);
              }
         }
-    }
+    } */
 
     // Активируем флаги рендеринга для всех основных блоков
     status_bar_sprite.needs_render = true;
     graph_sprite.needs_render = true;
     main_screen_sprite.needs_render = true;
+
+    // --- ВАЖНО: Принудительно помечаем правую панель (digits_node) грязной целиком ---
+    // Это гарантирует, что MeasureAndArrange перерисует ListBox и другие элементы
+    /* if (digits_node.sprite && digits_node.sprite->is_allocated) {
+        digits_node.sprite->dirty_x1 = 0;
+        digits_node.sprite->dirty_y1 = 0;
+        digits_node.sprite->dirty_x2 = digits_node.sprite->w - 1;
+        digits_node.sprite->dirty_y2 = digits_node.sprite->h - 1;
+        digits_node.sprite->needs_render = true;
+    } */
+
 
     // Сбрасываем Dirty Rect на весь размер
     GUI_InvalidateAll(&root_grid);
@@ -429,8 +449,164 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     UI_DrawTree(&root_grid);
 
     // Подписываем GUI на обновления измерений
-    Measurement_Subscribe(gui_measurement_callback);
+    //Measurement_Subscribe(gui_measurement_callback);
 }
+
+void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
+    // ====================================================================
+    // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
+    // ====================================================================
+    
+    // 1. Поворачиваем железо дисплея
+    ST7796_SetRotation(rotation);
+    
+    // Полностью очищаем прошлый пул памяти графики
+    // ВАЖНО: Это освобождает память, но не обнуляет данные в старых буферах, если они останутся.
+    // Однако, так как мы используем reset_pool, мы теряем доступ ко всем старым данным.
+    heap_caps_reset_pool();
+    
+    // Принудительно зануляем указатели .data, чтобы движок понял, что память очищена!
+    status_bar_sprite.data = NULL;
+    status_bar_sprite.is_allocated = false;
+
+    main_screen_sprite.data = NULL;
+    main_screen_sprite.is_allocated = false;
+
+    // Сбрасываем счетчики строк и списка
+    GUI_Panel_ClearStrings(&digits_node);
+    ui_bands_listbox.children_count = 0;
+    panel_rows_count = 0; 
+
+    // Сброс глобальных указателей на динамику, чтобы избежать использования "зombie" элементов
+    ui_swr_row = NULL;
+    ui_btn_row = NULL;
+    ui_touch_row = NULL;
+
+    extern uint16_t Display_Width;
+    extern uint16_t Display_Height;
+
+    // --- НАСТРОЙКА КОРНЕВОЙ СЕТКИ ---
+    root_grid.type = UI_TYPE_GRID;
+    root_grid.children_count = 0;
+    root_grid.props.grid.rows_count = 2;
+    root_grid.props.grid.cols_count = 1;
+
+    UI_SetGridRowPixel(&root_grid, 0, 25);  //status bar
+    UI_SetGridColPercent(&root_grid, 0, 100);
+
+    // --- СТАТУС-БАР ---
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Создаем статус-бар и добавляем его в root_grid
+     GUI_BuildModularStatusBar(&root_grid);
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // --- ВЛОЖЕННАЯ СЕТКА (График + Панель) ---
+    main_work_grid.type = UI_TYPE_GRID;
+    main_work_grid.children_count = 0;
+    main_work_grid.grid_row = 1;
+    main_work_grid.grid_col = 0;
+    main_work_grid.props.grid.rows_count = 1;
+    main_work_grid.props.grid.cols_count = 1;
+    
+    
+    UI_SetGridColPercent(&main_work_grid, 0, 100);
+    root_grid.children[root_grid.children_count++] = &main_work_grid;
+
+    
+
+    // --- ПРАВАЯ ПАНЕЛЬ (STACK) ---
+    digits_node.type = UI_TYPE_STACK_PANEL;
+    digits_node.sprite = &main_screen_sprite; 
+    digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
+    digits_node.props.stack.spacing = 2; 
+    digits_node.grid_row = 0; 
+    digits_node.grid_col = 0; 
+    digits_node.children_count = 0; 
+    digits_node.background_color = RGB565_BLACK;
+    // Устанавливаем шрифт по умолчанию для всей панели (опционально, если он наследуется)
+    digits_node.font = &font_arial_9_struct; 
+    main_work_grid.children[main_work_grid.children_count++] = &digits_node;
+
+    // ПЕРВЫЙ ОБМЕР: Определение доступного пространства
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+
+    // ====================================================================
+    // ЭТАП 2: НАПОЛНЕНИЕ КОНТЕНТОМ
+    // ====================================================================
+
+    // Создаем ListBox для меню
+    if (digits_node.children_count < MAX_ELEMENT_CHILDREN) {
+        UIElement_t* menu_lb = &panel_rows[panel_rows_count++];
+        memset(menu_lb, 0, sizeof(UIElement_t));
+        
+        // Инициализируем как ListBox
+        menu_lb->type = UI_TYPE_LIST_BOX;
+        menu_lb->sprite = &main_screen_sprite; // Общий спрайт панели
+        menu_lb->font = &font_segoe_struct;//font_arial_9_struct;
+        
+        // Настройки высоты: можно сделать фиксированной или авто
+        menu_lb->props.list_box.height_mode = UI_LISTBOX_HEIGHT_FIXED;
+        menu_lb->props.list_box.pixel_height = 0; // Высота блока меню
+        
+        digits_node.children[digits_node.children_count++] = menu_lb;
+        
+        // Устанавливаем глобальный указатель
+        current_menu_listbox = menu_lb;
+        
+         // Мы НЕ вызываем Menu_Draw с передачей массива.
+        // Мы вызываем Menu_Draw, используя текущие глобальные данные меню (current_menu_items).
+        // Но перед этим нужно убедиться, что current_menu_items указывает на mainMenu.
+        
+        // Либо, если вы хотите жестко привязать главное меню здесь:
+        // Предположим, в menu.h есть extern MenuItem_t* current_menu_items;
+        // И в menu.c в Menu_Init() мы уже установили current_menu_items = mainMenu;
+        
+        // Вызываем отрисовку, используя то, что сейчас "активно" в меню
+        Menu_Draw(menu_lb, current_menu_items, current_menu_count);
+    }
+    
+    // ====================================================================
+    // ЭТАП 3: ОБМЕР И АЛЛОКАЦИЯ ПАМЯТИ (ВТОРОЙ ПРОГОН)
+    // ====================================================================
+
+    ui_bands_listbox.sprite = NULL; 
+
+    // Второй обмер: реальный расчет размеров с учетом динамического контента
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
+
+// Возвращаем спрайты
+     for (uint8_t i = 0; i < digits_node.children_count; i++) {
+        if(digits_node.children[i]) {
+            digits_node.children[i]->sprite = &main_screen_sprite;
+        }
+    }
+    
+    ui_bands_listbox.sprite = &main_screen_sprite;
+    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+        if(ui_bands_listbox.children[i]) {
+            ui_bands_listbox.children[i]->sprite = &main_screen_sprite;
+        }
+    } 
+
+    // ------------------------------------------------------------------
+    // ФИКС 1: ОЧИСТКА ФОНА STACKPANEL
+    // Используем memset для скорости, так как это бинарный паттерн (0 = Black)
+    // ------------------------------------------------------------------
+    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
+        uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
+        memset(main_screen_sprite.data, 0x00, total_pixels * 2); // 0x0000 = Black in RGB565
+    }
+
+
+
+
+    // Сбрасываем Dirty Rect на весь размер
+    GUI_InvalidateAll(&root_grid);
+    
+    // Полная отрисовка
+    UI_DrawTree(&root_grid);
+}
+
+
 
 void UI_SetGridRowPixel(UIElement_t* grid_elem, uint8_t row_idx, uint8_t size_px) {
     if (!grid_elem || grid_elem->type != UI_TYPE_GRID) return;
@@ -492,7 +668,7 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
  * @param available_w Доступная ширина
  * @param available_h Доступная высота
  */
-void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h) {
+/* void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h) {
     if (!element) return;
 
     // 1. Установка базовых координат и доступных размеров
@@ -501,14 +677,33 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
     element->w = available_w; 
     element->h = available_h;
 
-    // Если у элемента нет детей и есть спрайт, занимаемся аллокацией памяти под него
+    // --- ЛОГИКА ДЛЯ КОНТЕЙНЕРОВ С ОБЩИМ СПРАЙТОМ ---
+    // Если это StackPanel или ListBox, которые используют общий спрайт (например, main_screen_sprite),
+    // нам нужно убедиться, что размеры спрайта соответствуют элементам, если это первый проход или размер изменился.
+    // Но мы НЕ должны выделять/фрить память здесь, это делает GUI_ShowAdvancedMeasurementScreen или аллокатор.
+    
+    if (element->children_count > 0) {
+        if (element->sprite != NULL) {
+            Sprite_t* s = element->sprite;
+            // Обновляем координаты спрайта (важно дляdirty rect)
+            if (s->w != element->w || s->h != element->h) {
+                s->w = element->w;
+                s->h = element->h;
+                // Если спрайт общий, мы не меняем его буфер здесь, если он уже выделен большим.
+                // Но если он маленький и должен стать большим — это может быть проблемой.
+                // В вашем случае main_screen_sprite обычно большой (размер всей правой панели).
+            }
+            s->x = element->x;
+            s->y = element->y;
+        }
+    }
+
+    // Если у элемента нет детей и есть спрайт — аллоцируем/чистим его
     if (element->children_count == 0 && element->sprite != NULL) {
         Sprite_t* s = element->sprite;
         
-        // Проверяем необходимость перераспределения буфера
         bool needs_realloc = (s->data == NULL || s->w != element->w || s->h != element->h || !s->is_allocated);
         
-        // Защита от выделения памяти при нулевых размерах
         if (element->w == 0 || element->h == 0) {
             if (s->is_allocated && s->data) {
                 heap_caps_free(s->data);
@@ -522,7 +717,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             if (s->is_allocated && s->data) {
                 heap_caps_free(s->data);
             }
-            size_t bytes = (size_t)element->w * (size_t)element->h * 2; // RGB565 = 2 bytes
+            size_t bytes = (size_t)element->w * (size_t)element->h * 2;
             s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
             s->is_allocated = (s->data != NULL);
             s->w = element->w;
@@ -531,104 +726,76 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             s->y = element->y;
             
             if (s->is_allocated) {
-                memset(s->data, 0, bytes); // Очистка памяти
+                memset(s->data, 0, bytes);
             }
         }
         return; 
     }
 
-    // 2. Обработка контейнеров: StackPanel и ListBox
+    // 2. Обработка StackPanel и ListBox
     if (element->type == UI_TYPE_STACK_PANEL || element->type == UI_TYPE_LIST_BOX) {
-        // Для контейнеров, использующих общий спрайт (например, main_screen_sprite),
-        // мы не меняем размеры самого спрайта здесь, так как он принадлежит рооту.
-        // Мы лишь корректируем логику расчета детей.
         
-        if (element->sprite != NULL) {
-            Sprite_t* s = element->sprite;
-            s->x = element->x; 
-            s->y = element->y;
-        }
-
         if (element->type == UI_TYPE_LIST_BOX) {
             // --- ЛОГИКА LISTBOX ---
-            
-            // Определяем высоту одного элемента
             uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
-            uint16_t item_h = font_h + 6; // 6px padding
+            uint16_t item_h = font_h + 6; 
             
-            // Корректировка высоты ListBox на основе режимов
-            uint16_t list_h = element->h; // По умолчанию берем доступное пространство
-            
-            if (element->props.list_box.height_mode == UI_LISTBOX_HEIGHT_FIXED) {
-                if (element->props.list_box.pixel_height > 0) {
-                    list_h = element->props.list_box.pixel_height;
-                }
-                // Ограничиваем, чтобы ListBox не вылез за пределы родителя
-                if (list_h > available_h) list_h = available_h;
-            } else {
-                // AUTO mode: пытаемся вместить все или видимое кол-во
-                // Если элементов больше, чем влезает по высоте, берем доступную высоту
-                if (list_h > available_h) list_h = available_h;
-                if (list_h == 0) list_h = 120; // Фоллбек
+            uint16_t list_h = element->h; 
+
+            if (list_h == 0 && element->props.list_box.height_mode == UI_LISTBOX_HEIGHT_AUTO) {
+                list_h = 120; 
+            }
+
+            if (available_h > 0 && list_h > available_h) {
+                list_h = available_h;
             }
             
             if (list_h == 0) list_h = 120;
-            element->h = list_h; // Применяем расчетную высоту к элементу
+            
+            element->h = list_h;
 
-            // Расчет видимых элементов
             uint8_t visible_count = (list_h + item_h - 1) / item_h;
             if (visible_count == 0) visible_count = 1;
             
-            // Расчет ширины с учетом скроллбара
             uint8_t max_offset = (element->children_count > visible_count) ? (element->children_count - visible_count) : 0;
             uint16_t scrollbar_width = (max_offset > 0) ? 10 : 0;
-            uint16_t item_w = element->w - scrollbar_width;
-            if (item_w < 8) item_w = 8;
-
-            // Распределение позиций детям
+            
             for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
                 UIElement_t* child = (UIElement_t*)element->children[i];
                 if (!child) continue;
 
-                // Восстанавливаем спрайт если потерялся
                 if (child->sprite == NULL && element->sprite != NULL) {
                     child->sprite = element->sprite;
                 }
 
-                // Определяем индекс видимости
                 int16_t relative_index = i - element->props.list_box.scroll_offset;
                 
                 if (relative_index >= 0 && relative_index < (int16_t)visible_count) {
-                    // Элемент видим
                     int16_t item_y = element->y + (int16_t)((i - element->props.list_box.scroll_offset) * item_h);
+                    uint16_t child_w = element->w - scrollbar_width;
                     
                     child->x = element->x;
                     child->y = item_y;
-                    child->w = item_w;
+                    child->w = child_w; 
                     child->h = item_h;
                     
-                    // Рекурсивный обмер
                     UI_MeasureAndArrange(child, child->x, child->y, child->w, child->h);
                 } else {
-                    // Элемент скрыт
                     child->w = 0;
                     child->h = 0;
-                    // Помещаем далеко за экран, чтобы не мешал
                     UI_MeasureAndArrange(child, element->x + element->w + 1000, element->y + element->h + 1000, 0, 0);
                 }
             }
-            return; // ListBox сам управляет своими детьми, Grid/StackPanel тут не нужны
+            return; 
         }
-    }
 
-    // 3. Обработка StackPanel
-    if (element->type == UI_TYPE_STACK_PANEL) {
+        // --- ЛОГИКА STACK_PANEL ---
+        // StackPanel обычно растягивается на всю доступную ширину и занимает оставшуюся высоту
         uint16_t fixed_height_sum = 0;
         uint16_t spacing_total = (element->children_count > 1) ? (uint16_t)(element->children_count - 1) * element->props.stack.spacing : 0;
         uint32_t total_weight = 0;
         uint8_t dynamic_count = 0;
 
-        // Первый проход: собираем суммы фиксированных и динамических высот
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             if (!child) continue;
@@ -641,14 +808,12 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             }
         }
 
-        // Остаток места для динамических элементов
         int32_t remaining_h = (int32_t)element->h - (int32_t)fixed_height_sum - (int32_t)spacing_total;
         if (remaining_h < 0) remaining_h = 0;
 
         uint16_t cur_y = element->y;
-        uint8_t first_dynamic_processed = 0; // Для раздачи остатка при округлении
+        uint8_t first_dynamic_processed = 0; 
 
-        // Второй проход: распределение и рекурсия
         for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
             if (!child) continue;
@@ -658,37 +823,30 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             if (child->h > 0) {
                 child_h = child->h;
             } else if (dynamic_count > 0 && total_weight > 0 && remaining_h > 0) {
-                // Расчет пропорциональной высоты
                 uint32_t weight = (child->layout_weight > 0) ? child->layout_weight : 1;
                 child_h = (uint16_t)((remaining_h * weight) / total_weight);
                 
-                // Минимальная высота (шрифт)
                 uint16_t min_h = (current_font != NULL) ? current_font->char_height : 12;
                 if (child_h < min_h) child_h = min_h;
 
-                // Раздача остатка от округления первому динамическому элементу
                 if (!first_dynamic_processed) {
-                    // Нечто вроде: вычислить теоретический точный размер, округлить вниз, 
-                    // и остаток добавить сюда. Но для простоты оставим текущую логику, 
-                    // либо можно собрать остаток в конце и добавить последнему.
-                    // Для улучшения UX можно оставить как есть или добавить логику "кирпичиков".
+                    first_dynamic_processed = 1;
                 }
-                first_dynamic_processed = 1;
             }
 
-            // Рекурсивный вызов
+            // Важно: StackPanel элементы обычно занимают всю ширину родителя
             UI_MeasureAndArrange(child, element->x, cur_y, element->w, child_h);
             
             cur_y += child_h + element->props.stack.spacing;
         }
+        return;
     }
 
 
-    // 4. Обработка Grid
+    // 3. Обработка Grid
     if (element->type == UI_TYPE_GRID) {
         GridDefinition_t* grid = &element->props.grid;
         
-        // Проверка целостности
         if (grid->rows_count > MAX_GRID_ROWS) grid->rows_count = MAX_GRID_ROWS;
         if (grid->cols_count > MAX_GRID_COLS) grid->cols_count = MAX_GRID_COLS;
 
@@ -712,7 +870,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             }
         }
 
-        // --- ШАГ 2: Коррекция переполнения пикселями ---
+        // --- ШАГ 2: Коррекция переполнения ---
         if (total_pixel_rows > element->h && element->h > 0) {
             float scale = (float)element->h / (float)total_pixel_rows;
             total_pixel_rows = 0;
@@ -771,14 +929,12 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
                         size = remaining_h / dynamic_rows;
                     }
                     
-                    // Защита от переполнения
                     if (current_allocated + size > remaining_h) size = remaining_h - current_allocated;
                     
                     row_heights[r] = size;
                     current_allocated += size;
                 }
             }
-            // Добавляем остаток округления в первую динамическую строку
             if (current_allocated < remaining_h) {
                 uint16_t remainder = remaining_h - current_allocated;
                 for (uint8_t r = 0; r < grid->rows_count; r++) {
@@ -825,6 +981,7 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             }
         }
 
+
         // --- ШАГ 6: Присвоение координат и размеров детям ---
         for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
             UIElement_t* child = (UIElement_t*)element->children[i];
@@ -857,8 +1014,8 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
         }
     }
 }
-
-/* void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h) {
+ */
+ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h) {
     if (!element) return;
 
     // Базовые координаты
@@ -1170,8 +1327,357 @@ void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent
             UI_MeasureAndArrange(child, cell_x, cell_y, cell_w, cell_h);
         }
     }
-} */
+}  
 
+
+/**
+ * @brief Рекурсивно вычисляет размеры и координаты элементов UI (Measure & Pass)
+ * 
+ * Версия, основанная на стабильной логике обработки StackPanel и ListBox,
+ * с защитой от null-указателей и деления на ноль.
+ */
+/* void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h) {
+    if (!element) return;
+
+    // 1. Установка базовых координат и доступных размеров
+    element->x = parent_x; 
+    element->y = parent_y;
+    element->w = available_w; 
+    element->h = available_h;
+
+    // --- ЛОГИКА ДЛЯ КОНТЕЙНЕРОВ С ОБЩИМ СПРАЙТОМ ---
+    // Если это StackPanel или ListBox, которые используют общий спрайт (например, main_screen_sprite),
+    // нам нужно убедиться, что размеры спрайта соответствуют элементам, если это первый проход или размер изменился.
+    
+    if (element->children_count > 0) {
+        if (element->sprite != NULL) {
+            Sprite_t* s = element->sprite;
+            // Обновляем координаты спрайта (важно для dirty rect)
+            if (s->w != element->w || s->h != element->h) {
+                s->w = element->w;
+                s->h = element->h;
+            }
+            s->x = element->x;
+            s->y = element->y;
+        }
+    }
+
+    // Если у элемента нет детей и есть спрайт — аллоцируем/чистим его
+    if (element->children_count == 0 && element->sprite != NULL) {
+        Sprite_t* s = element->sprite;
+        
+        bool needs_realloc = (s->data == NULL || s->w != element->w || s->h != element->h || !s->is_allocated);
+        
+        if (element->w == 0 || element->h == 0) {
+            if (s->is_allocated && s->data) {
+                heap_caps_free(s->data);
+                s->is_allocated = false;
+                s->data = NULL;
+            }
+            return; 
+        }
+
+        if (needs_realloc) {
+            if (s->is_allocated && s->data) {
+                heap_caps_free(s->data);
+            }
+            size_t bytes = (size_t)element->w * (size_t)element->h * 2;
+            s->data = (uint16_t*)heap_caps_malloc(bytes, 0);
+            s->is_allocated = (s->data != NULL);
+            s->w = element->w;
+            s->h = element->h;
+            s->x = element->x;
+            s->y = element->y;
+            
+            if (s->is_allocated) {
+                memset(s->data, 0, bytes);
+            }
+        }
+        return; 
+    }
+
+    // 2. Обработка StackPanel и ListBox
+    if (element->type == UI_TYPE_STACK_PANEL || element->type == UI_TYPE_LIST_BOX) {
+        
+        if (element->type == UI_TYPE_LIST_BOX) {
+            // --- ЛОГИКА LISTBOX ---
+            uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
+            uint16_t item_h = font_h + 6; 
+            
+            uint16_t list_h = element->h; 
+
+            if (list_h == 0 && element->props.list_box.height_mode == UI_LISTBOX_HEIGHT_AUTO) {
+                list_h = 120; 
+            }
+
+            if (available_h > 0 && list_h > available_h) {
+                list_h = available_h;
+            }
+            
+            if (list_h == 0) list_h = 120;
+            
+            element->h = list_h;
+
+            uint8_t visible_count = (list_h + item_h - 1) / item_h;
+            if (visible_count == 0) visible_count = 1;
+            
+            uint8_t max_offset = (element->children_count > visible_count) ? (element->children_count - visible_count) : 0;
+            uint16_t scrollbar_width = (max_offset > 0) ? 10 : 0;
+            
+            for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+                UIElement_t* child = (UIElement_t*)element->children[i];
+                if (!child) continue;
+
+                if (child->sprite == NULL && element->sprite != NULL) {
+                    child->sprite = element->sprite;
+                }
+
+                int16_t relative_index = i - element->props.list_box.scroll_offset;
+                
+                if (relative_index >= 0 && relative_index < (int16_t)visible_count) {
+                    int16_t item_y = element->y + (int16_t)((i - element->props.list_box.scroll_offset) * item_h);
+                    uint16_t child_w = element->w - scrollbar_width;
+                    
+                    child->x = element->x;
+                    child->y = item_y;
+                    child->w = child_w; 
+                    child->h = item_h;
+                    
+                    UI_MeasureAndArrange(child, child->x, child->y, child->w, child->h);
+                } else {
+                    child->w = 0;
+                    child->h = 0;
+                    UI_MeasureAndArrange(child, element->x + element->w + 1000, element->y + element->h + 1000, 0, 0);
+                }
+            }
+            return; 
+        }
+
+        // --- ЛОГИКА STACK_PANEL ---
+        // StackPanel обычно растягивается на всю доступную ширину и занимает оставшуюся высоту
+        uint16_t fixed_height_sum = 0;
+        uint16_t spacing_total = (element->children_count > 1) ? (uint16_t)(element->children_count - 1) * element->props.stack.spacing : 0;
+        uint32_t total_weight = 0;
+        uint8_t dynamic_count = 0;
+
+        for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            if (!child) continue;
+
+            if (child->h > 0) {
+                fixed_height_sum += child->h;
+            } else {
+                dynamic_count++;
+                total_weight += (child->layout_weight > 0) ? child->layout_weight : 1;
+            }
+        }
+
+        int32_t remaining_h = (int32_t)element->h - (int32_t)fixed_height_sum - (int32_t)spacing_total;
+        if (remaining_h < 0) remaining_h = 0;
+
+        uint16_t cur_y = element->y;
+        uint8_t first_dynamic_processed = 0; 
+
+        for (uint8_t i = 0; i < element->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            if (!child) continue;
+
+            uint16_t child_h = 0;
+            
+            if (child->h > 0) {
+                child_h = child->h;
+            } else if (dynamic_count > 0 && total_weight > 0 && remaining_h > 0) {
+                uint32_t weight = (child->layout_weight > 0) ? child->layout_weight : 1;
+                child_h = (uint16_t)((remaining_h * weight) / total_weight);
+                
+                uint16_t min_h = (current_font != NULL) ? current_font->char_height : 12;
+                if (child_h < min_h) child_h = min_h;
+
+                if (!first_dynamic_processed) {
+                    first_dynamic_processed = 1;
+                }
+            }
+
+            // Важно: StackPanel элементы обычно занимают всю ширину родителя
+            UI_MeasureAndArrange(child, element->x, cur_y, element->w, child_h);
+            
+            cur_y += child_h + element->props.stack.spacing;
+        }
+        return;
+    }
+
+
+    // 3. Обработка Grid
+    if (element->type == UI_TYPE_GRID) {
+        GridDefinition_t* grid = &element->props.grid;
+        
+        if (grid->rows_count > MAX_GRID_ROWS) grid->rows_count = MAX_GRID_ROWS;
+        if (grid->cols_count > MAX_GRID_COLS) grid->cols_count = MAX_GRID_COLS;
+
+        uint16_t row_heights[MAX_GRID_ROWS] = {0};
+        uint16_t col_widths[MAX_GRID_COLS] = {0};
+
+        uint16_t total_pixel_rows = 0;
+        uint16_t total_pixel_cols = 0;
+
+        // --- ШАГ 1: Фиксированные (пиксельные) размеры ---
+        for (uint8_t r = 0; r < grid->rows_count; r++) {
+            if (grid->row_is_pixel[r]) {
+                row_heights[r] = grid->row_definitions[r];
+                total_pixel_rows += row_heights[r];
+            }
+        }
+        for (uint8_t c = 0; c < grid->cols_count; c++) {
+            if (grid->col_is_pixel[c]) {
+                col_widths[c] = grid->col_definitions[c];
+                total_pixel_cols += col_widths[c];
+            }
+        }
+
+        // --- ШАГ 2: Коррекция переполнения ---
+        if (total_pixel_rows > element->h && element->h > 0) {
+            float scale = (float)element->h / (float)total_pixel_rows;
+            total_pixel_rows = 0;
+            for (uint8_t r = 0; r < grid->rows_count; r++) {
+                if (grid->row_is_pixel[r]) {
+                    row_heights[r] = (uint16_t)((float)row_heights[r] * scale);
+                    total_pixel_rows += row_heights[r];
+                }
+            }
+        }
+        if (total_pixel_cols > element->w && element->w > 0) {
+            float scale = (float)element->w / (float)total_pixel_cols;
+            total_pixel_cols = 0;
+            for (uint8_t c = 0; c < grid->cols_count; c++) {
+                if (grid->col_is_pixel[c]) {
+                    col_widths[c] = (uint16_t)((float)col_widths[c] * scale);
+                    total_pixel_cols += col_widths[c];
+                }
+            }
+        }
+
+        // --- ШАГ 3: Расчет свободного пространства ---
+        uint16_t remaining_h = (element->h > total_pixel_rows) ? (element->h - total_pixel_rows) : 0;
+        uint16_t remaining_w = (element->w > total_pixel_cols) ? (element->w - total_pixel_cols) : 0;
+
+        uint32_t percent_sum_h = 0, weight_sum_h = 0;
+        uint32_t percent_sum_w = 0, weight_sum_w = 0;
+        uint8_t dynamic_rows = 0, dynamic_cols = 0;
+
+        for (uint8_t r = 0; r < grid->rows_count; r++) {
+            if (!grid->row_is_pixel[r]) {
+                percent_sum_h += grid->row_definitions[r];
+                weight_sum_h += (grid->row_weights[r] > 0) ? grid->row_weights[r] : 1;
+                dynamic_rows++;
+            }
+        }
+        for (uint8_t c = 0; c < grid->cols_count; c++) {
+            if (!grid->col_is_pixel[c]) {
+                percent_sum_w += grid->col_definitions[c];
+                weight_sum_w += (grid->col_weights[c] > 0) ? grid->col_weights[c] : 1;
+                dynamic_cols++;
+            }
+        }
+
+        // --- ШАГ 4: Распределение оставшейся высоты ---
+        if (remaining_h > 0 && dynamic_rows > 0) {
+            uint16_t current_allocated = 0;
+            for (uint8_t r = 0; r < grid->rows_count; r++) {
+                if (!grid->row_is_pixel[r]) {
+                    uint16_t size = 0;
+                    if (percent_sum_h > 0 && grid->row_definitions[r] > 0) {
+                        size = (uint16_t)((uint32_t)remaining_h * grid->row_definitions[r] / percent_sum_h);
+                    } else if (weight_sum_h > 0) {
+                        size = (uint16_t)((uint32_t)remaining_h * (grid->row_weights[r] > 0 ? grid->row_weights[r] : 1) / weight_sum_h);
+                    } else {
+                        size = remaining_h / dynamic_rows;
+                    }
+                    
+                    if (current_allocated + size > remaining_h) size = remaining_h - current_allocated;
+                    
+                    row_heights[r] = size;
+                    current_allocated += size;
+                }
+            }
+            if (current_allocated < remaining_h) {
+                uint16_t remainder = remaining_h - current_allocated;
+                for (uint8_t r = 0; r < grid->rows_count; r++) {
+                    if (!grid->row_is_pixel[r]) {
+                        row_heights[r] += remainder;
+                        break; 
+                    }
+                }
+            }
+        }
+
+        // --- ШАГ 5: Расчет размеров гибких колонок ---
+        if (remaining_w > 0 && dynamic_cols > 0) {
+            uint16_t current_allocated = 0;
+            
+            for (uint8_t c = 0; c < grid->cols_count; c++) {
+                if (!grid->col_is_pixel[c]) {
+                    uint16_t size = 0;
+                    if (percent_sum_w > 0 && grid->col_definitions[c] > 0) {
+                        size = (uint16_t)((uint32_t)remaining_w * grid->col_definitions[c] / percent_sum_w);
+                    } else if (weight_sum_w > 0 && dynamic_cols > 0) {
+                        size = (uint16_t)((uint32_t)remaining_w * (grid->col_weights[c] > 0 ? grid->col_weights[c] : 1) / weight_sum_w);
+                    } else {
+                        size = remaining_w / dynamic_cols;
+                    }
+                    
+                    if (current_allocated + size > remaining_w) {
+                        size = remaining_w - current_allocated;
+                    }
+                    
+                    col_widths[c] = size;
+                    current_allocated += size;
+                }
+            }
+            
+            if (current_allocated < remaining_w) {
+                uint16_t remainder = remaining_w - current_allocated;
+                for (uint8_t c = 0; c < grid->cols_count; c++) {
+                    if (!grid->col_is_pixel[c]) {
+                        col_widths[c] += remainder;
+                        break;
+                    }
+                }
+            }
+        }
+
+        
+        // --- ШАГ 6: Присвоение координат и размеров детям ---
+        for (uint8_t i = 0; i < element->children_count && i < MAX_GRID_CHILDREN; i++) {
+            UIElement_t* child = (UIElement_t*)element->children[i];
+            if (!child) continue;
+
+            // Проверка границ индексов ячейки
+            if (child->grid_row >= grid->rows_count || child->grid_col >= grid->cols_count) continue;
+
+            int16_t cell_x = element->x;
+            int16_t cell_y = element->y;
+
+            // Суммируем ширины колонок слева
+            for (uint8_t c = 0; c < child->grid_col; c++) {
+                cell_x += col_widths[c];
+            }
+            // Суммируем высоты строк сверху
+            for (uint8_t r = 0; r < child->grid_row; r++) {
+                cell_y += row_heights[r];
+            }
+
+            uint16_t cell_w = col_widths[child->grid_col];
+            uint16_t cell_h = row_heights[child->grid_row];
+
+            // Минимальный размер 1x1, чтобы не передать 0 в дочерний элемент
+            if (cell_w < 1) cell_w = 1;
+            if (cell_h < 1) cell_h = 1;
+
+            // Вызываем рекурсивный обмер
+            UI_MeasureAndArrange(child, cell_x, cell_y, cell_w, cell_h);
+        }
+    }
+} */
 /**
  * @brief Вспомогательная функция для отрисовки одиночного дочернего элемента
  *        Обеспечивает инкапсуляцию и защиту от дублирования кода в UI_DrawTree
@@ -1299,146 +1805,10 @@ void UI_DrawTree(UIElement_t* element) {
     } 
 }
 
-uint8_t currentHour = 07;
-uint8_t currentMinute = 05;
-uint8_t battery_Level = 100;
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Колбэк отрисовки ТОЛЬКО ЧАСОВ
-void Draw_Clock_Callback(UIElement_t* el) {
-    if (!el || !el->sprite) return;
-    Sprite_t* sprite = el->sprite;
-
-    // Стираем старые часы внутри маленького буфера
-    Sprite_fill(sprite, RGB565_BLACK);
-    
-    lcd_set_font(&font_segoe_struct);
-    char timeBuf[8];
-    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
-    
-    // Рисуем в локальных координатах спрайта (0, 0)
-    lcd_print_to_buffer(2, 4, RGB565_WHITE, timeBuf, RGB565_BLACK, sprite);
-    
-    // Помечаем, что весь этот мини-спрайт изменился
-    sprite->dirty_x1 = 0; sprite->dirty_y1 = 0;
-    sprite->dirty_x2 = sprite->w - 1; sprite->dirty_y2 = sprite->h - 1;
-    sprite->needs_render = true;
-}
-
-// Колбэк отрисовки ТОЛЬКО ИКОНОК И БАТАРЕИ
-void Draw_Icons_Callback(UIElement_t* el) {
-    if (!el || !el->sprite) return;
-    Sprite_t* sprite = el->sprite;
-
-    Sprite_fill(sprite, RGB565_BLACK);
-    lcd_set_font(&font_arial_9_struct);
-    
-    int16_t curX = sprite->w - 5; // Начинаем от правого края спрайта (120)
-    
-    // Текст батареи
-    char batBuf[8];
-    snprintf(batBuf, sizeof(batBuf), "%d%%", battery_Level);
-    curX -= lcd_get_str_width(batBuf);
-    lcd_print_to_buffer(curX, 4, RGB565_WHITE, batBuf, RGB565_BLACK, sprite);
-    
-    // Иконка батареи
-    curX -= 18;
-    Draw_Bitmap_To_Sprite(sprite, curX, 4, icon_battery_16_16_bits, 16, 16, RGB565_WHITE);
-    
-    // Иконка Bluetooth
-    if (bluetoothEnabled) {
-        curX -= 14;
-        Draw_Bitmap_To_Sprite(sprite, curX, 4, icon_bluetooth_bits, 12, 16, RGB565_BLUE);
-    }
-    
-    // Помечаем весь мини-спрайт иконок грязным
-    sprite->dirty_x1 = 0; sprite->dirty_y1 = 0;
-    sprite->dirty_x2 = sprite->w - 1; sprite->dirty_y2 = sprite->h - 1;
-    sprite->needs_render = true;
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-extern int batteryLevel;
-extern bool bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, bluetoothMode;
-extern uint8_t currentHour, currentMinute;
-
-// Внешние иконки (примеры — см. ниже)
-extern const uint8_t icon_battery_bits[];
-extern const uint8_t icon_bluetooth_bits[];
-extern const uint8_t icon_wifi_bits[];
-extern const uint8_t icon_not_wifi_bits[];
-extern const uint8_t icon_ntp_bits[];
-extern const uint8_t icon_buzzer_on_bits[];
-extern const uint8_t icon_buzzer_off_bits[];
-extern const uint8_t icon_rs485ToBt_bits[];
 
 
-/**
- * @brief Полностью инвариантный render_callback для статус-бара
- * // Функция для отрисовки контента внутри статус-бара
- */
-void Draw_StatusBar_Callback(UIElement_t* el) {
-    if (!el || !el->sprite || !el->sprite->data) return;
-    // Извлекаем физический спрайт из элемента
-    Sprite_t* sprite = el->sprite; // Достаем физический спрайт из элемента
-
-    // 1. Очистка буфера статус-бара цветом RGB565_DARK_GRAY (например, 0x39E7)
-    Sprite_fill(sprite, RGB565_BLACK);
-
-    // 2. Отрисовка ВРЕМЕНИ (слева, отступ 5 пикселей)
-    lcd_set_font(&font_segoe_struct);
-    char timeBuf[8];
-    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
-    lcd_print_to_buffer(5, 4, RGB565_WHITE, timeBuf, RGB565_DARK_GRAY, sprite);
-
-    // Меняем шрифт для системных иконок и параметров
-    lcd_set_font(&font_arial_9_struct);
-
-    // 3. Динамический инвариантный расчет правого края (смещаемся влево от правого конца спрайта s->w)
-    int16_t curX = sprite->w - 5; // Стартуем в 5 пикселях от правого края экрана
-
-    // --- Батарея (Текст) ---
-    char batBuf[8]; 
-    snprintf(batBuf, sizeof(batBuf), "%d%%", battery_Level);
-    int batWidth = lcd_get_str_width(batBuf);
-    curX -= batWidth; // Сдвигаем маркер влево на ширину текста
-    lcd_print_to_buffer(curX, 4, RGB565_WHITE, batBuf, RGB565_DARK_GRAY, sprite);
-
-    // --- Иконка батареи (ширина 16) ---
-    curX -= 18; // 16 пикселей иконка + 2 пикселя зазор
-    Draw_Bitmap_To_Sprite(sprite, curX, 4, icon_battery_16_16_bits, 16, 16, RGB565_WHITE);
-
-    // --- Bluetooth Mode (RS485→BT) (ширина 10) ---
-    curX -= 12;
-    uint16_t bt_mode_color = bluetoothMode ? RGB565_GREEN : 0x528A; // Зеленый или блекло-серый
-    Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_rs485ToBt_bits, 8, 8), 8, 8, bt_mode_color);
-
-    // --- Buzzer (ширина 8) ---
-    curX -= 10;
-    const uint8_t* icon_buzz = buzzerOnOff ? icon_buzzer_on_bits : icon_buzzer_off_bits;
-    Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_buzz, 8, 8), 8, 8, RGB565_WHITE);
-
-    // --- Auto NTP (ширина 8) ---
-    if (ntpSyncEnabled) {
-        curX -= 10;
-        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_ntp_bits, 8, 8), 8, 8, RGB565_WHITE);
-    }
-
-    // --- Wi-Fi (ширина 10) ---
-    if (wifiEnabled) {
-        curX -= 12;
-        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_wifi_bits, 8, 8), 8, 8, RGB565_GREEN);
-    }
-
-    // --- Bluetooth (ширина 10) ---
-    if (bluetoothEnabled) {
-        curX -= 12;
-        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_bluetooth_bits, 8, 8), 8, 8, RGB565_BLUE);
-    }
-
-    // ВНИМАНИЕ: ST7796_PushSprite(sprite) отсюда УДАЛЕН. 
-    // Движок UI сам вызовет отправку по SPI после завершения сборки дерева.
-}
 
 
 /**
@@ -2045,264 +2415,170 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
     return item;
 }
 
-//Функция рисует рамку, подсвечивает выбранный пункт (0x10A5) и выводит текст
+/**
+ * @brief Отрисовка ListBox (фон, рамка, элементы, скроллбар)
+ * 
+ * @note ЭТА ФУНКЦИЯ ТОЛЬКО РИСУЕТ. Геометрия (x, y, w, h) уже должна быть
+ *       рассчитана в UI_MeasureAndArrange. Мы используем el->children[i]->x и т.д.
+ */
 void UI_RenderListBox(UIElement_t* el) {
     if (!el || !el->sprite || !el->sprite->data) return;
     Sprite_t* s = el->sprite;
     
-    // Локальные координаты самого ListBox внутри его физического спрайта
+    // 1. Локальные координаты ListBox внутри общего спрайта панели
     int16_t lx = el->x - s->x;
     int16_t ly = el->y - s->y;
 
-    // 1. Очистка фона ListBox и отрисовка серой рамки по краям
-    for (int16_t y = ly; y < ly + el->h; y++) {
-        if (y < 0 || y >= s->h) continue;
-        for (int16_t x = lx; x < lx + el->w; x++) {
-            if (x < 0 || x >= s->w) continue;
-            s->data[y * s->w + x] = (y == ly || y == ly + el->h - 1 || x == lx || x == lx + el->w - 1) ? 0x7BEF : RGB565_BLACK;
+    // Проверяем, что область отрисовки попадает в спрайт
+    if (lx + el->w <= 0 || lx >= s->w || ly + el->h <= 0 || ly >= s->h) return;
+
+    // --- ШАГ 1: Очистка фона и отрисовка рамки ListBox ---
+    // Определяем границы прямоугольника, который нужно залить (клиппинг)
+    int16_t clip_x1 = (lx < 0) ? 0 : lx;
+    int16_t clip_y1 = (ly < 0) ? 0 : ly;
+    int16_t clip_x2 = (lx + el->w > s->w) ? s->w : (lx + el->w);
+    int16_t clip_y2 = (ly + el->h > s->h) ? s->h : (ly + el->h);
+
+    // Заливаем фон ListBox (черный) И рисуем рамку
+    for (int16_t y = clip_y1; y < clip_y2; y++) {
+        for (int16_t x = clip_x1; x < clip_x2; x++) {
+            // Проверяем, является ли этот пиксель частью рамки
+            // Рамка имеет толщину 1 пиксель и отступ 1 пиксель от края
+            bool is_border = (x == lx + 1 || x == lx + el->w - 2 || 
+                              y == ly + 1 || y == ly + el->h - 2);
+            
+            if (is_border) {
+                s->data[y * s->w + x] = 0x7BEF; // Цвет рамки
+            } else {
+                s->data[y * s->w + x] = RGB565_BLACK; // Фон списка
+            }
         }
     }
 
+    // --- ШАГ 2: Подготовка параметров шрифта и скроллбара ---
     lcd_set_font(&font_arial_9_struct);
-    uint16_t item_h = current_font->char_height + 6;
+    uint16_t font_h = current_font->char_height;
+    uint16_t item_h = font_h + 6; // Высота строки с отступами
+    
     uint8_t start = el->props.list_box.scroll_offset;
     uint8_t visible_count = (el->h + item_h - 1) / item_h;
     if (visible_count == 0) visible_count = 1;
 
-    // Ширина зарезервированной зоны скроллбара
+    // Ширина скроллбара (должна совпадать с логикой в UI_MeasureAndArrange)
     uint8_t scrollbar_w = 10;
-    if (scrollbar_w > el->w - 2) scrollbar_w = (el->w > 2) ? (el->w - 2) : 0;
+    if (el->children_count <= visible_count) {
+        scrollbar_w = 0; // Скроллбар не нужен, если все видно
+    } else if (scrollbar_w > el->w - 2) {
+        scrollbar_w = (el->w > 2) ? (el->w - 2) : 0;
+    }
+    
+    // Реальная ширина контента (без скроллбара)
+    uint16_t content_w = el->w - scrollbar_w;
+    if (content_w < 8) content_w = 8;
 
-    // 2. Отрисовка видимых элементов списка
+    // --- ШАГ 3: Отрисовка видимых элементов ---
     for (uint8_t i = 0; i < el->children_count; i++) {
         if (i >= start && i < (start + visible_count)) {
             UIElement_t* child = (UIElement_t*)el->children[i];
             if (!child) continue;
 
-            int16_t row_y = el->y + (int16_t)((i - start) * item_h);
-            int16_t clx = el->x - s->x;
-            int16_t cly = row_y - s->y;
+            // Вычисляем Y позиции строки относительно ListBox
+            int16_t relative_row_y = (i - start) * item_h;
             
-            uint16_t bg = (i == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
+            // Абсолютные координаты строки в глобальном пространстве
+            int16_t row_abs_y = el->y + relative_row_y;
+            
+            // Локальные координаты в спрайте
+            int16_t clx = el->x - s->x; // Left X для контента
+            int16_t cly = row_abs_y - s->y;
 
-            // Вычисляем ширину контента
-            uint16_t content_w = el->w - (scrollbar_w > 0 ? scrollbar_w + 2 : 0);
-            if (content_w < 8) content_w = (el->w > 4) ? (el->w - 4) : el->w;
+            // Цвет фона элемента (выделен или нет)
+            uint16_t bg_color = (i == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
 
-            // Заливаем прямоугольник элемента
+            // --- ВАЖНО: Очищаем фон под текстом ЭТОЙ строки ---
+            // Рисуем прямоугольник фона для строки. 
+            // Важно: clip_x1/clx + 1 чтобы не задеть левую рамку
             for (int16_t y = cly; y < cly + item_h; y++) {
-                for (int16_t x = clx + 1; x < clx + (int16_t)content_w - 1; x++) {
-                    if (y < 0 || y >= s->h || x < 0 || x >= s->w) continue;
-                    s->data[y * s->w + x] = bg;
+                if (y < 0 || y >= s->h) continue;
+                
+                // Не рисуем в зоне скроллбара, если он есть
+                int16_t limit_x = (scrollbar_w > 0) ? (clx + content_w) : (clx + el->w);
+                
+                for (int16_t x = clx + 1; x < limit_x - 1; x++) {
+                    if (x < 0 || x >= s->w) continue;
+                    s->data[y * s->w + x] = bg_color;
                 }
             }
 
-            // Вычисляем координаты для текста
-            int16_t text_x = clx + 5; 
-            int16_t text_y = cly + (item_h - current_font->char_height) / 2;
+            // Отрисовка текста
+            int16_t text_x = clx + 5; // Отступ слева
+            int16_t text_y = cly + (item_h - font_h) / 2; // Центрирование по вертикали
 
-            // Печатаем текст
-            if (child->text_content != NULL) {
-                 lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg, s);
-            }
-        } else {
-            // Скрытые элементы
-            UIElement_t* child = (UIElement_t*)el->children[i];
-            if(child) {
-                child->w = 0;
-                child->h = 0;
+            if (child->text_content[0] != '\0') {
+                lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg_color, s);
             }
         }
     }
 
-    // 3. Отрисовка скроллбара
-    if (el->children_count > visible_count && scrollbar_w > 0) {
-        int16_t tx0 = lx + el->w - scrollbar_w;
-        int16_t tx1 = lx + el->w - 1;
+    // --- ШАГ 4: Отрисовка скроллбара ---
+    if (scrollbar_w > 0 && el->children_count > visible_count) {
+        int16_t sb_x1 = lx + el->w - scrollbar_w;
+        int16_t sb_x2 = lx + el->w - 1;
 
-        if (tx0 < 0) tx0 = 0;
-        if (tx1 >= s->w) tx1 = s->w - 1;
-        
-        // Рисуем трек
+        // Клиппинг скроллбара
+        if (sb_x1 < 0) sb_x1 = 0;
+        if (sb_x2 >= s->w) sb_x2 = s->w - 1;
+
+        // Рисуем трек (фон скроллбара)
         for (int16_t y = ly + 1; y < ly + el->h - 1; y++) {
             if (y < 0 || y >= s->h) continue;
-            for (int16_t x = tx0; x <= tx1; x++) {
+            for (int16_t x = sb_x1; x <= sb_x2; x++) {
                 if (x < 0 || x >= s->w) continue;
                 s->data[y * s->w + x] = RGB565_DARK_GRAY;
             }
         }
 
-        // Вычисляем размер и позицию ползунка
-        uint8_t max_offset = (el->children_count > visible_count) ? (el->children_count - visible_count) : 0;
-        uint16_t thumb_h;
-        if (el->children_count == 0) {
-            thumb_h = el->h;
-        } else if (el->children_count <= visible_count) {
-            thumb_h = el->h;
-        } else {
-            thumb_h = (uint16_t)visible_count * el->h / el->children_count;
-            if (thumb_h < 12) thumb_h = 12;
-            if (thumb_h > el->h) thumb_h = el->h;
-        }
-
-        int16_t thumb_y = ly;
-        if (max_offset > 0) {
-            thumb_y = ly + (int16_t)((el->props.list_box.scroll_offset * (el->h - thumb_h)) / max_offset);
-        }
-        if (thumb_y < ly) thumb_y = ly;
-        if (thumb_y + (int16_t)thumb_h > ly + (int16_t)el->h) thumb_y = ly + el->h - thumb_h;
-
-        // Рисуем ползунок
-        for (int16_t y = thumb_y; y < thumb_y + (int16_t)thumb_h; y++) {
-            if (y < 0 || y >= s->h) continue;
-            for (int16_t x = tx0 + 2; x < tx1 - 1; x++) {
-                if (x < 0 || x >= s->w) continue;
-                s->data[y * s->w + x] = RGB565_YELLOW;
-            }
-        }
-    }
-
-    // !!! ВАЖНО: Помечаем область ListBox как грязную на общем спрайте, 
-    // если этот спрайт принадлежит элементу или если мы уверены, что отрисовали изменения
-    if (s->is_allocated) {
-        s->needs_render = true;
-        // Обновляем dirty rect, если он еще не захватывает эту область
-        if (s->dirty_x2 < lx + el->w) s->dirty_x2 = lx + el->w - 1;
-        if (s->dirty_y2 < ly + el->h) s->dirty_y2 = ly + el->h - 1;
-        if (s->dirty_x1 > lx) s->dirty_x1 = lx;
-        if (s->dirty_y1 > ly) s->dirty_y1 = ly;
-    }
-}
-
-
-/* void UI_RenderListBox(UIElement_t* el) {
-    if (!el || !el->sprite || !el->sprite->data) return;
-    Sprite_t* s = el->sprite;
-    
-    // Локальные координаты самого ListBox внутри его физического спрайта
-    int16_t lx = el->x - s->x;
-    int16_t ly = el->y - s->y;
-
-    // 1. Очистка фона ListBox и отрисовка серой рамки по краям
-    for (int16_t y = ly; y < ly + el->h; y++) {
-        if (y < 0 || y >= s->h) continue;
-        for (int16_t x = lx; x < lx + el->w; x++) {
-            if (x < 0 || x >= s->w) continue;
-            s->data[y * s->w + x] = (y == ly || y == ly + el->h - 1 || x == lx || x == lx + el->w - 1) ? 0x7BEF : RGB565_BLACK;
-        }
-    }
-
-    lcd_set_font(&font_arial_9_struct);
-    uint16_t item_h = current_font->char_height + 6;
-    uint8_t start = el->props.list_box.scroll_offset;
-    uint8_t visible_count = (el->h + item_h - 1) / item_h;
-    if (visible_count == 0) visible_count = 1;
-
-    // Ширина зарезервированной зоны скроллбара (макс 10px), видима для логики отрисовки текста
-    uint8_t scrollbar_w = 10;
-    if (scrollbar_w > el->w - 2) scrollbar_w = (el->w > 2) ? (el->w - 2) : 0;
-
-    // 2. Отрисовка видимых элементов списка
-    for (uint8_t i = 0; i < el->children_count; i++) {
-        if (i >= start && i < (start + visible_count)) {
-            UIElement_t* child = (UIElement_t*)el->children[i];
-            
-            int16_t row_y = el->y + (int16_t)((i - start) * item_h);
-            int16_t clx = el->x - s->x;
-            int16_t cly = row_y - s->y;
-            
-            uint16_t bg = (i == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
-
-            // Вычисляем ширину контента так, чтобы она не пересекалась со скроллбаром справа
-            uint16_t content_w = el->w;
-            // Если скроллбар зарезервирован — отнимаем его ширину и небольшие отступы
-            if (scrollbar_w > 0 && scrollbar_w < el->w) {
-                if (el->w > (int)scrollbar_w + 2) content_w = el->w - scrollbar_w - 2;
-                else content_w = el->w - 2;
-            } else {
-                content_w = el->w - 2;
-            }
-            if (content_w < 8) content_w = (el->w > 4) ? (el->w - 4) : el->w;
-
-            child->w = content_w;
-            child->h = item_h;
-            child->x = el->x;
-            child->y = row_y;
-
-            // Заливаем прямоугольник элемента выбранным цветом фона, только в области content_w
-            for (int16_t y = cly; y < cly + child->h; y++) {
-                for (int16_t x = clx + 1; x < clx + (int16_t)content_w - 1; x++) {
-                    // защита границ спрайта
-                    if (y < 0 || y >= s->h || x < 0 || x >= s->w) continue;
-                    s->data[y * s->w + x] = bg;
-                }
-            }
-
-            // Вычисляем точные локальные координаты для текста внутри спрайта
-            int16_t text_x = clx + 5; // небольшой отступ слева в 5 пикселей
-            int16_t text_y = cly + (child->h - current_font->char_height) / 2; // центрируем по вертикали
-
-            // Печатаем текст в рамках content_w
-            lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg, s);
-        } else {
-            // Скрытые элементы скролла тоже сбрасываем в 0, чтобы они не рисовались
-            UIElement_t* child = (UIElement_t*)el->children[i];
-            child->w = 0;
-            child->h = 0;
-        }
-    }
-
-    // Отрисовка скроллбара (справа внутри ListBox)
-    if (el->children_count > visible_count && scrollbar_w > 0) {
-        int16_t tx0 = lx + el->w - scrollbar_w;
-        int16_t tx1 = lx + el->w - 1;
-
-        // Ограничиваем координаты трека пределами самого спрайта (защита от выхода за границу)
-        if (tx0 < 0) tx0 = 0;
-        if (tx1 >= s->w) tx1 = s->w - 1;
-        if (tx0 < lx) tx0 = lx; // держим внутри ListBox
-        if (tx1 > lx + el->w - 1) tx1 = lx + el->w - 1;
-
-        // Рисуем трек (тёмно-серый, использует константу движка)
-        for (int16_t y = ly + 1; y < ly + el->h - 1; y++) {
-            if (y < 0 || y >= s->h) continue;
-            for (int16_t x = tx0; x <= tx1; x++) {
-                if (x < 0 || x >= s->w) continue;
-                s->data[y * s->w + x] = RGB565_DARK_GRAY;
-            }
-        }
-
-        // Вычисляем размер ползунка (thumb)
-        uint8_t max_offset = (el->children_count > visible_count) ? (el->children_count - visible_count) : 0;
-        uint16_t thumb_h;
-        if (el->children_count == 0) {
-            thumb_h = el->h;
-        } else if (el->children_count <= visible_count) {
-            thumb_h = el->h; // полный ползунок — все элементы видимы
-        } else {
-            thumb_h = (uint16_t)visible_count * el->h / el->children_count;
-            if (thumb_h < 12) thumb_h = 12; // минимальный размер ползунка
-            if (thumb_h > el->h) thumb_h = el->h;
-        }
+        // Вычисляем ползунок (thumb)
+        uint8_t max_offset = el->children_count - visible_count;
+        uint16_t thumb_h = (uint16_t)visible_count * el->h / el->children_count;
+        if (thumb_h < 12) thumb_h = 12;
+        if (thumb_h > el->h) thumb_h = el->h;
 
         // Позиция ползунка
-        int16_t thumb_y = ly;
+        int16_t thumb_y = ly + 1;
         if (max_offset > 0) {
-            thumb_y = ly + (int16_t)((el->props.list_box.scroll_offset * (el->h - thumb_h)) / max_offset);
+            thumb_y = ly + 1 + (int16_t)((el->props.list_box.scroll_offset * ((el->h - 2) - thumb_h)) / max_offset);
         }
-        if (thumb_y < ly) thumb_y = ly;
-        if (thumb_y + (int16_t)thumb_h > ly + (int16_t)el->h) thumb_y = ly + el->h - thumb_h;
+        if (thumb_y + (int16_t)thumb_h > ly + el->h - 1) {
+            thumb_y = ly + el->h - 1 - thumb_h;
+        }
+        if (thumb_y < ly + 1) thumb_y = ly + 1;
 
-        // Рисуем сам ползунок (яркий цвет для заметности), но в пределах спрайта
-        for (int16_t y = thumb_y; y < thumb_y + (int16_t)thumb_h; y++) {
+        // Рисуем ползунок
+        for (int16_t y = thumb_y; y < thumb_y + thumb_h; y++) {
             if (y < 0 || y >= s->h) continue;
-            for (int16_t x = tx0 + 2; x < tx1 - 1; x++) {
+            for (int16_t x = sb_x1 + 2; x < sb_x2 - 1; x++) {
                 if (x < 0 || x >= s->w) continue;
                 s->data[y * s->w + x] = RGB565_YELLOW;
             }
         }
     }
-} */
+
+    // Помечаем область ListBox грязной, если она еще не помечена
+    if (s->is_allocated) {
+        s->needs_render = true;
+        // Обновляем dirty rect, чтобы не отправлять лишний весь экран
+        int16_t new_dirty_x2 = lx + el->w - 1;
+        int16_t new_dirty_y2 = ly + el->h - 1;
+        int16_t new_dirty_x1 = lx;
+        int16_t new_dirty_y1 = ly;
+
+        if (s->dirty_x2 < new_dirty_x2) s->dirty_x2 = new_dirty_x2;
+        if (s->dirty_y2 < new_dirty_y2) s->dirty_y2 = new_dirty_y2;
+        if (s->dirty_x1 > new_dirty_x1) s->dirty_x1 = new_dirty_x1;
+        if (s->dirty_y1 > new_dirty_y1) s->dirty_y1 = new_dirty_y1;
+    }
+}
 
 static bool g_listbox_drag_active = false;
 static int16_t g_listbox_drag_last_y = -1;
@@ -2442,7 +2718,7 @@ UIElement_t* UI_FindElementAt(UIElement_t* root, uint16_t tx, uint16_t ty, int16
 } */
 
 //Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
-int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
+/* int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
     if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
     if (tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) {
         g_listbox_drag_active = false;
@@ -2536,8 +2812,131 @@ int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
         GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
     }
     return target;
+} */
+
+// Вспомогательная функция: проверка попадания точки в прямоугольник
+static inline bool IsPointInRect(int16_t px, int16_t py, int16_t rx, int16_t ry, uint16_t rw, uint16_t rh) 
+{
+    return (px >= rx && px < (rx + rw) && py >= ry && py < (ry + rh));
 }
 
+int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) 
+{
+    if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
+
+    // 1. Быстрая отсечка по границам всего виджета
+    if (!IsPointInRect(tx, ty, listbox->x, listbox->y, listbox->w, listbox->h)) {
+        listbox->touch_state.drag_active = false;
+        listbox->touch_state.drag_last_y = -1;
+        return -1;
+    }
+
+    uint16_t font_h = (listbox->font != NULL) ? listbox->font->char_height : font_arial_9_struct.char_height;
+    uint16_t item_h = font_h + 6; // Высота строки с отступами
+    int16_t local_y = ty - listbox->y;
+
+    // 2. Расчеты размеров контента
+    uint8_t children = listbox->children_count;
+    uint8_t visible = (item_h > 0) ? (listbox->h / item_h) : 1;
+    if (visible == 0) visible = 1;
+    
+    // Если все влезает — скроллбар не нужен
+    bool has_scrollbar = (children > visible);
+
+    // Ширина ползунка (фиксированная или динамическая)
+    uint8_t scrollbar_w = has_scrollbar ? ((listbox->w > 12) ? 10 : (listbox->w - 2)) : 0;
+    bool hit_scrollbar = (scrollbar_w > 0 && tx >= (listbox->x + listbox->w - scrollbar_w));
+
+    // 3. Обработка жеста внутри области скроллбара
+    if (hit_scrollbar && has_scrollbar) {
+        uint8_t max_offset = (uint8_t)(children - visible);
+        
+        uint16_t track_h = listbox->h;
+        uint16_t thumb_h = (track_h * visible) / children;
+        if (thumb_h < 12) thumb_h = 12;
+        if (thumb_h > track_h) thumb_h = track_h;
+
+        int32_t track_span = (int32_t)track_h - (int32_t)thumb_h;
+        if (track_span <= 0) return -1;
+
+        int16_t rel_y = ty - listbox->y;
+        int32_t pos = rel_y - (thumb_h / 2);
+        if (pos < 0) pos = 0;
+        if (pos > track_span) pos = track_span;
+
+        uint8_t new_offset = (uint8_t)((pos * max_offset + track_span/2) / track_span);
+        if (new_offset != listbox->props.list_box.scroll_offset) {
+            listbox->props.list_box.scroll_offset = new_offset;
+            GUI_InvalidateRect(listbox->sprite, listbox->x, listbox->y, listbox->w, listbox->h);
+        }
+        return -1;
+    }
+
+    Touch_State_t* ts = &listbox->touch_state;
+
+    // 4. Начало нового касания (Press event)
+    if (ts->drag_last_y < 0) {
+        ts->drag_last_y = ty;
+        ts->drag_active = false;
+
+        // Мертвая зона по горизонтали (5% ширины), чтобы отличать свайп от клика
+        uint16_t dead_zone_x = listbox->w / 20;
+        if (dead_zone_x < 5) dead_zone_x = 5;
+        if (tx < listbox->x + dead_zone_x || tx >= listbox->x + listbox->w - dead_zone_x) return -1;
+
+        int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
+        if (target < 0 || target >= listbox->children_count) return -1;
+
+        if (listbox->props.list_box.selected_index != target) {
+            listbox->props.list_box.selected_index = target;
+            GUI_InvalidateRect(listbox->sprite, listbox->x, listbox->y, listbox->w, listbox->h);
+        }
+        return target;
+    }
+
+    // 5. Детекция начала активного перетаскивания (Drag threshold)
+    if (!ts->drag_active) {
+        int16_t delta_y = ty - ts->drag_last_y;
+        if (delta_y < 0) delta_y = -delta_y;
+        if (delta_y > (int16_t)item_h / 2) {
+            ts->drag_active = true;
+            
+            // Сбрасываем выделение при начале прокрутки
+            if (listbox->props.list_box.selected_index != -1) {
+                listbox->props.list_box.selected_index = -1;
+                GUI_InvalidateRect(listbox->sprite, listbox->x, listbox->y, listbox->w, listbox->h);
+            }
+        }
+    }
+
+    // 6. Логика активной инерционной прокрутки
+    if (ts->drag_active) {
+        int16_t delta_y = ty - ts->drag_last_y;
+        ts->drag_last_y = ty;
+        
+        if (delta_y != 0) {
+            uint8_t max_offset = (children > visible) ? (uint8_t)(children - visible) : 0;
+            if (max_offset > 0) {
+                int8_t step = delta_y / (int16_t)item_h;
+                if (step != 0) {
+                    int16_t new_offset = (int16_t)listbox->props.list_box.scroll_offset - step;
+                    if (new_offset < 0) new_offset = 0;
+                    if (new_offset > (int16_t)max_offset) new_offset = max_offset;
+                    
+                    if ((uint8_t)new_offset != listbox->props.list_box.scroll_offset) {
+                        listbox->props.list_box.scroll_offset = (uint8_t)new_offset;
+                        GUI_InvalidateRect(listbox->sprite, listbox->x, listbox->y, listbox->w, listbox->h);
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    // 7. Обновление "якоря" если палец просто лежит на экране без движения
+    ts->drag_last_y = ty;
+    return -1;
+}
 
 /**
  * @brief Устанавливает количество строк в сетке
@@ -2589,6 +2988,47 @@ UI_SetGridColsCount(&status_bar_grid, 3);
 UI_SetGridColProportional(&status_bar_grid, 1, 1); */
 
 
+uint8_t currentHour = 07;
+uint8_t currentMinute = 05;
+uint8_t battery_Level = 99;
+
+extern int batteryLevel;
+extern bool bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, bluetoothMode;
+extern uint8_t currentHour, currentMinute;
+
+// Внешние иконки (примеры — см. ниже)
+extern const uint8_t icon_battery_bits[];
+extern const uint8_t icon_bluetooth_bits[];
+extern const uint8_t icon_wifi_bits[];
+extern const uint8_t icon_not_wifi_bits[];
+extern const uint8_t icon_ntp_bits[];
+extern const uint8_t icon_buzzer_on_bits[];
+extern const uint8_t icon_buzzer_off_bits[];
+extern const uint8_t icon_rs485ToBt_bits[];
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Колбэк отрисовки ТОЛЬКО ЧАСОВ
+void Draw_Clock_Callback(UIElement_t* el) {
+    if (!el || !el->sprite) return;
+    Sprite_t* sprite = el->sprite;
+
+    // Стираем старые часы внутри маленького буфера
+    Sprite_fill(sprite, RGB565_BLACK);
+    
+    lcd_set_font(&font_segoe_struct);
+    char timeBuf[8];
+    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
+    
+    // Рисуем в локальных координатах спрайта (0, 0)
+    lcd_print_to_buffer(2, 4, RGB565_WHITE, timeBuf, RGB565_BLACK, sprite);
+    
+    // Помечаем, что весь этот мини-спрайт изменился
+    sprite->dirty_x1 = 0; sprite->dirty_y1 = 0;
+    sprite->dirty_x2 = sprite->w - 1; sprite->dirty_y2 = sprite->h - 1;
+    sprite->needs_render = true;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void Draw_Icon_Battery_Callback(UIElement_t* el) {
     if (!el || !el->sprite || !el->sprite->data) return;
     Sprite_t* s = el->sprite;
@@ -2598,11 +3038,11 @@ void Draw_Icon_Battery_Callback(UIElement_t* el) {
 
     // Рисуем иконку и текст батареи внутри этого маленького буфера
     // Координаты (0,0) — это левый верхний угол этого маленького спрайта
-    Draw_Bitmap_To_Sprite(s, 2, 2, icon_battery_16_16_bits, 16, 16, RGB565_WHITE);
+    Draw_Bitmap_To_Sprite(s, 2, 2, iconMirrorHorizontal(icon_battery_16_16_bits, 16, 16), 16, 16, RGB565_WHITE);
     
     // Можно добавить текст "%", если нужно, но лучше в другом спайте или рядом
     lcd_set_font(&font_arial_9_struct);
-    char buf[4];
+    char buf[5];
     snprintf(buf, sizeof(buf), "%d%%", battery_Level);
     lcd_print_to_buffer(18, 2, RGB565_WHITE, buf, RGB565_BLACK, s); // Если есть место
 
@@ -2618,10 +3058,10 @@ void Draw_Icon_Bluetooth_Callback(UIElement_t* el) {
 
     Sprite_fill(s, RGB565_BLACK);
 
-    if (bluetoothEnabled) {
-        Draw_Bitmap_To_Sprite(s, 1, 2, icon_bluetooth_bits, 12, 16, RGB565_BLUE);
-    }
-
+    uint16_t bt_color = bluetoothEnabled ? RGB565_BLUE : 0x528A; // Зеленый или блекло-серый
+    const uint8_t* bt_icon = bluetoothEnabled ? icon_bluetooth_bits : icon_not_bluetooth_bits;
+    Draw_Bitmap_To_Sprite(s, 1, 2, iconMirrorHorizontal(bt_icon,8,8), 8, 8, bt_color);
+    
     s->dirty_x1 = 0; s->dirty_y1 = 0;
     s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
     s->needs_render = true;
@@ -2633,10 +3073,52 @@ void Draw_Icon_WiFi_Callback(UIElement_t* el) {
 
     Sprite_fill(s, RGB565_BLACK);
 
-    if (wifiEnabled) {
-        Draw_Bitmap_To_Sprite(s, 0, 2, icon_wifi_bits, 10, 16, RGB565_GREEN);
-    }
+    uint16_t wifi_mode_color = wifiEnabled ? RGB565_GREEN : 0x528A; // Зеленый или блекло-серый
+    const uint8_t* wifi_mode_icon = wifiEnabled ? icon_wifi_bits : icon_not_wifi_bits;
+    Draw_Bitmap_To_Sprite(s, 0, 2, iconMirrorHorizontal(wifi_mode_icon,8,8), 8, 8, wifi_mode_color);
+    
+    s->dirty_x1 = 0; s->dirty_y1 = 0;
+    s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
+    s->needs_render = true;
+}
 
+void Draw_Icon_Buzzer_Callback(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+    Sprite_t* s = el->sprite;
+
+    Sprite_fill(s, RGB565_BLACK);
+
+    const uint8_t* icon_buzz = buzzerOnOff ? icon_buzzer_on_bits : icon_buzzer_off_bits;
+    Draw_Bitmap_To_Sprite(s, 0, 2, iconMirrorHorizontal(icon_buzz, 8, 8), 8, 8, RGB565_WHITE);
+
+    s->dirty_x1 = 0; s->dirty_y1 = 0;
+    s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
+    s->needs_render = true;
+}
+
+void Draw_Icon_RS485ToBT_Callback(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+    Sprite_t* s = el->sprite;
+
+    Sprite_fill(s, RGB565_BLACK);
+    uint16_t bt_mode_color = bluetoothMode ? RGB565_GREEN : 0x528A; // Зеленый или блекло-серый
+    const uint8_t* bt_mode_icon = bluetoothMode ? icon_rs485ToBt_bits : icon_not_rs485ToBt_bits;
+    Draw_Bitmap_To_Sprite(s, 0, 2, iconMirrorHorizontal(bt_mode_icon,8,8), 8, 8, bt_mode_color);
+    
+    s->dirty_x1 = 0; s->dirty_y1 = 0;
+    s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
+    s->needs_render = true;
+}
+
+void Draw_Icon_NTP_Callback(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+    Sprite_t* s = el->sprite;
+
+    Sprite_fill(s, RGB565_BLACK);
+    uint16_t ntp_color = ntpSyncEnabled ? RGB565_WHITE : 0x528A; // Зеленый или блекло-серый
+    const uint8_t* ntp_icon = ntpSyncEnabled ? icon_ntp_bits : icon_not_ntp_bits;
+    Draw_Bitmap_To_Sprite(s, 0, 2, iconMirrorHorizontal(ntp_icon,8,8), 8, 8, ntp_color);
+    
     s->dirty_x1 = 0; s->dirty_y1 = 0;
     s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
     s->needs_render = true;
@@ -2694,15 +3176,32 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // ==========================================
     // 3. КОНТЕЙНЕР ДЛЯ ИКОНОК (Внутри колонки 1)
     // ==========================================
-    // Используем StackPanel для автоматического расположения иконок в ряд
-    status_icons_node.type = UI_TYPE_STACK_PANEL;
+    // ИЗМЕНЕНИЕ: Тип изменен на UI_TYPE_GRID для более точного позиционирования
+    status_icons_node.type = UI_TYPE_GRID;
     status_icons_node.grid_row = 0;
     status_icons_node.grid_col = 1;
-    status_icons_node.sprite = NULL; // Не рисуем себя
-    status_icons_node.props.stack.orientation = ORIENTATION_HORIZONTAL;
-    status_icons_node.props.stack.spacing = 4;
+    status_icons_node.sprite = NULL; // Контейнер не имеет своего спрайта
+    
+    // Настраиваем сетку: 1 строка, 4 колонки
+    UI_SetGridRowsCount(&status_icons_node, 1);
+    UI_SetGridRowPixel(&status_icons_node, 0, STATUS_BAR_HEIGHT);
+    
+    UI_SetGridColsCount(&status_icons_node, 7); 
+    
+    // --- РАСПРЕДЕЛЕНИЕ КОЛОНОК ---
+    // Колонка 0: СПЕЙСЕР (занимает 100% оставшегося места, прижимая остальные вправо)
+    UI_SetGridColPercent(&status_icons_node, 0, 100); 
+    
+    // Колонки 1, 2, 3: Фиксированная ширина под иконки
+    UI_SetGridColPixel(&status_icons_node, 1, 16);   // rs485toBt
+    UI_SetGridColPixel(&status_icons_node, 2, 16);   // buzzer
+    UI_SetGridColPixel(&status_icons_node, 3, 16);   // ntp
+    UI_SetGridColPixel(&status_icons_node, 4, 16);   // Wi-Fi
+    UI_SetGridColPixel(&status_icons_node, 5, 16);   // Bluetooth
+    UI_SetGridColPixel(&status_icons_node, 6, 50);   // Battery
 
     status_bar_node.children[status_bar_node.children_count++] = &status_icons_node;
+
 
     // ==========================================
     // 4. ДОБАВЛЕНИЕ ИКОНОК КАК ОТДЕЛЬНЫХ ЭЛЕМЕНТОВ
@@ -2711,7 +3210,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- Батарея ---
     status_icon_battery_node.type = UI_TYPE_SPRITE;
     status_icon_battery_node.grid_row = 0; // В стеке игнорируется
-    status_icon_battery_node.grid_col = 0;
+    status_icon_battery_node.grid_col = 6;
     status_icon_battery_node.render_callback = Draw_Icon_Battery_Callback;
     status_icon_battery_node.background_color = RGB565_BLACK;
     status_icon_battery_node.sprite = &status_icon_battery_sprite;
@@ -2732,7 +3231,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- Bluetooth ---
     status_icon_bt_node.type = UI_TYPE_SPRITE;
     status_icon_bt_node.grid_row = 0;
-    status_icon_bt_node.grid_col = 0;
+    status_icon_bt_node.grid_col = 5;
     status_icon_bt_node.render_callback = Draw_Icon_Bluetooth_Callback;
     status_icon_bt_node.background_color = RGB565_BLACK;
     status_icon_bt_node.sprite = &status_icon_bt_sprite;
@@ -2751,7 +3250,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- Wi-Fi ---
     status_icon_wifi_node.type = UI_TYPE_SPRITE;
     status_icon_wifi_node.grid_row = 0;
-    status_icon_wifi_node.grid_col = 0;
+    status_icon_wifi_node.grid_col = 4;
     status_icon_wifi_node.render_callback = Draw_Icon_WiFi_Callback;
     status_icon_wifi_node.background_color = RGB565_BLACK;
     status_icon_wifi_node.sprite = &status_icon_wifi_sprite;
@@ -2767,6 +3266,147 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
         status_icons_node.children[status_icons_node.children_count++] = &status_icon_wifi_node;
     }
 
+
+    // --- NTP ---
+    status_icon_ntp_node.type = UI_TYPE_SPRITE;
+    status_icon_ntp_node.grid_row = 0;
+    status_icon_ntp_node.grid_col = 3;
+    status_icon_ntp_node.render_callback = Draw_Icon_NTP_Callback;
+    status_icon_ntp_node.background_color = RGB565_BLACK;
+    status_icon_ntp_node.sprite = &status_icon_ntp_sprite;
+    status_icon_ntp_node.w = 12;
+    status_icon_ntp_node.h = STATUS_BAR_HEIGHT;
+
+    status_icon_ntp_sprite.w = 12;
+    status_icon_ntp_sprite.h = STATUS_BAR_HEIGHT;
+    status_icon_ntp_sprite.data = (uint16_t*)heap_caps_malloc(12 * STATUS_BAR_HEIGHT * 2, 0);
+    status_icon_ntp_sprite.is_allocated = (status_icon_ntp_sprite.data != NULL);
+
+    if (status_icon_ntp_sprite.is_allocated) {
+        status_icons_node.children[status_icons_node.children_count++] = &status_icon_ntp_node;
+    }
+
+    // --- BUZZER ---
+    status_icon_buzzer_node.type = UI_TYPE_SPRITE;
+    status_icon_buzzer_node.grid_row = 0;
+    status_icon_buzzer_node.grid_col = 2;
+    status_icon_buzzer_node.render_callback = Draw_Icon_Buzzer_Callback;
+    status_icon_buzzer_node.background_color = RGB565_BLACK;
+    status_icon_buzzer_node.sprite = &status_icon_buzzer_sprite;
+    status_icon_buzzer_node.w = 12;
+    status_icon_buzzer_node.h = STATUS_BAR_HEIGHT;
+
+    status_icon_buzzer_sprite.w = 12;
+    status_icon_buzzer_sprite.h = STATUS_BAR_HEIGHT;
+    status_icon_buzzer_sprite.data = (uint16_t*)heap_caps_malloc(12 * STATUS_BAR_HEIGHT * 2, 0);
+    status_icon_buzzer_sprite.is_allocated = (status_icon_buzzer_sprite.data != NULL);
+
+    if (status_icon_buzzer_sprite.is_allocated) {
+        status_icons_node.children[status_icons_node.children_count++] = &status_icon_buzzer_node;
+    }
+
+    // --- RS485ToBt ---
+    status_icon_mode_node.type = UI_TYPE_SPRITE;
+    status_icon_mode_node.grid_row = 0;
+    status_icon_mode_node.grid_col = 1;
+    status_icon_mode_node.render_callback = Draw_Icon_RS485ToBT_Callback;
+    status_icon_mode_node.background_color = RGB565_BLACK;
+    status_icon_mode_node.sprite = &status_icon_mode_sprite;
+    status_icon_mode_node.w = 12;
+    status_icon_mode_node.h = STATUS_BAR_HEIGHT;
+
+    status_icon_mode_sprite.w = 12;
+    status_icon_mode_sprite.h = STATUS_BAR_HEIGHT;
+    status_icon_mode_sprite.data = (uint16_t*)heap_caps_malloc(12 * STATUS_BAR_HEIGHT * 2, 0);
+    status_icon_mode_sprite.is_allocated = (status_icon_mode_sprite.data != NULL);
+
+    if (status_icon_mode_sprite.is_allocated) {
+        status_icons_node.children[status_icons_node.children_count++] = &status_icon_mode_node;
+    }
+
     // --- Другие иконки (NTP, Buzzer, Mode) добавляются аналогично ---
     // ...
+
+    status_icon_spacer_node.type = UI_TYPE_TEXT_BLOCK;
+    status_icon_spacer_node.grid_row = 0;
+    status_icon_spacer_node.grid_col = 0;
+    status_icon_spacer_node.sprite = &status_spacer_sprite;
+    status_icon_spacer_node.render_callback = NULL;
+    status_icon_spacer_node.background_color = RGB565_BLACK;
+    status_icon_spacer_node.w = 0; // Размер задается сеткой
+    status_icon_spacer_node.h = 0;
+    status_icon_spacer_node.text_content[0] = '\0'; // Пустой текст
+
+    if (status_icons_node.children_count < MAX_ELEMENT_CHILDREN) {
+        status_icons_node.children[status_icons_node.children_count++] = &status_icon_spacer_node;
+    }
 }
+
+
+/**
+ * @brief Полностью инвариантный render_callback для статус-бара
+ * // Функция для отрисовки контента внутри статус-бара
+ */
+/* void Draw_StatusBar_Callback(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+    // Извлекаем физический спрайт из элемента
+    Sprite_t* sprite = el->sprite; // Достаем физический спрайт из элемента
+
+    // 1. Очистка буфера статус-бара цветом RGB565_DARK_GRAY (например, 0x39E7)
+    Sprite_fill(sprite, RGB565_BLACK);
+
+    // 2. Отрисовка ВРЕМЕНИ (слева, отступ 5 пикселей)
+    lcd_set_font(&font_segoe_struct);
+    char timeBuf[8];
+    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
+    lcd_print_to_buffer(5, 4, RGB565_WHITE, timeBuf, RGB565_DARK_GRAY, sprite);
+
+    // Меняем шрифт для системных иконок и параметров
+    lcd_set_font(&font_arial_9_struct);
+
+    // 3. Динамический инвариантный расчет правого края (смещаемся влево от правого конца спрайта s->w)
+    int16_t curX = sprite->w - 5; // Стартуем в 5 пикселях от правого края экрана
+
+    // --- Батарея (Текст) ---
+    char batBuf[8]; 
+    snprintf(batBuf, sizeof(batBuf), "%d%%", battery_Level);
+    int batWidth = lcd_get_str_width(batBuf);
+    curX -= batWidth; // Сдвигаем маркер влево на ширину текста
+    lcd_print_to_buffer(curX, 4, RGB565_WHITE, batBuf, RGB565_DARK_GRAY, sprite);
+
+    // --- Иконка батареи (ширина 16) ---
+    curX -= 18; // 16 пикселей иконка + 2 пикселя зазор
+    Draw_Bitmap_To_Sprite(sprite, curX, 4, icon_battery_16_16_bits, 16, 16, RGB565_WHITE);
+
+    // --- Bluetooth Mode (RS485→BT) (ширина 10) ---
+    curX -= 12;
+    uint16_t bt_mode_color = bluetoothMode ? RGB565_GREEN : 0x528A; // Зеленый или блекло-серый
+    Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_rs485ToBt_bits, 8, 8), 8, 8, bt_mode_color);
+
+    // --- Buzzer (ширина 8) ---
+    curX -= 10;
+    const uint8_t* icon_buzz = buzzerOnOff ? icon_buzzer_on_bits : icon_buzzer_off_bits;
+    Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_buzz, 8, 8), 8, 8, RGB565_WHITE);
+
+    // --- Auto NTP (ширина 8) ---
+    if (ntpSyncEnabled) {
+        curX -= 10;
+        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_ntp_bits, 8, 8), 8, 8, RGB565_WHITE);
+    }
+
+    // --- Wi-Fi (ширина 10) ---
+    if (wifiEnabled) {
+        curX -= 12;
+        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_wifi_bits, 8, 8), 8, 8, RGB565_GREEN);
+    }
+
+    // --- Bluetooth (ширина 10) ---
+    if (bluetoothEnabled) {
+        curX -= 12;
+        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_bluetooth_bits, 8, 8), 8, 8, RGB565_BLUE);
+    }
+
+    // ВНИМАНИЕ: ST7796_PushSprite(sprite) отсюда УДАЛЕН. 
+    // Движок UI сам вызовет отправку по SPI после завершения сборки дерева.
+}
+ */
