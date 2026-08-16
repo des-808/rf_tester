@@ -88,7 +88,7 @@ extern uint8_t current_menu_count;
     if (graph_node.sprite != NULL) GUI_InvalidateSprite(graph_node.sprite);
 } */
 
-void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
+/* void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ====================================================================
     // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
     // ====================================================================
@@ -184,8 +184,8 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     main_work_grid.props.grid.rows_count = 1;
     main_work_grid.props.grid.cols_count = 2;
     
-    /* UI_SetGridColPixel(&main_work_grid, 0, 200); 
-    UI_SetGridColPercent(&main_work_grid, 1, 100);  */
+    // UI_SetGridColPixel(&main_work_grid, 0, 200); 
+    //UI_SetGridColPercent(&main_work_grid, 1, 100);  
     UI_SetGridColPercent(&main_work_grid, 0, 65); 
     UI_SetGridColPercent(&main_work_grid, 1, 35); 
 
@@ -367,19 +367,19 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Отключаем спрайты у детей, чтобы MeasureAndArrange не пытался аллоцировать старые буферы
     // или использовал неправильные размеры
     // Проставляем спрайты элементам перед обмером
-    /* for (uint8_t i = 0; i < digits_node.children_count; i++) {
-        if (digits_node.children[i]) {
-            digits_node.children[i]->sprite = &main_screen_sprite;//= NULL;
-            //digits_node.children[i]->sprite = NULL;
-        }
-    }
-    ui_bands_listbox.sprite = &main_screen_sprite;
-    for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
-        if (ui_bands_listbox.children[i]) {
-            ui_bands_listbox.children[i]->sprite = &main_screen_sprite;//= NULL;
-            //ui_bands_listbox.children[i]->sprite = NULL;
-        }
-    } */
+    //  for (uint8_t i = 0; i < digits_node.children_count; i++) {
+    //     if (digits_node.children[i]) {
+    //         digits_node.children[i]->sprite = &main_screen_sprite;//= NULL;
+    //         //digits_node.children[i]->sprite = NULL;
+    //     }
+    // }
+    // ui_bands_listbox.sprite = &main_screen_sprite;
+    // for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+    //     if (ui_bands_listbox.children[i]) {
+    //         ui_bands_listbox.children[i]->sprite = &main_screen_sprite;//= NULL;
+    //         //ui_bands_listbox.children[i]->sprite = NULL;
+    //     }
+    // }
     ui_bands_listbox.sprite = NULL; 
 
     // Второй обмер: реальный расчет размеров с учетом динамического контента
@@ -415,16 +415,16 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // ------------------------------------------------------------------
     // ФИКС 2: ПРЕДВАРИТЕЛЬНАЯ ОТРИСОВКА ЭЛЕМЕНТОВ LISTBOX
     // ------------------------------------------------------------------
-    /* for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
-        UIElement_t* item = (UIElement_t*)ui_bands_listbox.children[i];
-        if (item && item->sprite != NULL && item->sprite->data) {
-             // Рисуем текст элемента в общий буфер панели
-             // Убедимся, что у элемента есть координаты, назначенные MeasureAndArrange
-             if (item->w > 0 && item->h > 0) {
-                 Draw_GeneralText_Callback(item);
-             }
-        }
-    } */
+    //  for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
+    //     UIElement_t* item = (UIElement_t*)ui_bands_listbox.children[i];
+    //     if (item && item->sprite != NULL && item->sprite->data) {
+    //          // Рисуем текст элемента в общий буфер панели
+    //          // Убедимся, что у элемента есть координаты, назначенные MeasureAndArrange
+    //          if (item->w > 0 && item->h > 0) {
+    //              Draw_GeneralText_Callback(item);
+    //          }
+    //     }
+    // } 
 
     // Активируем флаги рендеринга для всех основных блоков
     status_bar_sprite.needs_render = true;
@@ -433,13 +433,13 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
 
     // --- ВАЖНО: Принудительно помечаем правую панель (digits_node) грязной целиком ---
     // Это гарантирует, что MeasureAndArrange перерисует ListBox и другие элементы
-    /* if (digits_node.sprite && digits_node.sprite->is_allocated) {
-        digits_node.sprite->dirty_x1 = 0;
-        digits_node.sprite->dirty_y1 = 0;
-        digits_node.sprite->dirty_x2 = digits_node.sprite->w - 1;
-        digits_node.sprite->dirty_y2 = digits_node.sprite->h - 1;
-        digits_node.sprite->needs_render = true;
-    } */
+    //  if (digits_node.sprite && digits_node.sprite->is_allocated) {
+    //     digits_node.sprite->dirty_x1 = 0;
+    //     digits_node.sprite->dirty_y1 = 0;
+    //     digits_node.sprite->dirty_x2 = digits_node.sprite->w - 1;
+    //     digits_node.sprite->dirty_y2 = digits_node.sprite->h - 1;
+    //     digits_node.sprite->needs_render = true;
+    // } 
 
 
     // Сбрасываем Dirty Rect на весь размер
@@ -451,7 +451,7 @@ void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation) {
     // Подписываем GUI на обновления измерений
     //Measurement_Subscribe(gui_measurement_callback);
 }
-
+ */
 void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     // ====================================================================
     // ЭТАП 1: АППАРАТНЫЙ СБРОС И ПОСТРОЕНИЕ "СКЕЛЕТА" СЕТОК
@@ -3177,6 +3177,14 @@ void Draw_Icon_NTP_Callback(UIElement_t* el) {
 // ==========================================
 
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
+    status_clock_sprite.data = NULL;          status_clock_sprite.is_allocated = false;
+    status_icon_battery_sprite.data = NULL;   status_icon_battery_sprite.is_allocated = false;
+    status_icon_bt_sprite.data = NULL;        status_icon_bt_sprite.is_allocated = false;
+    status_icon_wifi_sprite.data = NULL;      status_icon_wifi_sprite.is_allocated = false;
+    status_icon_ntp_sprite.data = NULL;       status_icon_ntp_sprite.is_allocated = false;
+    status_icon_buzzer_sprite.data = NULL;    status_icon_buzzer_sprite.is_allocated = false;
+    status_icon_mode_sprite.data = NULL;      status_icon_mode_sprite.is_allocated = false;
+    status_spacer_sprite.data = NULL;         status_spacer_sprite.is_allocated = false;
     // 1. Инициализация корневого контейнера статус-бара (Grid)
     status_bar_node.type = UI_TYPE_GRID;
     status_bar_node.children_count = 0;
