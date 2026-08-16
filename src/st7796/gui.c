@@ -2355,30 +2355,22 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
     el->font = &font_arial_9_struct;
 }
 
+void Menu_ClearListbox(UIElement_t* listbox) {
+    // Сбрасываем состояние выбора, иначе "фантом" старого индекса выберет новую строку
+    listbox->props.list_box.selected_index = -1; 
+    listbox->touch_state.drag_last_y = -1;
+    listbox->touch_state.drag_active = false;
+    
+    // Просто сбрасываем счетчик. Так как panel_rows — статический массив, 
+    // память физически не удаляется, но перезаписывается новыми данными.
+    listbox->children_count = 0;
+}
+
 /**
  * @brief Добавляет строку (пункт списка) внутрь ListBox
  */
-/* UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text) {
-    if (panel_rows_count >= MAX_PANEL_ROWS || listbox->children_count >= MAX_PANEL_ROWS) return NULL;
-    UIElement_t* item = &panel_rows[panel_rows_count++];
-    item->type = UI_TYPE_TEXT_BLOCK;
-    item->sprite = listbox->sprite;
-    item->render_callback = NULL;
-    item->children_count = 0;
-    item->x = 0;
-    item->y = 0;
-    item->w = 0;
-    item->h = 0;
-    item->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
-    item->vertical_alignment = VERTICAL_ALIGN_CENTER;
-    // Устанавливаем шрифт по умолчанию для ListBox
-    item->font = &font_arial_9_struct;
-    strncpy(item->text_content, item_text, sizeof(item->text_content) - 1);
-    item->text_content[sizeof(item->text_content) - 1] = '\0';
-    listbox->children[listbox->children_count++] = item;
-    return item;
-} */
-UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
+
+/* UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
     if (!listbox_elem || listbox_elem->type != UI_TYPE_LIST_BOX) return NULL;
     
     // 1. Проверяем жесткий лимит на максимальное количество детей у одного контейнера
@@ -2410,6 +2402,60 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
     item->text_content[sizeof(item->text_content) - 1] = '\0'; // Гарантируем нуль-терминатор
     
     // 6. Регистрируем элемент в массиве детей ListBox
+    listbox_elem->children[listbox_elem->children_count++] = item;
+    
+    return item;
+} */
+
+// Константы отступов лучше вынести в #define или enum для переиспользования
+#define LISTBOX_PADDING_X     5 
+#define LISTBOX_ICON_SIZE     16 // Предполагаемый размер иконки, если она появится позже
+
+UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
+    if (!listbox_elem || listbox_elem->type != UI_TYPE_LIST_BOX) return NULL;
+    
+    // Проверка лимитов
+    if (listbox_elem->children_count >= MAX_ELEMENT_CHILDREN) return NULL;
+    if (panel_rows_count >= MAX_PANEL_ROWS) return NULL;
+
+    // Берем объект из пула и гарантируем чистоту памяти
+    UIElement_t* item = &panel_rows[panel_rows_count++];
+    memset(item, 0, sizeof(UIElement_t));
+
+    // Базовая инициализация типа и внешнего вида
+    item->type = UI_TYPE_TEXT_BLOCK;
+    item->sprite = listbox_elem->sprite;
+    item->font = listbox_elem->font;
+    item->background_color = listbox_elem->background_color;
+    item->foreground_color = listbox_elem->foreground_color; // ВАЖНО: Наследуем цвет текста!
+    
+    item->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;
+    item->vertical_alignment = VERTICAL_ALIGN_CENTER; // Центрирование работает надежнее, чем CENTER при разных высотах
+
+    // Безопасное копирование текста
+    strncpy(item->text_content, text, sizeof(item->text_content) - 1);
+    item->text_content[sizeof(item->text_content) - 1] = '\0';
+
+    // --- ГЕОМЕТРИЯ И ПОЗИЦИОНИРОВАНИЕ ---
+    
+    // Ширина равна ширине листа минус паддинги и ширина возможного скроллбара
+    uint8_t scrollbar_w = 10;
+    bool has_scrollbar = (listbox_elem->children_count + 1 > listbox_elem->h / (listbox_elem->font->char_height + 6));
+    uint16_t available_width = listbox_elem->w - (2 * LISTBOX_PADDING_X) - (has_scrollbar ? scrollbar_w : 0);
+    
+    item->w = available_width;
+    
+    // Высота зависит от высоты шрифта
+    item->h = listbox_elem->font->char_height + 6; // Шрифт + 6px внутренних отступов (ваш item_h)
+
+    // Координаты X и Y здесь относительны родительского контейнера (будут учтены layout-менеджером)
+    // Для простоты кладем их со стандартным левым паддингом
+    item->x = LISTBOX_PADDING_X;
+    // Y можно рассчитать сразу, чтобы не делать лишних делений в цикле отрисовки,
+    // либо оставить 0 и считать в GUI_Render pass.
+    // Оставим 0, так как позиция сильно зависит от scroll_offset.
+
+    // Регистрация в иерархии
     listbox_elem->children[listbox_elem->children_count++] = item;
     
     return item;

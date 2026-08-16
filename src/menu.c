@@ -204,71 +204,26 @@ void Menu_Init(void) {
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
     if (!listbox_container || !items) return;
 
-    // 1. Очищаем ListBox
+    // Очищаем старые элементы (здесь должен быть цикл удаления старых children,
+    // чтобы избежать утечек памяти/ссылок!)
+    for (uint8_t i = 0; i < listbox_container->children_count; i++) {
+        free(listbox_container->children[i]); // Или возврат в пул объектов
+    }
     listbox_container->children_count = 0;
+
     listbox_container->props.list_box.scroll_offset = 0;
     listbox_container->props.list_box.selected_index = 0;
 
-    // 2. Добавляем элементы
-    // ВАЖНО: Мы используем UI_ListBox_AddItem, который добавляет элементы в panel_rows в gui.c
-    // Чтобы избежать конфликтов, мы должны убедиться, что panel_rows достаточно велик.
-    // Или мы можем временно очищать panel_rows_count перед добавлением меню, если это единственное, что рисуется в digits_node.
-    // Для простоты, будем считать, что Menu_Draw вызывает GUI_Panel_ClearStrings(parent) перед собой, 
-    // если это полный экран меню.
-    
+    // Заполняем новыми данными
     for (uint8_t i = 0; i < count; i++) {
+        //UI_ListBox_AddItem(listbox_container, items[i].text, items[i].icon_id);
         UI_ListBox_AddItem(listbox_container, items[i].text);
-    // Если есть иконка, рисуем её
-        if (items[i].icon_id < ICON_COUNT) {
-            Icon_t* icon = &all_icons[items[i].icon_id];
-            if (icon->pixels && icon->width > 0 && icon->height > 0) {
-                // Получаем координаты текстового элемента, чтобы нарисовать иконку слева от него
-                // Предполагаем, что UIElement_t имеет x, y, w, h
-                // Рисуем иконку слева от текста с отступом (например, 5 пикселей)
-                
-                // Внимание: точные координаты зависят от реализации UI_ListBox_AddItem.
-                // Вам нужно узнать, где именно текстовый элемент оказался на экране.
-                
-                // Примерная логика (адаптируйте под реальные координаты вашего UI):
-                // Допустим, текст начинается с x=10, y=строка * высота_строки
-                // Иконка будет с x=10-16-2= -2 (слишком слева), нужно скорректировать.
-                
-                // Часто проще рисовать иконку, а затем сдвигать текст.
-                // Но если UI элемент создан, мы можем попробовать нарисовать поверх него или перед ним.
-                
-                // Если UI_ListBox_AddItem создает элемент, и мы знаем его позицию:
-                // uint16_t icon_x = text_elem->x - icon->width - 5; 
-                // uint16_t icon_y = text_elem->y + (text_elem->height - icon->height) / 2;
-                // st7796_drawBitmap(icon_x, icon_y, icon->width, icon->height, icon->pixels);
-                
-                // Поскольку я не знаю точную реализацию UI_ListBox_AddItem, 
-                // я предложу добавить поле "has_icon" в элемент или рисовать иконку до вызова AddItem, 
-                // если вы контролируете координаты.
-                
-                // ВАЖНО: В текущей реализации Menu_Draw мы не знаем координаты заранее.
-                // Поэтому, возможно, вам нужно изменить GUI_функцию AddItem, чтобы она принимала иконку,
-                // либо рисовать иконку после создания элемента, обратившись к его координатам.
-                
-                // Для примера, предположим, что мы можем получить координаты последнего добавленного элемента:
-                UIElement_t* last_elem = (UIElement_t*)listbox_container->children[listbox_container->children_count - 1];
-                
-                // Координаты иконки: слева от текста, по центру вертикально
-                // Этот код нужно будет отладить под ваши координаты UI
-                int16_t icon_x = last_elem->x - icon->width - 5; 
-                int16_t icon_y = last_elem->y; // Текст обычно начинается сверху строки
-                
-                // Проверка границ, чтобы не рисовать за экраном
-                if (icon_x >= 0) {
-                    //ST7796_DrawBitmap(icon_x, icon_y, icon->width, icon->height, icon->pixels);
-                }
-            }
-        }
     }
+
     current_menu_items = items;
     current_menu_count = count;
 
-    // Перерисовка
-    GUI_InvalidateSprite(listbox_container->sprite);
+    GUI_InvalidateSprite(listbox_container->sprite); // Просим GUI перерисовать всё с учетом новых иконок
 }
 
 // Хелпер для изменения значения
@@ -419,66 +374,97 @@ static void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
 
 void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
     if (!current_menu_listbox || !current_menu_items) return;
+
+    UIElement_t* lb = current_menu_listbox;
     
-    // 1. Обрабатываем тач через стандартный механизм ListBox
-    // Это обновит selected_index и скролл
-    int8_t selected = UI_ListBox_ProcessTouch(current_menu_listbox, tx, ty);
+    // КРИТИЧЕСКИ ВАЖНО: Игнорируем выбор, если сейчас идет активное инерционное скроллирование.
+    // Это предотвращает случайные клики при пролистывании.
+    if (lb->touch_state.drag_active) {
+        return;
+    }
+
+    int8_t selected = UI_ListBox_ProcessTouch(lb, tx, ty);
+
+    // Индекс -1 означает промах, клик по скроллбару или начало драг-жеста.
+    // Нас интересует только фактический выбор элемента (OnSelect / OnClick).
+    if (selected < 0) {
+        return;
+    }
+
+    // Защита от выхода за границы массива данных
+    if ((uint8_t)selected >= current_menu_count) {
+        return;
+    }
+
+    MenuItem_t* item = &current_menu_items[selected];
     
-    if (selected >= 0) {
-        // Если выбран новый пункт или был клик
-        UIElement_t* lb = current_menu_listbox;
-        
-        // Проверяем границы
-        if (selected >= current_menu_count) return;
-        
-        MenuItem_t* item = &current_menu_items[selected];
-        UIElement_t* ui_item = (UIElement_t*)lb->children[selected];
-        
-        // Если это элемент типа VALUE, обновляем его текст, чтобы отразить текущее состояние
-        // (например, если тач был скроллом, а не кликом по самому элементу, текст всё равно должен быть актуален)
-        if (item->type == ITEM_TYPE_VALUE && ui_item) {
-            Update_MenuItem_Text(ui_item, item);
-        }
+    // Безопасное получение UI-элемента (защита от рассинхрона data vs view)
+    UIElement_t* ui_item = NULL;
+    if ((uint8_t)selected < lb->children_count) {
+        ui_item = (UIElement_t*)lb->children[selected];
+    }
 
-        // 2. Имитируем действие "Select" (Enter) для тача
-        switch (item->type) {
-            case ITEM_TYPE_ACTION:
-                if (item->data.action_func) {
-                    item->data.action_func();
-                }
-                break;
+    // Актуализируем текст значений (ползунки, переключатели), чтобы они отображали текущее состояние системы
+    if (item->type == ITEM_TYPE_VALUE && ui_item) {
+        Update_MenuItem_Text(ui_item, item);
+    }
 
-            case ITEM_TYPE_VALUE:
-                // При тапе по значению - увеличиваем его на шаг (как клавиша Enter в клавиатурном режиме)
-                // Это удобный паттерн для сенсорных экранов: тап = +, долгое нажатие или другая кнопка = -
-                if (ui_item) {
-                    AdjustValue(item->data.ptr_value, 
-                                item->data.value_limits.min_val, 
-                                item->data.value_limits.max_val, 
-                                item->data.value_limits.step, 
-                                1);
-                    Update_MenuItem_Text(ui_item, item);
-                } else {
-                     AdjustValue(item->data.ptr_value, 
-                                item->data.value_limits.min_val, 
-                                item->data.value_limits.max_val, 
-                                item->data.value_limits.step, 
-                                1);
-                }
-                GUI_InvalidateSprite(lb->sprite);
-                break;
+    // Выполняем действие выбранного пункта
+    switch (item->type) {
+        case ITEM_TYPE_ACTION:
+            if (item->data.action_func) {
+                item->data.action_func();
+            }
+            break;
 
-            case ITEM_TYPE_SUBMENU:
-                if (item->data.submenu_items) {
-                    // Переход в подменю
-                    Menu_Draw(lb, item->data.submenu_items, item->data.submenu_count);
-                }
-                break;
+        case ITEM_TYPE_VALUE: {
+            // Убираем дублирование кода, используя вспомогательную переменную-флаг
+            bool needs_redraw = false;
+            
+            if (ui_item) {
+                AdjustValue(item->data.ptr_value, 
+                            item->data.value_limits.min_val, 
+                            item->data.value_limits.max_val, 
+                            item->data.value_limits.step, 
+                            1);
+                Update_MenuItem_Text(ui_item, item);
+                needs_redraw = true; // Перерисуем только конкретный дочерний элемент
+            } else {
+                 AdjustValue(item->data.ptr_value, 
+                            item->data.value_limits.min_val, 
+                            item->data.value_limits.max_val, 
+                            item->data.value_limits.step, 
+                            1);
+                 needs_redraw = true;
+            }
+
+            if (needs_redraw) {
+                // Вместо перерисовки всего спрайта листа, эффективнее пометить конкретную строку
+                uint16_t font_h = (lb->font != NULL) ? lb->font->char_height : font_arial_9_struct.char_height;
+                uint16_t item_h = font_h + 6;
                 
-            case ITEM_TYPE_INFO:
-                // Для информационных пунктов ничего не делаем при тапе (или можно показать алерт)
-                break;
+                GUI_InvalidateRect(lb->sprite, 
+                                   lb->x, 
+                                   lb->y + (selected - lb->props.list_box.scroll_offset) * item_h, 
+                                   lb->w, 
+                                   item_h);
+            }
+            break;
         }
+
+        case ITEM_TYPE_SUBMENU:
+            if (item->data.submenu_items) {
+                // Перед передачей управления убеждаемся, что старое состояние сброшено
+                lb->touch_state.drag_last_y = -1;
+                lb->touch_state.drag_active = false;
+                
+                Menu_Draw(lb, item->data.submenu_items, item->data.submenu_count);
+            }
+            break;
+            
+        case ITEM_TYPE_INFO:
+            // Можно добавить звуковую обратную связь (Tick) для информативности
+            break;
     }
 }
 
