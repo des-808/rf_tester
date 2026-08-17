@@ -238,12 +238,8 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
 
     // Заполнение новыми данными
     for (uint8_t i = 0; i < count; i++) {
-        // ВАЖНО: Передаем icon_id = 0, если иконки пока не нужны
-        //UI_ListBox_AddItem(listbox_container, items[i].text, 0); 
         UI_ListBox_AddItem(listbox_container, items[i].text); 
-        // Проверка переполнения буфера GUI (на всякий случай)
         if (listbox_container->children_count == 0 && i > 0) {
-            // Ошибка добавления элемента (панель закончилась)
             break; 
         }
     }
@@ -258,11 +254,16 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
         if (items[i].type == ITEM_TYPE_VALUE && 
             (uint8_t)i < listbox_container->children_count) {
             Update_MenuItem_Text(listbox_container->children[i], &items[i]);
-            UI_RenderListBoxItem(listbox_container, i);
         }
     }
 
-    GUI_InvalidateSprite(listbox_container->sprite);
+    // Инвалидируем спрайт — следующий UI_DrawTree вызовет UI_RenderListBox для всего ListBox
+    if (listbox_container->sprite) {
+        Sprite_t* s = listbox_container->sprite;
+        s->needs_render = true;
+        s->dirty_x1 = 0; s->dirty_y1 = 0;
+        s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
+    }
 }
 
 // Хелпер для изменения значения
@@ -310,7 +311,7 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
             if (*(int*)item->data.ptr_value != old_val && ui_item) {
                 Update_MenuItem_Text(ui_item, item);
                 
-                // Перерисовка только изменившейся строки
+                // Отрисовка только изменившейся строки
                 UI_RenderListBoxItem(listbox, selected_index);
                 
                 // Вызов колбэка обновления иконки (если есть)
@@ -350,7 +351,6 @@ void Menu_ProcessInput(uint8_t key) {
         case KEY_UP:
             if (idx > 0) { 
                 lb->props.list_box.selected_index--; 
-                // Перерисовка только старой и новой строки
                 UI_RenderListBoxItem(lb, idx);
                 UI_RenderListBoxItem(lb, lb->props.list_box.selected_index);
             }
@@ -358,7 +358,6 @@ void Menu_ProcessInput(uint8_t key) {
         case KEY_DOWN:
             if (idx < current_menu_count - 1) { 
                 lb->props.list_box.selected_index++; 
-                // Перерисовка только старой и новой строки
                 UI_RenderListBoxItem(lb, idx);
                 UI_RenderListBoxItem(lb, lb->props.list_box.selected_index);
             }

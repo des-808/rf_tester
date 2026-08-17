@@ -90,8 +90,7 @@ void Buzzer_On_Off_(void) {
     // Больше ничего делать НЕ НУЖНО. 
     // UI_DrawTree(&status_icon_buzzer_node);// увидит флаг needs_render у этого узла и вызовет Draw_Icon_Buzzer_Callback автоматически.
 
-    // Инвалидируем узел, чтобы главный цикл подхватил изменения в Dirty Rect
-    //GUI_InvalidateSprite(status_icon_buzzer_node.sprite);
+    UI_DrawTree(&root_grid);
 }
 
 /* static void gui_measurement_callback(const MeasurementResults* r) {
@@ -2709,15 +2708,13 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
         lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg_color, s);
     }
     
-    // --- МЕТКА ОБЛАСТИ ГРЯЗНОЙ (правильно через GUI_InvalidateRect) ---
+    // --- ОТПРАВКА ОТРИСОВАННОЙ СТРОКИ НА LCD ---
     if (s->is_allocated) {
         s->needs_render = true;
         GUI_InvalidateRect(s, clx, cly, el->w, item_h);
         
-        // ОТПРАВКА dirty области на LCD (аналог UI_DrawTree строка 1784)
+        // Отправляем на LCD и сбрасываем dirty rect
         ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
-        
-        // Сброс dirty rect ПОСЛЕ отправки
         s->dirty_x1 = 0; s->dirty_y1 = 0;
         s->dirty_x2 = 0; s->dirty_y2 = 0;
         s->needs_render = false;
