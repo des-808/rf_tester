@@ -38,7 +38,9 @@ typedef struct MenuItem {
             int min_val;
             int max_val;
             uint8_t step;
+            void (*callback)(void);  // <-- ДОБАВИТЬ СЮДА
         } value_limits;
+        
     } data;
 } MenuItem_t;
 

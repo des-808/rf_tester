@@ -2626,6 +2626,86 @@ void UI_RenderListBox(UIElement_t* el) {
     }
 }
 
+
+/**
+ * @brief Отрисовка ОДНОЙ строки ListBox по индексу
+ *        Используется для оптимизации при навигации (вместо полной перерисовки)
+ */
+void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+    if (item_index >= el->children_count) return;
+    
+    Sprite_t* s = el->sprite;
+    
+    // Проверяем, что элемент видим
+    uint8_t start = el->props.list_box.scroll_offset;
+    uint8_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
+    uint16_t item_h = font_h + 6;
+    uint8_t visible_count = (el->h + item_h - 1) / item_h;
+    if (visible_count == 0) visible_count = 1;
+    
+    // Проверяем, что элемент попадает в видимую область
+    if (item_index < start || item_index >= (start + visible_count)) return;
+    
+    // Локальные координаты ListBox внутри спрайта
+    int16_t lx = el->x - s->x;
+    
+    // Ширина скроллбара (должна совпадать с UI_RenderListBox)
+    uint8_t scrollbar_w = 10;
+    if (el->children_count <= visible_count) {
+        scrollbar_w = 0;
+    } else if (scrollbar_w > el->w - 2) {
+        scrollbar_w = (el->w > 2) ? (el->w - 2) : 0;
+    }
+    uint16_t content_w = el->w - scrollbar_w;
+    if (content_w < 8) content_w = 8;
+    
+    // Вычисляем позицию строки
+    int16_t relative_row_y = (item_index - start) * item_h;
+    int16_t clx = lx;
+    int16_t cly = relative_row_y;
+    
+    // Цвет фона элемента (выделен или нет)
+    UIElement_t* child = (UIElement_t*)el->children[item_index];
+    if (!child) return;
+    
+    uint16_t bg_color = (item_index == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
+    
+    // Очищаем фон строки
+    for (int16_t y = cly; y < cly + item_h; y++) {
+        if (y < 0 || y >= s->h) continue;
+        
+        int16_t limit_x = (scrollbar_w > 0) ? (clx + content_w) : (clx + el->w);
+        
+        for (int16_t x = clx + 1; x < limit_x - 1; x++) {
+            if (x < 0 || x >= s->w) continue;
+            s->data[y * s->w + x] = bg_color;
+        }
+    }
+    
+    // Отрисовка текста
+    int16_t text_x = clx + 5;
+    int16_t text_y = cly + (item_h - font_h) / 2;
+    
+    if (child->text_content[0] != '\0') {
+        lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg_color, s);
+    }
+    
+    // Помечаем область строки грязной
+    if (s->is_allocated) {
+        s->needs_render = true;
+        int16_t new_dirty_x2 = clx + el->w - 1;
+        int16_t new_dirty_y2 = cly + item_h - 1;
+        int16_t new_dirty_x1 = clx;
+        int16_t new_dirty_y1 = cly;
+        
+        if (s->dirty_x2 < new_dirty_x2) s->dirty_x2 = new_dirty_x2;
+        if (s->dirty_y2 < new_dirty_y2) s->dirty_y2 = new_dirty_y2;
+        if (s->dirty_x1 > new_dirty_x1) s->dirty_x1 = new_dirty_x1;
+        if (s->dirty_y1 > new_dirty_y1) s->dirty_y1 = new_dirty_y1;
+    }
+}
+
 static bool g_listbox_drag_active = false;
 static int16_t g_listbox_drag_last_y = -1;
 
@@ -3128,6 +3208,10 @@ void Draw_Icon_WiFi_Callback(UIElement_t* el) {
     s->dirty_x1 = 0; s->dirty_y1 = 0;
     s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
     s->needs_render = true;
+}
+
+void Buzzer_On_Off_(){
+    Draw_Icon_Buzzer_Callback(&status_icon_buzzer_node);
 }
 
 void Draw_Icon_Buzzer_Callback(UIElement_t* el) {

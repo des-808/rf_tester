@@ -218,6 +218,8 @@ void Draw_Icons_Callback(UIElement_t* el);
 void Draw_Icon_Battery_Callback(UIElement_t* el);
 void Draw_Icon_Bluetooth_Callback(UIElement_t* el);
 void Draw_Icon_WiFi_Callback(UIElement_t* el);
+void Buzzer_On_Off_();
+void Draw_Icon_Buzzer_Callback(UIElement_t* el);
 
 void Draw_StatusBar_Callback(UIElement_t* el);
 void Draw_Graph_Content(UIElement_t* els);
@@ -246,6 +248,7 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox, const char* item_text);
 int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty);
 UIElement_t* UI_FindElementAt(UIElement_t* root, uint16_t tx, uint16_t ty, int16_t* out_local_x, int16_t* out_local_y);
 void UI_RenderListBox(UIElement_t* el);
+void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index);
 
 // Включить/выключить отладочную отрисовку геометрии элементов и скроллбара
 extern bool ui_debug_draw;

@@ -1,4 +1,5 @@
 #include "menu.h"
+#include "gui.h"
 #include "st7796.h"
 #include <string.h>
 
@@ -164,7 +165,7 @@ static MenuItem_t settingsSubMenu[] = {
     { "WiFi",0, ITEM_TYPE_VALUE, .data.action_func = toggleWiFi, .data.value_limits = {0, 1, 1} }, // Логика toggle внутри
     { "NTP Auto",0, ITEM_TYPE_VALUE, .data.ptr_value = &ntpSyncEnabled, .data.value_limits = {0, 1, 1} },
     { "Sync Now",0, ITEM_TYPE_ACTION, .data.action_func = manualSyncTimeWithNTP },
-    { "Buzzer",0, ITEM_TYPE_VALUE, .data.ptr_value = &buzzerOnOff, .data.value_limits = {0, 1, 1} },
+    { "Buzzer",0, ITEM_TYPE_VALUE, .data.ptr_value = &buzzerOnOff, .data.value_limits = {0, 1, 1,Buzzer_On_Off_}/* , .data.callback = Buzzer_On_Off */ },
     { "CC1101",0, ITEM_TYPE_SUBMENU, .data.submenu_items = cc1101SubMenu, .data_count = sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]) },
     { "Forget WiFi",0, ITEM_TYPE_ACTION, .data.action_func = NULL }, // Реализовать отдельно
 };
@@ -300,10 +301,8 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
             if (*(int*)item->data.ptr_value != old_val && ui_item) {
                 Update_MenuItem_Text(ui_item, item);
                 
-                // Оптимизация перерисовки: обновляем только строку, если ListBox это поддерживает
-                // GUI_InvalidateRect(... конкретная строка ...); 
-                // Пока используем полную перерисовку списка:
-                GUI_InvalidateSprite(listbox->sprite); 
+                // Перерисовка только изменившейся строки
+                GUI_InvalidateRect(listbox->sprite, ui_item->x, ui_item->y, ui_item->w, ui_item->h);
             }
             break;
         }
@@ -335,10 +334,20 @@ void Menu_ProcessInput(uint8_t key) {
 
     switch (key) {
         case KEY_UP:
-            if (idx > 0) { lb->props.list_box.selected_index--; GUI_InvalidateSprite(lb->sprite); }
+            if (idx > 0) { 
+                lb->props.list_box.selected_index--; 
+                // Перерисовка только старой и новой строки
+                UI_RenderListBoxItem(lb, idx);
+                UI_RenderListBoxItem(lb, lb->props.list_box.selected_index);
+            }
             break;
         case KEY_DOWN:
-            if (idx < current_menu_count - 1) { lb->props.list_box.selected_index++; GUI_InvalidateSprite(lb->sprite); }
+            if (idx < current_menu_count - 1) { 
+                lb->props.list_box.selected_index++; 
+                // Перерисовка только старой и новой строки
+                UI_RenderListBoxItem(lb, idx);
+                UI_RenderListBoxItem(lb, lb->props.list_box.selected_index);
+            }
             break;
             
         case KEY_ENTER:
