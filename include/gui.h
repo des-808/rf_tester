@@ -221,6 +221,9 @@ void Draw_Icon_WiFi_Callback(UIElement_t* el);
 void Buzzer_On_Off_();
 void Draw_Icon_Buzzer_Callback(UIElement_t* el);
 
+extern UIElement_t status_icon_buzzer_node;
+extern Sprite_t status_icon_buzzer_sprite;
+
 void Draw_StatusBar_Callback(UIElement_t* el);
 void Draw_Graph_Content(UIElement_t* els);
 

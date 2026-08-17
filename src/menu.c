@@ -165,7 +165,7 @@ static MenuItem_t settingsSubMenu[] = {
     { "WiFi",0, ITEM_TYPE_VALUE, .data.action_func = toggleWiFi, .data.value_limits = {0, 1, 1} }, // Логика toggle внутри
     { "NTP Auto",0, ITEM_TYPE_VALUE, .data.ptr_value = &ntpSyncEnabled, .data.value_limits = {0, 1, 1} },
     { "Sync Now",0, ITEM_TYPE_ACTION, .data.action_func = manualSyncTimeWithNTP },
-    { "Buzzer",0, ITEM_TYPE_VALUE, .data.ptr_value = &buzzerOnOff, .data.value_limits = {0, 1, 1,Buzzer_On_Off_}/* , .data.callback = Buzzer_On_Off */ },
+    { "Buzzer",0, ITEM_TYPE_VALUE, .data.ptr_value = &buzzerOnOff, .data.value_limits = {0, 1, 1, Buzzer_On_Off_} },
     { "CC1101",0, ITEM_TYPE_SUBMENU, .data.submenu_items = cc1101SubMenu, .data_count = sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]) },
     { "Forget WiFi",0, ITEM_TYPE_ACTION, .data.action_func = NULL }, // Реализовать отдельно
 };
@@ -253,6 +253,15 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
     current_menu_items = items;
     current_menu_count = count;
 
+    // Обновляем текст всех элементов ListBox с текущими значениями параметров
+    for (uint8_t i = 0; i < count; i++) {
+        if (items[i].type == ITEM_TYPE_VALUE && 
+            (uint8_t)i < listbox_container->children_count) {
+            Update_MenuItem_Text(listbox_container->children[i], &items[i]);
+            UI_RenderListBoxItem(listbox_container, i);
+        }
+    }
+
     GUI_InvalidateSprite(listbox_container->sprite);
 }
 
@@ -302,7 +311,12 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
                 Update_MenuItem_Text(ui_item, item);
                 
                 // Перерисовка только изменившейся строки
-                GUI_InvalidateRect(listbox->sprite, ui_item->x, ui_item->y, ui_item->w, ui_item->h);
+                UI_RenderListBoxItem(listbox, selected_index);
+                
+                // Вызов колбэка обновления иконки (если есть)
+                if (item->data.value_limits.callback) {
+                    item->data.value_limits.callback();
+                }
             }
             break;
         }

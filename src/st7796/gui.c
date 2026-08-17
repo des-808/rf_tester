@@ -38,7 +38,7 @@ static Sprite_t status_icon_battery_sprite;
 static Sprite_t status_icon_bt_sprite;
 static Sprite_t status_icon_wifi_sprite;
 static Sprite_t status_icon_ntp_sprite;
-static Sprite_t status_icon_buzzer_sprite;
+ Sprite_t status_icon_buzzer_sprite;
 static Sprite_t status_icon_mode_sprite;
 static Sprite_t status_spacer_sprite;
 
@@ -47,7 +47,7 @@ static UIElement_t status_icon_battery_node;
 static UIElement_t status_icon_bt_node;
 static UIElement_t status_icon_wifi_node;
 static UIElement_t status_icon_ntp_node;
-static UIElement_t status_icon_buzzer_node;
+ UIElement_t status_icon_buzzer_node;
 static UIElement_t status_icon_mode_node;
 static UIElement_t status_icon_spacer_node;
 
@@ -77,6 +77,26 @@ UIElement_t* ui_touch_row = NULL;
 extern UIElement_t* current_menu_listbox;
 extern MenuItem_t* current_menu_items;
 extern uint8_t current_menu_count;
+
+
+
+void Buzzer_On_Off_(){
+    // Перерисовываем иконку — она уже инвалидирует свой спрайт
+    extern UIElement_t status_icon_buzzer_node;
+    Draw_Icon_Buzzer_Callback(&status_icon_buzzer_node);
+    
+    // Инвалидируем статус-бар для перерисовки
+    Sprite_t* sb_s = &status_bar_sprite;
+    if (sb_s && sb_s->is_allocated) {
+        sb_s->dirty_x1 = 0; sb_s->dirty_y1 = 0;
+        sb_s->dirty_x2 = sb_s->w - 1; sb_s->dirty_y2 = sb_s->h - 1;
+        sb_s->needs_render = true;
+    }
+
+    // Пометим панели на перерисовку
+    if (digits_node.sprite != NULL) GUI_InvalidateSprite(digits_node.sprite);
+    //if (graph_node.sprite != NULL) GUI_InvalidateSprite(graph_node.sprite);
+} 
 
 /* static void gui_measurement_callback(const MeasurementResults* r) {
     if (!r) return;
@@ -2649,6 +2669,7 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
     
     // Локальные координаты ListBox внутри спрайта
     int16_t lx = el->x - s->x;
+    int16_t ly = el->y - s->y;
     
     // Ширина скроллбара (должна совпадать с UI_RenderListBox)
     uint8_t scrollbar_w = 10;
@@ -2660,10 +2681,11 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
     uint16_t content_w = el->w - scrollbar_w;
     if (content_w < 8) content_w = 8;
     
-    // Вычисляем позицию строки
+    // Вычисляем позицию строки (ВЕРНО!)
     int16_t relative_row_y = (item_index - start) * item_h;
+    int16_t row_abs_y = el->y + relative_row_y;
     int16_t clx = lx;
-    int16_t cly = relative_row_y;
+    int16_t cly = row_abs_y - s->y;
     
     // Цвет фона элемента (выделен или нет)
     UIElement_t* child = (UIElement_t*)el->children[item_index];
@@ -2671,7 +2693,7 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
     
     uint16_t bg_color = (item_index == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
     
-    // Очищаем фон строки
+    // --- ОЧИСТКА ФОНА СТРОКИ ---
     for (int16_t y = cly; y < cly + item_h; y++) {
         if (y < 0 || y >= s->h) continue;
         
@@ -2683,7 +2705,7 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
         }
     }
     
-    // Отрисовка текста
+    // --- ОТРИСОВКА ТЕКСТА ---
     int16_t text_x = clx + 5;
     int16_t text_y = cly + (item_h - font_h) / 2;
     
@@ -2691,18 +2713,18 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
         lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg_color, s);
     }
     
-    // Помечаем область строки грязной
+    // --- МЕТКА ОБЛАСТИ ГРЯЗНОЙ (правильно через GUI_InvalidateRect) ---
     if (s->is_allocated) {
         s->needs_render = true;
-        int16_t new_dirty_x2 = clx + el->w - 1;
-        int16_t new_dirty_y2 = cly + item_h - 1;
-        int16_t new_dirty_x1 = clx;
-        int16_t new_dirty_y1 = cly;
+        GUI_InvalidateRect(s, clx, cly, el->w, item_h);
         
-        if (s->dirty_x2 < new_dirty_x2) s->dirty_x2 = new_dirty_x2;
-        if (s->dirty_y2 < new_dirty_y2) s->dirty_y2 = new_dirty_y2;
-        if (s->dirty_x1 > new_dirty_x1) s->dirty_x1 = new_dirty_x1;
-        if (s->dirty_y1 > new_dirty_y1) s->dirty_y1 = new_dirty_y1;
+        // ОТПРАВКА dirty области на LCD (аналог UI_DrawTree строка 1784)
+        ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
+        
+        // Сброс dirty rect ПОСЛЕ отправки
+        s->dirty_x1 = 0; s->dirty_y1 = 0;
+        s->dirty_x2 = 0; s->dirty_y2 = 0;
+        s->needs_render = false;
     }
 }
 
@@ -3210,9 +3232,7 @@ void Draw_Icon_WiFi_Callback(UIElement_t* el) {
     s->needs_render = true;
 }
 
-void Buzzer_On_Off_(){
-    Draw_Icon_Buzzer_Callback(&status_icon_buzzer_node);
-}
+
 
 void Draw_Icon_Buzzer_Callback(UIElement_t* el) {
     if (!el || !el->sprite || !el->sprite->data) return;
