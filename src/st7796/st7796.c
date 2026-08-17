@@ -7,6 +7,7 @@
 #include "font.h"
 
 extern SPI_HandleTypeDef hspi4;
+extern DMA_HandleTypeDef hdma2d;
 uint8_t screen_rotation = 0;
 
 
@@ -499,5 +500,74 @@ void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, i
         while (HAL_SPI_GetState(&hspi4) != HAL_SPI_STATE_READY); 
     }
 
+    LCD_CS_HIGH;
+}
+
+
+// ============================================================================
+// DMA2D-УСКОРЕННЫЕ ФУНКЦИИ
+// ============================================================================
+
+/**
+ * @brief Заполнение спрайта цветом через DMA2D
+ */
+void Sprite_fill_DMA2D(Sprite_t* s, uint16_t color) {
+    if (!s || !s->data || !s->is_allocated) return;
+    
+    hdma2d.Init.Mode = DMA2D_M2M;
+    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
+    hdma2d.Init.OutputOffset = 0x0;
+    
+    if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) return;
+    if (HAL_DMA2D_ConfigLayer(&hdma2d, DMA2D_OUTPUT_MEMORY) != HAL_OK) return;
+    
+    if (HAL_DMA2D_Start(&hdma2d, color, s->w * s->h) != HAL_OK) return;
+    if (HAL_DMA2D_PollForTransfer(&hdma2d, 10) != HAL_OK) return;
+    
+    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (s->w * s->h * 2 + 31) & ~31);
+}
+
+/**
+ * @brief Отправка выделенной прямоугольной области через DMA2D (одним блоком)
+ */
+void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2) {
+    uint16_t screen_x1 = s->x + rx1;
+    uint16_t screen_y1 = s->y + ry1;
+    uint16_t screen_x2 = s->x + rx2;
+    uint16_t screen_y2 = s->y + ry2;
+    
+    uint16_t rect_w = rx2 - rx1 + 1;
+    uint16_t rect_h = ry2 - ry1 + 1;
+    uint32_t total_bytes = (uint32_t)rect_w * rect_h * 2;
+    
+    ST7796_SetAddressWindow(screen_x1, screen_y1, screen_x2, screen_y2);
+    
+    LCD_CS_LOW;
+    LCD_DC_DATA;
+    
+    // Копируем блоки из sprite-буфера в DMA-буфер через DMA2D
+    hdma2d.Init.Mode = DMA2D_M2M;
+    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
+    hdma2d.Init.OutputOffset = rect_w;
+    hdma2d.Init.AlphaMode = DMA2D_NO_MODIF_ALPHA;
+    hdma2d.Init.InputOffset = 0x0;
+    hdma2d.Init.InputColorMode = DMA2D_INPUT_RGB565;
+    
+    if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) return;
+    if (HAL_DMA2D_ConfigLayer(&hdma2d, DMA2D_INPUT_MEMORY) != HAL_OK) return;
+    
+    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (s->w * s->h * 2 + 31) & ~31);
+    __DSB();
+    
+    if (HAL_DMA2D_BlendingStart(&hdma2d, (uint32_t)&s->data[ry1 * s->w + rx1], 
+                                 (uint32_t)dma_buffer, rect_w, rect_h) != HAL_OK) return;
+    if (HAL_DMA2D_PollForTransfer(&hdma2d, 10) != HAL_OK) return;
+    
+    SCB_CleanDCache_by_Addr((uint32_t*)dma_buffer, (total_bytes + 31) & ~31);
+    __DSB();
+    
+    HAL_SPI_Transmit_DMA(&hspi4, (uint8_t*)dma_buffer, total_bytes);
+    while (HAL_SPI_GetState(&hspi4) != HAL_SPI_STATE_READY);
+    
     LCD_CS_HIGH;
 }
