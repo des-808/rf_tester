@@ -80,23 +80,19 @@ extern uint8_t current_menu_count;
 
 
 
-void Buzzer_On_Off_(){
-    // Перерисовываем иконку — она уже инвалидирует свой спрайт
-    extern UIElement_t status_icon_buzzer_node;
+void Buzzer_On_Off_(void) {
+    // Меняем состояние переменной
+    //buzzerOnOff = !buzzerOnOff; 
     Draw_Icon_Buzzer_Callback(&status_icon_buzzer_node);
+    // Говорим движку: "Узел иконки изменился, обнови его"
+    GUI_InvalidateSprite(status_icon_buzzer_node.sprite); 
     
-    // Инвалидируем статус-бар для перерисовки
-    Sprite_t* sb_s = &status_bar_sprite;
-    if (sb_s && sb_s->is_allocated) {
-        sb_s->dirty_x1 = 0; sb_s->dirty_y1 = 0;
-        sb_s->dirty_x2 = sb_s->w - 1; sb_s->dirty_y2 = sb_s->h - 1;
-        sb_s->needs_render = true;
-    }
+    // Больше ничего делать НЕ НУЖНО. 
+    // UI_DrawTree(&status_icon_buzzer_node);// увидит флаг needs_render у этого узла и вызовет Draw_Icon_Buzzer_Callback автоматически.
 
-    // Пометим панели на перерисовку
-    if (digits_node.sprite != NULL) GUI_InvalidateSprite(digits_node.sprite);
-    //if (graph_node.sprite != NULL) GUI_InvalidateSprite(graph_node.sprite);
-} 
+    // Инвалидируем узел, чтобы главный цикл подхватил изменения в Dirty Rect
+    //GUI_InvalidateSprite(status_icon_buzzer_node.sprite);
+}
 
 /* static void gui_measurement_callback(const MeasurementResults* r) {
     if (!r) return;
@@ -2370,7 +2366,7 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
 
     el->props.list_box.height_mode = UI_LISTBOX_HEIGHT_AUTO;
     el->props.list_box.visible_row_count = 4;  // можно переопределить позже
-    el->props.list_box.pixel_height = 192;     // можно переопределить позже
+    el->props.list_box.pixel_height = 0;// 192;     // можно переопределить позже
     // Устанавливаем шрифт по умолчанию для ListBox
     el->font = &font_arial_9_struct;
 }
@@ -2788,186 +2784,12 @@ UIElement_t* UI_FindElementAt(UIElement_t* root, uint16_t tx, uint16_t ty, int16
     return UI_FindElementRecursive(root, tx, ty, out_local_x, out_local_y);
 }
 
-//Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
-/* int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
-    if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
-    if (tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) {
-        g_listbox_drag_active = false;
-        g_listbox_drag_last_y = -1;
-        return -1;
-    }
-
-    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-    uint16_t item_h = font_h + 6;
-    int16_t local_y = ty - listbox->y;
-    if (local_y < 0 || local_y >= listbox->h) return -1;
-
-    uint8_t visible = (listbox->h + item_h - 1) / item_h;
-    if (visible == 0) visible = 1;
-
-    // Обработка клика по области скроллбара (правая полоса)
-    uint8_t scrollbar_w = 10;
-    if (scrollbar_w > listbox->w - 2) scrollbar_w = (listbox->w > 2) ? (listbox->w - 2) : 0;
-    if (scrollbar_w > 0 && tx >= (listbox->x + listbox->w - scrollbar_w)) {
-        uint8_t children = listbox->children_count;
-        if (children <= visible) return -1;
-
-        uint8_t max_offset = (children > visible) ? (children - visible) : 0;
-        uint16_t thumb_h = (uint16_t)visible * listbox->h / children;
-        if (thumb_h < 12) thumb_h = 12;
-        if (thumb_h > listbox->h) thumb_h = listbox->h;
-
-        int16_t rel_y = ty - listbox->y;
-        int32_t track_span = (int32_t)listbox->h - (int32_t)thumb_h;
-        if (track_span <= 0) return -1;
-
-        int32_t pos = rel_y - (thumb_h / 2);
-        if (pos < 0) pos = 0;
-        if (pos > track_span) pos = track_span;
-
-        uint8_t new_offset = (uint8_t)((pos * max_offset + track_span/2) / track_span);
-        if (new_offset != listbox->props.list_box.scroll_offset) {
-            listbox->props.list_box.scroll_offset = new_offset;
-            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-        }
-        return -1;
-    }
-
-    if (!g_listbox_drag_active) {
-        g_listbox_drag_active = true;
-        g_listbox_drag_last_y = ty;
-        int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
-        if (target < 0 || target >= listbox->children_count) return -1;
-        if (listbox->props.list_box.selected_index != target) {
-            listbox->props.list_box.selected_index = target;
-            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-        }
-        return target;
-    }
-
-    int16_t delta_y = ty - g_listbox_drag_last_y;
-    g_listbox_drag_last_y = ty;
-    if (delta_y != 0) {
-        uint8_t max_offset = (listbox->children_count > visible) ? (listbox->children_count - visible) : 0;
-        if (max_offset > 0) {
-            int8_t step = delta_y / (int16_t)item_h;
-            if (step != 0) {
-                int16_t new_offset = (int16_t)listbox->props.list_box.scroll_offset - step;
-                if (new_offset < 0) new_offset = 0;
-                if (new_offset > (int16_t)max_offset) new_offset = max_offset;
-                if ((uint8_t)new_offset != listbox->props.list_box.scroll_offset) {
-                    listbox->props.list_box.scroll_offset = (uint8_t)new_offset;
-                    GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-                }
-            }
-        }
-    }
-    return -1;
-} */
-
-//Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
-/* int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) {
-    if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
-    if (tx < listbox->x || tx >= (listbox->x + listbox->w) || ty < listbox->y || ty >= (listbox->y + listbox->h)) {
-        g_listbox_drag_active = false;
-        g_listbox_drag_last_y = -1;
-        return -1;
-    }
-
-    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-    uint16_t item_h = font_h + 6;
-    int16_t local_y = ty - listbox->y;
-    if (local_y < 0 || local_y >= listbox->h) return -1;
-
-    // Обработка клика по области скроллбара (правая полоса)
-    uint8_t scrollbar_w = 10; // резервируем до 10 пикселей справа под скроллбар
-    if (scrollbar_w > listbox->w - 2) scrollbar_w = (listbox->w > 2) ? (listbox->w - 2) : 0;
-    if (scrollbar_w > 0 && tx >= (listbox->x + listbox->w - scrollbar_w)) {
-        uint8_t children = listbox->children_count;
-        uint8_t visible = listbox->h / item_h;
-        if (visible == 0) visible = 1;
-        if (children <= visible) return -1;
-
-        uint8_t max_offset = (children > visible) ? (children - visible) : 0;
-        uint16_t thumb_h = (uint16_t)visible * listbox->h / children;
-        if (thumb_h < 12) thumb_h = 12;
-        if (thumb_h > listbox->h) thumb_h = listbox->h;
-
-        int16_t rel_y = ty - listbox->y;
-        int32_t track_span = (int32_t)listbox->h - (int32_t)thumb_h;
-        if (track_span <= 0) return -1;
-
-        int32_t pos = rel_y - (thumb_h / 2);
-        if (pos < 0) pos = 0;
-        if (pos > track_span) pos = track_span;
-
-        uint8_t new_offset = (uint8_t)((pos * max_offset + track_span/2) / track_span);
-        if (new_offset != listbox->props.list_box.scroll_offset) {
-            listbox->props.list_box.scroll_offset = new_offset;
-            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-        }
-        return -1;
-    }
-
-    if (g_listbox_drag_last_y < 0) {
-        g_listbox_drag_last_y = ty;
-        int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
-        if (target < 0 || target >= listbox->children_count) return -1;
-        if (listbox->props.list_box.selected_index != target) {
-            listbox->props.list_box.selected_index = target;
-            GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-        }
-        return target;
-    }
-
-    if (!g_listbox_drag_active) {
-        int16_t delta_y = ty - g_listbox_drag_last_y;
-        if (delta_y < 0) delta_y = -delta_y;
-        if (delta_y > (int16_t)item_h / 2) {
-            g_listbox_drag_active = true;
-        }
-    }
-
-    if (g_listbox_drag_active) {
-        int16_t delta_y = ty - g_listbox_drag_last_y;
-        g_listbox_drag_last_y = ty;
-        if (delta_y != 0) {
-            uint8_t visible = (listbox->h / item_h);
-            if (visible == 0) visible = 1;
-            uint8_t max_offset = (listbox->children_count > visible) ? (listbox->children_count - visible) : 0;
-            if (max_offset > 0) {
-                int8_t step = delta_y / (int16_t)item_h;
-                if (step != 0) {
-                    int16_t new_offset = (int16_t)listbox->props.list_box.scroll_offset - step;
-                    if (new_offset < 0) new_offset = 0;
-                    if (new_offset > (int16_t)max_offset) new_offset = max_offset;
-                    if ((uint8_t)new_offset != listbox->props.list_box.scroll_offset) {
-                        listbox->props.list_box.scroll_offset = (uint8_t)new_offset;
-                        GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-                    }
-                }
-            }
-        }
-        return -1;
-    }
-
-    g_listbox_drag_last_y = ty;
-    int8_t target = listbox->props.list_box.scroll_offset + (local_y / item_h);
-    if (target < 0 || target >= listbox->children_count) return -1;
-
-    if (listbox->props.list_box.selected_index != target) {
-        listbox->props.list_box.selected_index = target;
-        GUI_InvalidateRect(listbox->sprite, listbox->x - listbox->sprite->x, listbox->y - listbox->sprite->y, listbox->w, listbox->h);
-    }
-    return target;
-} */
-
 // Вспомогательная функция: проверка попадания точки в прямоугольник
 static inline bool IsPointInRect(int16_t px, int16_t py, int16_t rx, int16_t ry, uint16_t rw, uint16_t rh) 
 {
     return (px >= rx && px < (rx + rw) && py >= ry && py < (ry + rh));
 }
-
+//Обработчик тача, меняющий selected_index и вызывающий GUI_InvalidateRect для перерисовки
 int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty) 
 {
     if (!listbox || listbox->type != UI_TYPE_LIST_BOX || !listbox->sprite) return -1;
