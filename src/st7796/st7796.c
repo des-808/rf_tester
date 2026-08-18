@@ -559,47 +559,39 @@ void Send_Next_Chunk_Internal(void) {
         return;
     }
 
-    // Высчитываем, сколько строк за этот заход мы можем упаковать в 256 КБ
     uint32_t bytes_per_line = current_rect_w * 2;
     uint16_t chunk_lines = DMA_BUFFER_MAX_BYTES / bytes_per_line;
     
     if (chunk_lines > lines_left) {
-        chunk_lines = lines_left; // Если остаток влезает полностью
+        chunk_lines = lines_left;
     }
-    if (chunk_lines == 0) chunk_lines = 1; // Защита (минимум 1 строка)
+    if (chunk_lines == 0) chunk_lines = 1; 
 
     uint32_t total_bytes = chunk_lines * bytes_per_line;
 
-    // Настройка выхода DMA2D (в dma_buffer в RAM_D2)
     hdma2d.Instance = DMA2D;
     hdma2d.Init.Mode = DMA2D_M2M;
     hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
-    hdma2d.Init.OutputOffset = 0; // В dma_buffer строки упаковываются плотно
+    hdma2d.Init.OutputOffset = 0; 
     
     if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) goto error;
     
-    // Настройка слоя-источника
     hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
     hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
-    // Ключевой момент: DMA2D сам пропустит «лишние» пиксели справа в вашем спрайте!
     hdma2d.LayerCfg[1].InputOffset = sprite_total_w - current_rect_w; 
     hdma2d.LayerCfg[1].InputAlpha = 0xFF;
     
     if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) goto error;
     
-    // Аппаратно вырезаем и копируем большой блок (высота = chunk_lines)
     if (HAL_DMA2D_Start(&hdma2d, current_src_addr, (uint32_t)dma_buffer, current_rect_w, chunk_lines) != HAL_OK) goto error;
     if (HAL_DMA2D_PollForTransfer(&hdma2d, 20) != HAL_OK) goto error;
     
-    // Инвалидируем кэш dma_buffer в RAM_D2
     SCB_InvalidateDCache_by_Addr((uint32_t*)dma_buffer, (total_bytes + 31) & ~31);
     __DSB();
     
-    // Сдвигаем адрес источника на количество отправленных строк
     current_src_addr += chunk_lines * sprite_total_w * 2; 
     lines_left -= chunk_lines;
 
-    // Отправляем большой кусок по SPI DMA асинхронно
     if (HAL_SPI_Transmit_DMA(&hspi4, (uint8_t*)dma_buffer, total_bytes) != HAL_OK) {
         goto error;
     }
@@ -612,8 +604,11 @@ error:
 void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2) {
     if (!s || !s->data || !s->is_allocated) return;
 
-    // Если предыдущий огромный кусок еще шлется, ждем
-    while (display_spi_busy); 
+    // Гарантируем, что предыдущий огромный кусок полностью ушел по SPI.
+    // Если этого не делать, новые вызовы затирали контекст старых.
+    while (display_spi_busy == 1) {
+        __NOP(); 
+    }
 
     uint16_t screen_x1 = s->x + rx1;
     uint16_t screen_y1 = s->y + ry1;
@@ -629,16 +624,16 @@ void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t 
     LCD_CS_LOW;
     LCD_DC_DATA;
     
+    // Блокируем конвейер для этого кадра
     display_spi_busy = 1;
     
-    // Стартовый адрес грязного прямоугольника в спрайте
     current_src_addr = (uint32_t)&s->data[ry1 * s->w + rx1];
 
-    // Очищаем кэш всего спрайта ОДИН раз перед отправкой
+    // Синхронизируем кэш всего спрайта
     SCB_CleanDCache_by_Addr((uint32_t*)s->data, (s->w * s->h * 2 + 31) & ~31);
     __DSB();
 
-    // Запускаем конвейер крупных чанков
+    // Запускаем отправку первого крупного куска
     Send_Next_Chunk_Internal();
 }
 
