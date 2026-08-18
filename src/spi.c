@@ -28,6 +28,7 @@ SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi4;
 SPI_HandleTypeDef hspi6;
 DMA_HandleTypeDef hdma_spi4_tx;
+DMA2D_HandleTypeDef hdma2d;
 
 /* SPI1 init function */
 void MX_SPI1_Init(void)

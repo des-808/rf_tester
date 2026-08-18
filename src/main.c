@@ -80,7 +80,8 @@ void SystemClock_Config(void);
 void ST7796_Init(void);
 static void Scroll_ListBox(int8_t direction);
 uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
-DMA_HandleTypeDef hdma_spi4_tx;
+extern DMA_HandleTypeDef hdma_spi4_tx;
+extern DMA2D_HandleTypeDef hdma2d;
 //extern void drawStatusBar(Sprite_t *sprite);
 extern Sprite_t* status_bar_sprite;
 extern Sprite_t* main_screen_sprite;
@@ -219,6 +220,7 @@ int main(void)
   MX_SPI4_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_DMA2D_Init();
   MX_USB_DEVICE_Init();
   MX_UART5_Init();
   MX_I2C1_Init();

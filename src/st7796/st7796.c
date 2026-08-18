@@ -7,16 +7,27 @@
 #include "font.h"
 
 extern SPI_HandleTypeDef hspi4;
-extern DMA_HandleTypeDef hdma2d;
+extern DMA2D_HandleTypeDef hdma2d;
 uint8_t screen_rotation = 0;
 
+//***********************************************************************************************/
+/**
+ * @brief Флаг занятости дисплея
+**/
+volatile uint8_t display_spi_busy = 0;
 
-
+// Переменные для отслеживания текущего состояния отправки прямоугольника
+static uint32_t current_src_addr = 0;   // Текущий адрес считывания в спрайте
+static uint16_t lines_left = 0;         // Сколько строк осталось отправить
+static uint16_t current_rect_w = 0;     // Ширина отправляемого прямоугольника
+static uint16_t sprite_total_w = 0;     // Полная ширина спрайта (для шага строки)
+#define DMA_BUFFER_MAX_BYTES 262144//480*2
+//************************************************************************************************/
 uint16_t Display_Width = ST7796_WIDTH;   // Изначально 320
 uint16_t Display_Height = ST7796_HEIGHT; // Изначально 480
 
 // Буфер для DMA (остаётся — нужен для передачи)
-uint8_t dma_buffer[320 * 2] __attribute__((section(".ram_d1"), aligned(32)));
+uint8_t dma_buffer[DMA_BUFFER_MAX_BYTES] __attribute__((section(".ram_d2"), aligned(32)));
 
 // Создаем один большой массив памяти строго в AXI SRAM. 
 // Максимальный размер: статус-бар (480*30) + экран (480*290) = 153 600 слов (307 200 байт)
@@ -511,26 +522,132 @@ void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, i
 /**
  * @brief Заполнение спрайта цветом через DMA2D
  */
-void Sprite_fill_DMA2D(Sprite_t* s, uint16_t color) {
+/* void Sprite_fill_DMA2D(Sprite_t* s, uint16_t color) {
     if (!s || !s->data || !s->is_allocated) return;
     
-    hdma2d.Init.Mode = DMA2D_M2M;
-    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
-    hdma2d.Init.OutputOffset = 0x0;
+    // Включаем режим Register-to-Memory (заливка памяти цветом из регистра)
+    hdma2d.Instance = DMA2D;
+    hdma2d.Init.Mode = DMA2D_R2M;                 
+    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;   // Формат цвета вашего дисплея
+    hdma2d.Init.OutputOffset = 0;                  // Заливаем память сплошным потоком
     
     if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) return;
-    if (HAL_DMA2D_ConfigLayer(&hdma2d, DMA2D_OUTPUT_MEMORY) != HAL_OK) return;
     
-    if (HAL_DMA2D_Start(&hdma2d, color, s->w * s->h) != HAL_OK) return;
+     
+    //    Передаем 4 аргумента в HAL_DMA2D_Start:
+    //    1. Хэндл hdma2d
+    //    2. Значение цвета (для R2M это просто 16-битный цвет)
+    //    3. Адрес назначения (куда заливать в памяти)
+    //    4. Ширина (кол-во пикселей в строке)
+    //    5. Высота (кол-во строк)
+    
+    if (HAL_DMA2D_Start(&hdma2d, (uint32_t)color, (uint32_t)s->data, s->w, s->h) != HAL_OK) {
+        return;
+    }
+    
+    // Ожидаем окончания операции (займет доли миллисекунды)
     if (HAL_DMA2D_PollForTransfer(&hdma2d, 10) != HAL_OK) return;
     
+    // Очищаем D-Cache, чтобы SPI DMA гарантированно увидел изменения в RAM
+    uint32_t total_bytes = (uint32_t)s->w * s->h * 2;
+    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (total_bytes + 31) & ~31);
+} */
+void Send_Next_Chunk_Internal(void) {
+    if (lines_left == 0) {
+        LCD_CS_HIGH;
+        display_spi_busy = 0;
+        return;
+    }
+
+    // Высчитываем, сколько строк за этот заход мы можем упаковать в 256 КБ
+    uint32_t bytes_per_line = current_rect_w * 2;
+    uint16_t chunk_lines = DMA_BUFFER_MAX_BYTES / bytes_per_line;
+    
+    if (chunk_lines > lines_left) {
+        chunk_lines = lines_left; // Если остаток влезает полностью
+    }
+    if (chunk_lines == 0) chunk_lines = 1; // Защита (минимум 1 строка)
+
+    uint32_t total_bytes = chunk_lines * bytes_per_line;
+
+    // Настройка выхода DMA2D (в dma_buffer в RAM_D2)
+    hdma2d.Instance = DMA2D;
+    hdma2d.Init.Mode = DMA2D_M2M;
+    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
+    hdma2d.Init.OutputOffset = 0; // В dma_buffer строки упаковываются плотно
+    
+    if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) goto error;
+    
+    // Настройка слоя-источника
+    hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
+    hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
+    // Ключевой момент: DMA2D сам пропустит «лишние» пиксели справа в вашем спрайте!
+    hdma2d.LayerCfg[1].InputOffset = sprite_total_w - current_rect_w; 
+    hdma2d.LayerCfg[1].InputAlpha = 0xFF;
+    
+    if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) goto error;
+    
+    // Аппаратно вырезаем и копируем большой блок (высота = chunk_lines)
+    if (HAL_DMA2D_Start(&hdma2d, current_src_addr, (uint32_t)dma_buffer, current_rect_w, chunk_lines) != HAL_OK) goto error;
+    if (HAL_DMA2D_PollForTransfer(&hdma2d, 20) != HAL_OK) goto error;
+    
+    // Инвалидируем кэш dma_buffer в RAM_D2
+    SCB_InvalidateDCache_by_Addr((uint32_t*)dma_buffer, (total_bytes + 31) & ~31);
+    __DSB();
+    
+    // Сдвигаем адрес источника на количество отправленных строк
+    current_src_addr += chunk_lines * sprite_total_w * 2; 
+    lines_left -= chunk_lines;
+
+    // Отправляем большой кусок по SPI DMA асинхронно
+    if (HAL_SPI_Transmit_DMA(&hspi4, (uint8_t*)dma_buffer, total_bytes) != HAL_OK) {
+        goto error;
+    }
+    return;
+
+error:
+    display_spi_busy = 0;
+    LCD_CS_HIGH;
+}
+void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2) {
+    if (!s || !s->data || !s->is_allocated) return;
+
+    // Если предыдущий огромный кусок еще шлется, ждем
+    while (display_spi_busy); 
+
+    uint16_t screen_x1 = s->x + rx1;
+    uint16_t screen_y1 = s->y + ry1;
+    uint16_t screen_x2 = s->x + rx2;
+    uint16_t screen_y2 = s->y + ry2;
+    
+    current_rect_w = rx2 - rx1 + 1;
+    lines_left = ry2 - ry1 + 1;
+    sprite_total_w = s->w;
+    
+    ST7796_SetAddressWindow(screen_x1, screen_y1, screen_x2, screen_y2);
+    
+    LCD_CS_LOW;
+    LCD_DC_DATA;
+    
+    display_spi_busy = 1;
+    
+    // Стартовый адрес грязного прямоугольника в спрайте
+    current_src_addr = (uint32_t)&s->data[ry1 * s->w + rx1];
+
+    // Очищаем кэш всего спрайта ОДИН раз перед отправкой
     SCB_CleanDCache_by_Addr((uint32_t*)s->data, (s->w * s->h * 2 + 31) & ~31);
+    __DSB();
+
+    // Запускаем конвейер крупных чанков
+    Send_Next_Chunk_Internal();
 }
 
 /**
  * @brief Отправка выделенной прямоугольной области через DMA2D (одним блоком)
  */
-void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2) {
+/* void ST7796_PushSpriteRect_DMA2D_OLD(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2) {
+    if (!s || !s->data || !s->is_allocated) return;
+
     uint16_t screen_x1 = s->x + rx1;
     uint16_t screen_y1 = s->y + ry1;
     uint16_t screen_x2 = s->x + rx2;
@@ -545,29 +662,163 @@ void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t 
     LCD_CS_LOW;
     LCD_DC_DATA;
     
-    // Копируем блоки из sprite-буфера в DMA-буфер через DMA2D
-    hdma2d.Init.Mode = DMA2D_M2M;
-    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
-    hdma2d.Init.OutputOffset = rect_w;
-    hdma2d.Init.AlphaMode = DMA2D_NO_MODIF_ALPHA;
-    hdma2d.Init.InputOffset = 0x0;
-    hdma2d.Init.InputColorMode = DMA2D_INPUT_RGB565;
+    // 1. НАСТРОЙКА ВЫХОДА (Куда копируем — в наш плотный dma_buffer)
+    hdma2d.Instance = DMA2D;
+    hdma2d.Init.Mode = DMA2D_M2M;                  // Режим копирования из памяти в память
+    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;   // Формат цвета под ST7796
+    hdma2d.Init.OutputOffset = 0;                  // В dma_buffer строки идут без отступов
     
     if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) return;
-    if (HAL_DMA2D_ConfigLayer(&hdma2d, DMA2D_INPUT_MEMORY) != HAL_OK) return;
     
+    // 2. НАСТРОЙКА СЛОЯ-ИСТОЧНИКА (Используем встроенный массив во Foreground слой, индекс 1)
+    hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;     // Оставляем цвет как есть
+    hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;  // Формат пикселей в спрайте
+    // Высчитываем шаг строки: сколько пикселей пропустить в спрайте, чтобы перейти на новую строку
+    hdma2d.LayerCfg[1].InputOffset = s->w - rect_w;          
+    hdma2d.LayerCfg[1].InputAlpha = 0xFF;                    // Слой полностью непрозрачен
+    
+    // Применяем настройки для Foreground слоя (индекс 1)
+    if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) return;
+    
+    // Сбрасываем кэш данных (D-Cache) для исходного спрайта, чтобы DMA2D читал актуальные данные из RAM
     SCB_CleanDCache_by_Addr((uint32_t*)s->data, (s->w * s->h * 2 + 31) & ~31);
     __DSB();
     
-    if (HAL_DMA2D_BlendingStart(&hdma2d, (uint32_t)&s->data[ry1 * s->w + rx1], 
-                                 (uint32_t)dma_buffer, rect_w, rect_h) != HAL_OK) return;
+    // Рассчитываем адрес начала нужного нам прямоугольника (верхний левый угол) в спрайте
+    uint32_t src_start_addr = (uint32_t)&s->data[ry1 * s->w + rx1];
+    
+    // Запускаем аппаратное вырезание прямоугольника и его копирование в dma_buffer
+    if (HAL_DMA2D_Start(&hdma2d, src_start_addr, (uint32_t)dma_buffer, rect_w, rect_h) != HAL_OK) return;
     if (HAL_DMA2D_PollForTransfer(&hdma2d, 10) != HAL_OK) return;
     
-    SCB_CleanDCache_by_Addr((uint32_t*)dma_buffer, (total_bytes + 31) & ~31);
+    // Сбрасываем кэш dma_buffer, чтобы контроллер SPI DMA считал из RAM то, что туда положил DMA2D
+   // чтобы SPI DMA прочитал из физической RAM свежие данные от DMA2D, а не старый кэш CPU
+    SCB_InvalidateDCache_by_Addr((uint32_t*)dma_buffer, (total_bytes + 31) & ~31);
     __DSB();
     
+    // Отправляем готовую упакованную область на дисплей через SPI DMA
     HAL_SPI_Transmit_DMA(&hspi4, (uint8_t*)dma_buffer, total_bytes);
+    
+    // Ожидаем завершения отправки по SPI (пока это необходимо для стабильности)
     while (HAL_SPI_GetState(&hspi4) != HAL_SPI_STATE_READY);
     
     LCD_CS_HIGH;
-}
+}  */
+
+ /* void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2) {
+    if (!s || !s->data || !s->is_allocated) return;
+
+    // Ждем, если предыдущая SPI-передача еще не завершилась
+    while (display_spi_busy); 
+
+    uint16_t screen_x1 = s->x + rx1;
+    uint16_t screen_y1 = s->y + ry1;
+    uint16_t screen_x2 = s->x + rx2;
+    uint16_t screen_y2 = s->y + ry2;
+    
+    uint16_t rect_w = rx2 - rx1 + 1;
+    uint16_t rect_h = ry2 - ry1 + 1;
+    uint32_t total_bytes = (uint32_t)rect_w * rect_h * 2;
+    
+    ST7796_SetAddressWindow(screen_x1, screen_y1, screen_x2, screen_y2);
+    
+    LCD_CS_LOW;
+    LCD_DC_DATA;
+    
+    // Выставляем флаг: дисплей занят передачей данных
+    display_spi_busy = 1;
+    
+    // 1. НАСТРОЙКА ВЫХОДА DMA2D (в dma_buffer)
+    hdma2d.Instance = DMA2D;
+    hdma2d.Init.Mode = DMA2D_M2M;
+    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
+    hdma2d.Init.OutputOffset = 0;
+    
+    if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) { display_spi_busy = 0; LCD_CS_HIGH; return; }
+    
+    // 2. НАСТРОЙКА СЛОЯ-ИСТОЧНИКА
+    hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
+    hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
+    hdma2d.LayerCfg[1].InputOffset = s->w - rect_w;
+    hdma2d.LayerCfg[1].InputAlpha = 0xFF;
+    
+    if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) { display_spi_busy = 0; LCD_CS_HIGH; return; }
+    
+    // Синхронизация кэша для исходного буфера
+    SCB_CleanDCache_by_Addr((uint32_t*)s->data, (s->w * s->h * 2 + 31) & ~31);
+    __DSB();
+    
+    uint32_t src_start_addr = (uint32_t)&s->data[ry1 * s->w + rx1];
+    
+    // Копируем из спрайта в dma_buffer через DMA2D
+    if (HAL_DMA2D_Start(&hdma2d, src_start_addr, (uint32_t)dma_buffer, rect_w, rect_h) != HAL_OK) { 
+        display_spi_busy = 0; LCD_CS_HIGH; return; 
+    }
+    if (HAL_DMA2D_PollForTransfer(&hdma2d, 10) != HAL_OK) { display_spi_busy = 0; LCD_CS_HIGH; return; }
+    
+    // Инвалидируем кэш для dma_buffer (подготовка для SPI DMA)
+    SCB_InvalidateDCache_by_Addr((uint32_t*)dma_buffer, (total_bytes + 31) & ~31);
+    __DSB();
+    
+    // Запускаем передачу по SPI DMA. Функция возвращает управление СРАЗУ, не дожидаясь отправки.
+    if (HAL_SPI_Transmit_DMA(&hspi4, (uint8_t*)dma_buffer, total_bytes) != HAL_OK) {
+        display_spi_busy = 0;
+        LCD_CS_HIGH;
+    }
+    
+    // ВНИМАНИЕ: Здесь больше НЕТ блокирующего цикла while!
+    // Пин CS в HIGH здесь тоже НЕ поднимаем, это сделает прерывание.
+}  */
+
+/* void GUI_DrawImage_To_Sprite_DMA2D(Sprite_t* dest, int16_t dst_x, int16_t dst_y, const uint16_t* src_data, uint16_t src_w, uint16_t src_h) 
+{
+    if (!dest || !dest->data || !src_data) return;
+    
+    if (dst_x + src_w > dest->w) src_w = dest->w - dst_x;
+    if (dst_y + src_h > dest->h) src_h = dest->h - dst_y;
+    if (src_w <= 0 || src_h <= 0) return;
+
+    hdma2d.Instance = DMA2D;
+    hdma2d.Init.Mode = DMA2D_M2M;
+    hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
+    hdma2d.Init.OutputOffset = dest->w - src_w;
+    
+    if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) return;
+    
+    hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
+    hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
+    hdma2d.LayerCfg[1].InputOffset = 0;
+    hdma2d.LayerCfg[1].InputAlpha = 0xFF;
+    
+    if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) return;
+
+    uint32_t dest_start_addr = (uint32_t)&dest->data[dst_y * dest->w + dst_x];
+
+    if (HAL_DMA2D_Start(&hdma2d, (uint32_t)src_data, dest_start_addr, src_w, src_h) != HAL_OK) return;
+    if (HAL_DMA2D_PollForTransfer(&hdma2d, 10) != HAL_OK) return;
+    
+    uint32_t total_bytes = dest->w * dest->h * 2;
+    SCB_CleanDCache_by_Addr((uint32_t*)dest->data, (total_bytes + 31) & ~31);
+    __DSB();
+} */
+
+
+
+
+
+/**
+  * @brief  Вызывается автоматически библиотекой HAL, когда SPI DMA завершает отправку данных
+  * @param  hspi: указатель на хэндл SPI
+  */
+ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    // Проверяем, что прерывание пришло именно от нашего дисплейного SPI4
+    if (hspi->Instance == SPI4) 
+    {
+        // Поднимаем Chip Select дисплея — передача кадра официально завершена
+        LCD_CS_HIGH;
+        
+        // Разрешаем отправку следующего прямоугольника
+        display_spi_busy = 0;
+    }
+} 

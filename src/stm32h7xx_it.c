@@ -60,6 +60,7 @@ extern PCF8574_HandleTypeDef pcf_handle;
 extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 extern DMA_HandleTypeDef hdma_spi4_tx;
 extern SPI_HandleTypeDef hspi4;
+extern DMA2D_HandleTypeDef hdma2d;
 extern uint8_t bmi160_irq_received;
 /* USER CODE BEGIN EV */
 

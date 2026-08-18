@@ -27,8 +27,8 @@
 DMA2D_HandleTypeDef hdma2d;
 
 /* DMA2D init function */
-void MX_DMA2D_Init(void)
-{
+//void MX_DMA2D_Init(void)
+//{
 
   /* USER CODE BEGIN DMA2D_Init 0 */
 
@@ -37,7 +37,7 @@ void MX_DMA2D_Init(void)
   /* USER CODE BEGIN DMA2D_Init 1 */
 
   /* USER CODE END DMA2D_Init 1 */
-  hdma2d.Instance = DMA2D;
+  /* hdma2d.Instance = DMA2D;
   hdma2d.Init.Mode = DMA2D_M2M;
   hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
   hdma2d.Init.OutputOffset = 0;
@@ -55,7 +55,7 @@ void MX_DMA2D_Init(void)
   if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK)
   {
     Error_Handler();
-  }
+  } */
   /* USER CODE BEGIN DMA2D_Init 2 */
   /* DMA2D clock enable */
  // __HAL_RCC_DMA2D_CLK_ENABLE();
@@ -65,6 +65,38 @@ void MX_DMA2D_Init(void)
   //HAL_NVIC_EnableIRQ(DMA2D_IRQn);
   /* USER CODE END DMA2D_Init 2 */
 
+//}
+
+void MX_DMA2D_Init(void)
+{
+  /* 1. Включаем тактирование аппаратного модуля DMA2D */
+  __HAL_RCC_DMA2D_CLK_ENABLE();
+
+  /* 2. Базовая конфигурация контроллера */
+  hdma2d.Instance = DMA2D;
+  // По умолчанию выставляем режим "Регистр-в-Память" (быстрая заливка цветом)
+  hdma2d.Init.Mode = DMA2D_R2M; 
+  // Выходной формат пикселей строго RGB565 под ваш дисплей ST7796
+  hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
+  // Смещение строк по умолчанию (0, так как работаем со сплошным буфером при заливке)
+  hdma2d.Init.OutputOffset = 0;
+
+  /* 3. Инициализация структуры в HAL */
+  if (HAL_DMA2D_Init(&hdma2d) != HAL_OK)
+  {
+    /* Ошибка инициализации — здесь можно разместить обработчик (например, blink LED) */
+    printf("Error: DMA2D Init Failed!\r\n");
+    while(1);
+  }
+
+  /* 4. Конфигурация слоев (необходима для режимов копирования M2M и смешивания) */
+  if (HAL_DMA2D_ConfigLayer(&hdma2d, DMA2D_FOREGROUND_LAYER) != HAL_OK)
+  {
+    printf("Error: DMA2D Layer Config Failed!\r\n");
+    while(1);
+  }
+  HAL_NVIC_SetPriority(DMA2D_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2D_IRQn);
 }
 
 
