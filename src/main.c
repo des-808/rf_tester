@@ -37,8 +37,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-//#define QSPI_BASE 0x90000000
-//#define W25Qxx
+#define W25Qxx
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -152,6 +151,79 @@ static void CPU_CACHE_Enable(void)
   /* Enable D-Cache */
   SCB_EnableDCache();
 }
+
+/* ============================================
+   QSPI Bootstrap: runs from INTERNAL FLASH
+   before code execution switches to QSPI XIP
+   ============================================ */
+/* ============================================
+   QSPI Bootstrap: Initialize QSPI BEFORE
+   any code fetches from QSPI (XIP).
+   This overrides the weak SystemInit from CMSIS.
+   ============================================ */
+__attribute__((weak))
+void SystemInit(void)
+{
+  /* 1. Keep original CMSIS SystemInit behavior (clock config) */
+  /* The default CMSIS SystemInit sets up clock, we add QSPI init after */
+
+  /* 2. Minimal QSPI init — executes from FLASH, enables QSPI for XIP */
+  GPIO_InitTypeDef gpio = {0};
+
+  /* Enable clocks */
+  __HAL_RCC_QSPI_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
+
+  /* Configure QSPI pins (same as HAL_QSPI_MspInit but before HAL_Init) */
+  /* PE2  -> QUADSPI_BK1_IO2  (AF9) */
+  gpio.Pin = GPIO_PIN_2;
+  gpio.Mode = GPIO_MODE_AF_PP;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  gpio.Alternate = GPIO_AF9_QUADSPI;
+  HAL_GPIO_Init(GPIOE, &gpio);
+
+  /* PB2  -> QUADSPI_CLK  (AF9) */
+  gpio.Pin = GPIO_PIN_2;
+  gpio.Alternate = GPIO_AF9_QUADSPI;
+  HAL_GPIO_Init(GPIOB, &gpio);
+
+  /* PB6  -> QUADSPI_BK1_NCS  (AF10) */
+  gpio.Pin = GPIO_PIN_6;
+  gpio.Alternate = GPIO_AF10_QUADSPI;
+  HAL_GPIO_Init(GPIOB, &gpio);
+
+  /* PD11,12,13 -> QUADSPI_BK1_IO0/1/3  (AF9) */
+  gpio.Pin = GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_13;
+  gpio.Alternate = GPIO_AF9_QUADSPI;
+  HAL_GPIO_Init(GPIOD, &gpio);
+
+  /* Configure QSPI command register for Quad Fast Read (0xEB) XIP */
+  QUADSPI->CCR = (0xEB << QUADSPI_CCR_INSTRUCTION_Pos) |  /* 0xEB command */
+                 (0x01 << QUADSPI_CCR_IMODE_Pos)  |       /* 1-line instruction */
+                 (0x01 << QUADSPI_CCR_ADMODE_Pos) |       /* 1-line address */
+                 (0x01 << QUADSPI_CCR_ADSIZE_Pos) |       /* 24-bit address */
+                 (0x07 << QUADSPI_CCR_DCYC_Pos)  |        /* 8 dummy cycles */
+                 (0x01 << QUADSPI_CCR_DMODE_Pos);         /* 1-line data */
+
+  /* Configure control register: prescaler, FIFO threshold */
+  QUADSPI->CR = (1U << QUADSPI_CR_PRESCALER_Pos) |
+                (7U  << QUADSPI_CR_FTHRES_Pos);
+
+  /* Device config: flash size 16MB (2^24), CS high time */
+  QUADSPI->DCR = (23U << QUADSPI_DCR_FSIZE_Pos) |
+                 (7U  << QUADSPI_DCR_CSHT_Pos);
+
+  /* Enable QSPI controller */
+  QUADSPI->CR |= QUADSPI_CR_EN;
+  for (volatile uint32_t i = 0; i < 200; i++);  /* stabilize */
+
+  /* Set vector table offset to QSPI (interrupts will be fetched from QSPI) */
+  SCB->VTOR = QSPI_BASE;
+}
+
 void LED_Blink(uint32_t delay)
 {
 	HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_SET);
@@ -189,9 +261,12 @@ static void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* 
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+
+  /* VTOR is already set in SystemInit (after QSPI init) */
   #ifdef W25Qxx
-    SCB->VTOR = QSPI_BASE;
-	#endif
+    /* No need to set VTOR here — done in SystemInit */
+  #endif
+
   MPU_Config();
   CPU_CACHE_Enable();
   /* USER CODE END 1 */
@@ -211,7 +286,9 @@ int main(void)
   HAL_GPIO_WritePin(CTP_RESET_GPIO_Port,CTP_RESET_Pin,GPIO_PIN_SET);
   MX_DMA_Init();
   MX_UART4_Init();
-  MX_QUADSPI_Init();
+  #ifndef W25Qxx
+    MX_QUADSPI_Init();  /* QSPI already initialized in SystemInit for XIP */
+  #endif
   MX_RTC_Init();
   //MX_SDMMC1_MMC_Init();
   MX_SPI4_Init();
@@ -227,15 +304,14 @@ int main(void)
   HAL_Delay(50);
   PCF8574_Init(&pcf_handle, &hi2c1, 0x3C);
   Buttons_Init(&btn_s, &pcf_handle);
-  //FT6336U_Init(&ft6336u, &hi2c1, 0x38);  // адрес 0x38
-  INIT_FT6336U();
+  INIT_FT6336U();//FT6336U_Init(&ft6336u, &hi2c1, 0x38);  // адрес 0x38
   //HAL_SD_GetCardCID(&hmmc1, &pCID);
   //HAL_SD_GetCardCSD(&hmmc1, &pCSD);
 	//HAL_SD_GetCardInfo(&hmmc1, &pCardInfo);
   if (!BMI160_Init(&hi2c1, BMI160_I2C_ADDR_VCC)) {
       while(1); // Ошибка
   }
-	HAL_Delay(150);
+	HAL_Delay(15);
   /* USER CODE BEGIN 2 */
   ST7796_Init();
 

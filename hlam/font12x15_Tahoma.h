@@ -1,4 +1,4 @@
-#ifndef FONT12x15_Tahoma_H
+/* #ifndef FONT12x15_Tahoma_H
 #define FONT12x15_Tahoma_H
 
 #include <stdint.h>
@@ -6,4 +6,4 @@
 //GLCD FontSize : 12 x 15
 extern const uint8_t Tahoma12x15[];
 
-#endif
+#endif */

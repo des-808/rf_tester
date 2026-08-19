@@ -103,7 +103,7 @@ SECTIONS
     PROVIDE_HIDDEN (__fini_array_end = .);
   } >QSPI
 
-  /* Initialized data - stored in QSPI, loaded to RAM */
+  /* Load address (LMA) of .data section - location in QSPI */
   _sidata = LOADADDR(.data);
 
   .data :

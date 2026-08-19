@@ -1,4 +1,4 @@
-#ifndef FONT8x8_Arial_H
+/* #ifndef FONT8x8_Arial_H
 #define FONT8x8_Arial_H
 
 #include <stdint.h>
@@ -7,4 +7,4 @@
 //unsigned short Arial8x8[][];
 extern const uint8_t Arial8x8[];
 
-#endif
+#endif */
