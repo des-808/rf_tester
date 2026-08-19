@@ -805,7 +805,7 @@ void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t 
   * @brief  Вызывается автоматически библиотекой HAL, когда SPI DMA завершает отправку данных
   * @param  hspi: указатель на хэндл SPI
   */
- void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+/*  void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 {
     // Проверяем, что прерывание пришло именно от нашего дисплейного SPI4
     if (hspi->Instance == SPI4) 
@@ -816,4 +816,4 @@ void ST7796_PushSpriteRect_DMA2D(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t 
         // Разрешаем отправку следующего прямоугольника
         display_spi_busy = 0;
     }
-} 
+}  */

@@ -1796,7 +1796,7 @@ void UI_DrawTree(UIElement_t* element) {
             }
 
             // ОТПРАВКА: Шлем в контроллер ST7796 строго грязный прямоугольник
-           ST7796_PushSpriteRect_DMA2D(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);//ST7796_PushSpriteRect_DMA2D_OLD(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
+           ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);//ST7796_PushSpriteRect_DMA2D_OLD(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
             
             // КРИТИЧЕСКИЙ СБРОС: Сбрасываем координаты строго ПОСЛЕ отправки всего узла!
             s->dirty_x1 = 0; s->dirty_y1 = 0;
@@ -2714,7 +2714,7 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
         GUI_InvalidateRect(s, clx, cly, el->w, item_h);
         
         // Отправляем на LCD и сбрасываем dirty rect
-        ST7796_PushSpriteRect_DMA2D(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);//ST7796_PushSpriteRect_DMA2D_OLD(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
+        ST7796_PushSpriteRect(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);//ST7796_PushSpriteRect_DMA2D_OLD(s, s->dirty_x1, s->dirty_y1, s->dirty_x2, s->dirty_y2);
         s->dirty_x1 = 0; s->dirty_y1 = 0;
         s->dirty_x2 = 0; s->dirty_y2 = 0;
         s->needs_render = false;
