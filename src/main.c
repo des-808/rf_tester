@@ -29,17 +29,15 @@
 #include "usb_device.h"
 #include "gpio.h"
 #include "flash.h"
+#include "dma2d.h"
 #include "ft6336u.h"
 #include "gui.h"
 #include "bmi160_h7.h"
 #include "ds3231.h"
 #include "menu.h"
-//#include "measurement/measurement.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-//#define QSPI_BASE 0x90000000
-//#define W25Qxx
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,7 +47,6 @@
 #include "buttons.h"
 #include "i2c_scanner.h"
 #include "buzzer.h"
-//#include "font8x8_Arial.h"
 #include <string.h>
 /* USER CODE END PTD */
 
@@ -192,9 +189,6 @@ bool ui_needs_refresh = true;
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  #ifdef W25Qxx
-    SCB->VTOR = QSPI_BASE;
-	#endif
   MPU_Config();
   CPU_CACHE_Enable();
   /* USER CODE END 1 */
@@ -257,9 +251,6 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   Menu_Init();
   //GUI_ShowAdvancedMeasurementScreen(current_display_orientation);
   GUI_ShowMenuAdvancedMeasurementScreen(current_display_orientation);
- // Инициализируем модуль измерений и запускаем его в неблокирующем режиме
- //Measurement_Init();
- //Measurement_Start();
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
@@ -268,32 +259,6 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   {
     /* USER CODE END WHILE */
 // ====================================================================
-    /* if (bmi160_irq_received) 
-    {
-      bmi160_irq_received = 0; // Сбрасываем флаг события EXTI
-      
-      // Вызываем упакованную функцию. Она сама решит, нужно ли менять экран
-      uint8_t task_reorient_display = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
-      
-      // Если функция вернула команду на смену режима (не 0)
-      if (task_reorient_display != 0) 
-      {
-        current_display_orientation = task_reorient_display;
-        
-        // Выполняем физический разворот дисплея ST7796
-        if (current_display_orientation == 1) {
-            // ST7796_SetRotation(1); // Альбомная
-        } else {
-            // ST7796_SetRotation(0); // Портретная
-        }
-        
-        // Пересчитываем сетку интерфейса rf_tester под новые размеры экрана
-        extern uint16_t Display_Width, Display_Height;
-        UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
-        ui_needs_refresh = true; // Триггерим полную перерисовку UI дерева
-      }
-    }
- */
 if (bmi160_irq_received) 
     {
       bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
