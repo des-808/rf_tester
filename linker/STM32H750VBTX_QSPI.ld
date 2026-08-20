@@ -25,7 +25,7 @@ _Min_Stack_Size = 0x400;
 /* Memory Areas */
 MEMORY
 {
-  FLASH (rx)   : ORIGIN = 0x08000000, LENGTH = 32K    /* Bootloader */
+  FLASH (rx)   : ORIGIN = 0x08000000, LENGTH = 2048K    /* Bootloader */
   QSPI (rx)    : ORIGIN = 0x90000000, LENGTH = 8M    /* XIP Code */
   DTCMRAM (xrw): ORIGIN = 0x20000000, LENGTH = 128K   /* Data TCM */
   RAM_D1 (xrw) : ORIGIN = 0x24000000, LENGTH = 512K   /* AXI RAM */

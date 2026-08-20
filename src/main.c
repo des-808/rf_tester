@@ -22,17 +22,14 @@
 #include "i2c.h"
 #include "quadspi.h"
 #include "rtc.h"
-#include "sdmmc.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
-#include "flash.h"
 #include "ft6336u.h"
 #include "st7796.h"
 #include "bmi160_h7.h"
-#include "ds3231.h"
 #include "lvgl_ui.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -65,9 +62,6 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-  HAL_SD_CardCIDTypedef pCID;
-HAL_SD_CardCSDTypedef pCSD;
-HAL_SD_CardInfoTypeDef pCardInfo;
 FT6336U_HandleTypeDef ft6336u;
 /* USER CODE END PV */
 
@@ -267,8 +261,6 @@ int main(void)
     /* No need to set VTOR here — done in SystemInit */
   #endif
 
-  MPU_Config();
-  CPU_CACHE_Enable();
   /* USER CODE END 1 */
   /* MCU Configuration--------------------------------------------------------*/
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
@@ -290,7 +282,7 @@ int main(void)
     MX_QUADSPI_Init();  /* QSPI already initialized in SystemInit for XIP */
   #endif
   MX_RTC_Init();
-  //MX_SDMMC1_MMC_Init();
+  MX_SPI4_Init();
   MX_SPI4_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
@@ -305,9 +297,6 @@ int main(void)
   PCF8574_Init(&pcf_handle, &hi2c1, 0x3C);
   Buttons_Init(&btn_s, &pcf_handle);
   INIT_FT6336U();//FT6336U_Init(&ft6336u, &hi2c1, 0x38);  // адрес 0x38
-  //HAL_SD_GetCardCID(&hmmc1, &pCID);
-  //HAL_SD_GetCardCSD(&hmmc1, &pCSD);
-	//HAL_SD_GetCardInfo(&hmmc1, &pCardInfo);
   if (!BMI160_Init(&hi2c1, BMI160_I2C_ADDR_VCC)) {
       while(1); // Ошибка
   }
