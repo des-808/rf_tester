@@ -258,4 +258,5 @@ extern bool ui_debug_draw;
 
 
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid);
+void GUI_InvalidateStatusBar(void);
 #endif // GUI_H

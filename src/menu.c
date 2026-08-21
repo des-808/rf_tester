@@ -21,6 +21,9 @@ extern void toggleWiFi();
 extern void manualSyncTimeWithNTP();
 extern void clearWiFiCredentials();
 
+// Для перерисовки статус-бара
+extern void GUI_InvalidateStatusBar(void);
+
 // Для CC1101
 extern uint16_t cc1101FreqFixed;
 extern uint16_t cc1101BitRateFixed;
@@ -34,25 +37,17 @@ UIElement_t* current_menu_listbox = NULL;
 MenuItem_t* current_menu_items = NULL;
 uint8_t current_menu_count = 0;
 
-// Временный буфер для пунктов (чтобы UI_ListBox_AddItem работал корректно)
-// ВАЖНО: Нужно следить за panel_rows_count в gui.c
-// Для простоты считаем, что Menu_Draw вызывается редко, и мы можем временно "забрать" строки из пула gui.c
-// Но лучше использовать собственный пул или гарантировать, что digits_node не используется другим образом.
-// В вашей реализации digits_node используется постоянно.
-// Поэтому мы будем использовать статический массив элементов для меню, если digits_node занят,
-// ИЛИ мы очищаем digits_node, рисуем меню, и восстанавливаем?
-// Нет, лучше всего: Меню занимает ВЕСЬ список или заменяет его временно.
-// Давайте предположим, что меню рисуется в тот же ListBox (ui_bands_listbox или новый).
-// Для совместимости с вашим gui.c, я буду использовать глобальный пул panel_rows для элементов меню,
-// но сначала очистим ListBox, а затем добавим элементы.
+// External reference to panel_rows counter from gui.c
+extern uint8_t panel_rows_count;
 
-#define MAX_MENU_ENTRIES 20
-static MenuItem_t menu_entries_buffer[MAX_MENU_ENTRIES];
+// === СТЕК НАВИГАЦИИ ===
+MenuState_t menu_stack[MAX_MENU_DEPTH];
+int menu_stack_top = -1;  // -1 = стек пуст (находимся в главном меню)
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Пример простой иконки 16x16 (синий квадрат для примера)
 // Лучше заменить эти данные на реальные иконки
-static const uint16_t icon_tx[] = {
+/* static const uint16_t icon_tx[] = {
     // ... ваши пиксели 16x16 ...
     0x001F, 0x001F, 0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,
     0x001F, 0x001F, 0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,0x001F,
@@ -118,7 +113,7 @@ static const Icon_t all_icons[] = {
     // Добавьте другие иконки сюда
 };
 
-#define ICON_COUNT (sizeof(all_icons) / sizeof(all_icons[0]))
+#define ICON_COUNT (sizeof(all_icons) / sizeof(all_icons[0])) */
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // === ОПРЕДЕЛЕНИЕ МЕНЮ (Перенос из вашего C++ кода) ===
 
@@ -127,62 +122,67 @@ static void Action_Send_Key() { transmit(sys, room, btn, 0); /* DEVICE_TYPE_KEY 
 static void Action_Send_Pager() { transmit(sys, room, btn, 1); /* DEVICE_TYPE_PAGER */ }
 static void Action_GoBack() { /* Логика возврата к главному меню */ }
 
+// Колбэк для обновления статус-бара при изменении настроек
+static void StatusBar_Update_Callback() {
+    GUI_InvalidateStatusBar();
+}
+
 // --- Подменю передачи ---
 static MenuItem_t buttonSubMenu[] = {
-    { "Sys:",0, ITEM_TYPE_VALUE, .data.ptr_value = &sys, .data.value_limits = {1, 32, 1} },
-    { "Room:",0, ITEM_TYPE_VALUE, .data.ptr_value = &room, .data.value_limits = {1, 32, 1} },
-    { "Btn:",0, ITEM_TYPE_VALUE, .data.ptr_value = &btn, .data.value_limits = {1, 9, 1} },
-    { "Send",0, ITEM_TYPE_ACTION, .data.action_func = Action_Send_Key },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1 },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1 },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1 },
+    { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Key } },
 };
 
 static MenuItem_t pagerSubMenu[] = {
-    { "Sys:",0, ITEM_TYPE_VALUE, .data.ptr_value = &sys, .data.value_limits = {1, 32, 1} },
-    { "Room:",0, ITEM_TYPE_VALUE, .data.ptr_value = &room, .data.value_limits = {1, 32, 1} },
-    { "Btn:",0, ITEM_TYPE_VALUE, .data.ptr_value = &btn, .data.value_limits = {1, 9, 1} },
-    { "Send",0, ITEM_TYPE_ACTION, .data.action_func = Action_Send_Pager },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1 },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1 },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1 },
+    { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Pager } },
 };
 
 static MenuItem_t transmitterSubMenu[] = {
-    { "Buttons",0, ITEM_TYPE_SUBMENU, .data.submenu_items = buttonSubMenu, .data_count = sizeof(buttonSubMenu)/sizeof(buttonSubMenu[0]) },
-    { "Pager",0, ITEM_TYPE_SUBMENU, .data.submenu_items = pagerSubMenu, .data_count = sizeof(pagerSubMenu)/sizeof(pagerSubMenu[0]) },
+    { "Buttons", 0, ITEM_TYPE_SUBMENU, sizeof(buttonSubMenu)/sizeof(buttonSubMenu[0]), NULL, { .submenu_items = buttonSubMenu } },
+    { "Pager", 0, ITEM_TYPE_SUBMENU, sizeof(pagerSubMenu)/sizeof(pagerSubMenu[0]), NULL, { .submenu_items = pagerSubMenu } },
 };
 
 // --- Подменю CC1101 ---
 static MenuItem_t cc1101SubMenu[] = {
-    { "Freq MHz",0, ITEM_TYPE_VALUE, .data.ptr_value = &cc1101FreqFixed, .data.value_limits = {30000, 92800, 10} }, // Шаг большой для частоты
-    { "BitRate",0, ITEM_TYPE_VALUE, .data.ptr_value = &cc1101BitRateFixed, .data.value_limits = {100, 6000, 10} },
-    { "RxBw",0, ITEM_TYPE_VALUE, .data.ptr_value = &cc1101RxBwIndex, .data.value_limits = {0, 15, 1} },
-    { "Mod",0, ITEM_TYPE_VALUE, .data.ptr_value = &cc1101Modulation, .data.value_limits = {0, 1, 1} },
-    { "Power",0, ITEM_TYPE_VALUE, .data.ptr_value = &cc1101PowerIndex, .data.value_limits = {0, 7, 1} },
-    { "Apply",0, ITEM_TYPE_ACTION, .data.action_func = cc1101ApplySettingsFromMenu },
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 100, 6000, 10 },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1 },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1 },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
 };
 
 // --- Подменю настроек ---
 static MenuItem_t settingsSubMenu[] = {
-    { "RS485",0, ITEM_TYPE_VALUE, .data.ptr_value = &rs485BaudIndex, .data.value_limits = {0, 7, 1} },
-    { "Light",0, ITEM_TYPE_VALUE, .data.ptr_value = &oledBrightness, .data.value_limits = {1, 10, 1} },
-    { "BT",0, ITEM_TYPE_VALUE, .data.ptr_value = &bluetoothEnabled, .data.value_limits = {0, 1, 1} },
-    { "WiFi",0, ITEM_TYPE_VALUE, .data.action_func = toggleWiFi, .data.value_limits = {0, 1, 1} }, // Логика toggle внутри
-    { "NTP Auto",0, ITEM_TYPE_VALUE, .data.ptr_value = &ntpSyncEnabled, .data.value_limits = {0, 1, 1} },
-    { "Sync Now",0, ITEM_TYPE_ACTION, .data.action_func = manualSyncTimeWithNTP },
-    { "Buzzer",0, ITEM_TYPE_VALUE, .data.ptr_value = &buzzerOnOff, .data.value_limits = {0, 1, 1, Buzzer_On_Off_} },
-    { "CC1101",0, ITEM_TYPE_SUBMENU, .data.submenu_items = cc1101SubMenu, .data_count = sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]) },
-    { "Forget WiFi",0, ITEM_TYPE_ACTION, .data.action_func = NULL }, // Реализовать отдельно
+    { "RS485", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &rs485BaudIndex }, 0, 7, 1 },
+    { "Light", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &oledBrightness }, 1, 10, 1 },
+    { "BT", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1 },
+    { "WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = toggleWiFi } },
+    { "NTP Auto", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1 },
+    { "Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = manualSyncTimeWithNTP } },
+    { "Buzzer", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1 },
+    { "CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]), NULL, { .submenu_items = cc1101SubMenu } },
+    { "Forget WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
 };
 
 // --- Главное меню ---
 static MenuItem_t getCallMenu[] = {
-    { "1.Transmitter",0, ITEM_TYPE_SUBMENU, .data.submenu_items = transmitterSubMenu, .data_count = sizeof(transmitterSubMenu)/sizeof(transmitterSubMenu[0]) },
-    { "2.Receiver",0, ITEM_TYPE_ACTION, .data.action_func = enterReceiverMode },
+    { "1.Transmitter", 0, ITEM_TYPE_SUBMENU, sizeof(transmitterSubMenu)/sizeof(transmitterSubMenu[0]), NULL, { .submenu_items = transmitterSubMenu } },
+    { "2.Receiver", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = enterReceiverMode } },
 };
 
 static MenuItem_t mainMenu[] = {
-    { "1.GetCall", 0 ,ITEM_TYPE_SUBMENU, .data.submenu_items = getCallMenu, .data_count = sizeof(getCallMenu)/sizeof(getCallMenu[0]) },
-    { "2.RS485_To_Bt",0, ITEM_TYPE_ACTION, .data.action_func = rs485ToggleBluetoothMode },
-    { "3.NC",2, ITEM_TYPE_INFO },
-    { "4.Settings",1, ITEM_TYPE_SUBMENU, .data.submenu_items = settingsSubMenu, .data_count = sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]) },
-    { "5.About",0, ITEM_TYPE_INFO },
-    { "6.RSSI Plotter",0, ITEM_TYPE_ACTION, .data.action_func = NULL },
+    { "1.GetCall", 0, ITEM_TYPE_SUBMENU, sizeof(getCallMenu)/sizeof(getCallMenu[0]), NULL, { .submenu_items = getCallMenu } },
+    { "2.RS485_To_Bt", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = rs485ToggleBluetoothMode } },
+    { "3.NC", 2, ITEM_TYPE_INFO },
+    { "4.Settings", 1, ITEM_TYPE_SUBMENU, sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]), NULL, { .submenu_items = settingsSubMenu } },
+    { "5.About", 0, ITEM_TYPE_INFO },
+    { "6.RSSI Plotter", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
 };
 
 // Глобальная переменная для размера
@@ -197,8 +197,47 @@ void Menu_SetMainMenu(void) {
     current_menu_count = sizeof(mainMenu) / sizeof(mainMenu[0]);
 }
 
+void Menu_PushMenu(MenuItem_t* items, uint8_t count) {
+    if (menu_stack_top >= MAX_MENU_DEPTH - 1) return; // Стек переполнен
+    
+    UIElement_t* lb = current_menu_listbox;
+    if (!lb) return;
+    
+    // Сохраняем текущее состояние на стек
+    menu_stack_top++;
+    menu_stack[menu_stack_top].items = current_menu_items;
+    menu_stack[menu_stack_top].count = current_menu_count;
+    menu_stack[menu_stack_top].selected_index = lb->props.list_box.selected_index;
+    menu_stack[menu_stack_top].scroll_offset = lb->props.list_box.scroll_offset;
+    
+    // Переключаемся на новое подменю
+    Menu_Draw(lb, items, count);
+}
+
+void Menu_PopMenu(UIElement_t* listbox) {
+    if (menu_stack_top < 0) return; // Стек пуст — уже в главном меню
+    
+    // Восстанавливаем состояние с стека
+    MenuState_t* prev_state = &menu_stack[menu_stack_top];
+    menu_stack_top--;  // Очищаем элемент на стеке
+    
+    // Восстанавливаем selected_index с проверкой границ
+    if (prev_state->selected_index >= prev_state->count) {
+        prev_state->selected_index = 0;
+    }
+    
+    // Полная перерисовка меню через Menu_Draw (корректно пересоздаст children)
+    current_menu_items = prev_state->items;
+    current_menu_count = prev_state->count;
+    
+    Menu_Draw(listbox, prev_state->items, prev_state->count);
+    listbox->props.list_box.selected_index = prev_state->selected_index;
+    listbox->props.list_box.scroll_offset = prev_state->scroll_offset;
+}
+
 void Menu_Init(void) {
     current_menu_listbox = NULL;
+    menu_stack_top = -1;  // Очищаем стек
     Menu_SetMainMenu(); // Инициализируем указатели на начало
 }
 
@@ -229,8 +268,12 @@ void Menu_Init(void) {
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
     if (!listbox_container || !items) return;
 
-    // Сброс визуальных детей. Так как они лежат в static panel_rows, free() запрещен.
+    // Возвращаем строки в пул (чтобы использовать их для нового меню)
+    uint8_t prev_children = listbox_container->children_count;
+    
+    // Сброс визуальных детей
     listbox_container->children_count = 0; 
+    panel_rows_count -= prev_children;
     
     // Сброс логики прокрутки
     listbox_container->props.list_box.scroll_offset = 0;
@@ -239,9 +282,6 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
     // Заполнение новыми данными
     for (uint8_t i = 0; i < count; i++) {
         UI_ListBox_AddItem(listbox_container, items[i].text); 
-        if (listbox_container->children_count == 0 && i > 0) {
-            break; 
-        }
     }
 
     // ОБНОВЛЕНИЕ ГЛОБАЛЬНОГО КОНТЕКСТА КРИТИЧЕСКИ ВАЖНО:
@@ -303,9 +343,9 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
             int old_val = *(int*)item->data.ptr_value;
             
             AdjustValue(item->data.ptr_value, 
-                        item->data.value_limits.min_val, 
-                        item->data.value_limits.max_val, 
-                        item->data.value_limits.step, 
+                        item->value_limits.min_val, 
+                        item->value_limits.max_val, 
+                        item->value_limits.step, 
                         1); // direction = +1 (Enter/Tap всегда увеличивает)
 
             if (*(int*)item->data.ptr_value != old_val && ui_item) {
@@ -314,22 +354,21 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
                 // Отрисовка только изменившейся строки
                 UI_RenderListBoxItem(listbox, selected_index);
                 
-                // Вызов колбэка обновления иконки (если есть)
-                if (item->data.value_limits.callback) {
-                    item->data.value_limits.callback();
+                // Вызов колбэка обновления статус-бара (если есть)
+                if (item->on_value_changed) {
+                    item->on_value_changed();
                 }
             }
             break;
         }
 
         case ITEM_TYPE_SUBMENU:
-            if (item->data.submenu_items && item->data_count > 0) { // Используем вынесенное поле data_count
+            if (item->data.submenu_items && item->data_count > 0) {
                 listbox->touch_state.drag_last_y = -1;
                 listbox->touch_state.drag_active = false;
                 
-                // Очистка глобальных ссылок перед сменой контекста не требуется,
-                // так как Menu_Draw сделает listbox_container->children_count = 0
-                Menu_Draw(listbox, item->data.submenu_items, item->data_count);
+                // Сохраняем текущее меню на стек и переходим в подменю
+                Menu_PushMenu(item->data.submenu_items, item->data_count);
             }
             break;
 
@@ -368,9 +407,8 @@ void Menu_ProcessInput(uint8_t key) {
             break;
 
         case KEY_CANCEL:
-            // Выход всегда в корень (главное меню)
-            Menu_SetMainMenu(); // Устанавливаем указатели на mainMenu
-            Menu_Draw(lb, mainMenu, main_menu_count); 
+            // Выход на уровень выше (или в главное меню, если стек пуст)
+            Menu_PopMenu(lb);
             break;
     }
 }
@@ -438,7 +476,10 @@ void rs485ToggleBluetoothMode(){;}
 //extern uint8_t rs485BaudIndex;
 //extern uint8_t oledBrightness;
 //int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff;
-void toggleWiFi(){}
+void toggleWiFi() {
+    wifiEnabled = !wifiEnabled;
+    GUI_InvalidateStatusBar();
+}
 void manualSyncTimeWithNTP(){}
 void clearWiFiCredentials(){}
 void cc1101ApplySettingsFromMenu(){}

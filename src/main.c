@@ -69,6 +69,9 @@
 HAL_SD_CardCSDTypedef pCSD;
 HAL_SD_CardInfoTypeDef pCardInfo;
 FT6336U_HandleTypeDef ft6336u;
+
+// Переменные меню
+uint16_t sys = 1, room = 1, btn = 1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/

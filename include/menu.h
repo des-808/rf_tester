@@ -26,22 +26,23 @@ typedef struct MenuItem {
     const char* text;
     uint16_t icon_id;           // Индекс иконки (0 = нет иконки)
     MenuItemType_t type;
-    uint8_t data_count;         
+    uint8_t data_count;         // Количество элементов для SUBMENU
+    void (*on_value_changed)(void);  // Колбэк при изменении значения (например для обновления статус-бара)
     
     // Данные в зависимости от типа
     union {
         void* ptr_value;       // Для ITEM_TYPE_VALUE: указатель на int/uint
         void (*action_func)(void); // Для ITEM_TYPE_ACTION
         struct MenuItem* submenu_items; // Для ITEM_TYPE_SUBMENU: массив подменю
-        uint8_t submenu_count;         // Для ITEM_TYPE_SUBMENU: кол-во элементов
-        struct {
-            int min_val;
-            int max_val;
-            uint8_t step;
-            void (*callback)(void);  // <-- ДОБАВИТЬ СЮДА
-        } value_limits;
-        
     } data;
+    
+    // Лимиты значений (для ITEM_TYPE_VALUE) — вне union, всегда доступны
+    struct {
+        int min_val;
+        int max_val;
+        uint8_t step;
+    } value_limits;
+    
 } MenuItem_t;
 
 
@@ -53,25 +54,33 @@ typedef struct MenuItem {
     KEY_CANCEL
 }; */
 
+// === СТЕК НАВИГАЦИИ МЕНЮ ===
+// Позволяет сохранять состояние меню при переходах в подменю
+// и возвращаться на предыдущий уровень (включая вложенные подменю)
+
+#define MAX_MENU_DEPTH 5          // Максимальная глубина вложенности
+
+typedef struct {
+    MenuItem_t* items;          // Массив пунктов меню
+    uint8_t count;              // Количество пунктов
+    uint8_t selected_index;     // Выбранный элемент (для восстановления скролла)
+    uint8_t scroll_offset;      // Смещение прокрутки (для восстановления)
+} MenuState_t;
+
 // Глобальные переменные состояния
 extern UIElement_t* current_menu_listbox;
 extern MenuItem_t* current_menu_items;
 extern uint8_t current_menu_count;
 extern uint8_t main_menu_count;
 
+// Стек навигации
+extern MenuState_t menu_stack[MAX_MENU_DEPTH];
+extern int menu_stack_top;        // -1 = стек пуст, 0 = один уровень на стеке
 
-// Указатель на текущий ListBox, в котором рисуется меню
-extern UIElement_t* g_menu_listbox;
 
-// Указатели на массивы меню (объявляем здесь как extern, определяем в menu.c)
-extern const MenuItem_t menu_main[];
-extern const MenuItem_t menu_settings[];
-extern const MenuItem_t menu_tx_buttons[];
-extern const MenuItem_t menu_tx_pager[];
-extern const MenuItem_t menu_tx_transmitter[];
-extern const MenuItem_t menu_cc1101[];
-extern const MenuItem_t menu_get_call[];
-
+// === API СТЕКА НАВИГАЦИИ ===
+void Menu_PushMenu(MenuItem_t* items, uint8_t count);   // Войти в подменю (сохраняет текущее)
+void Menu_PopMenu(UIElement_t* listbox);                // Выход на уровень выше
 
 // API
 void Menu_Init(void);

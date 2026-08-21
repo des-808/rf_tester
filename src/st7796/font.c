@@ -13,50 +13,6 @@ void lcd_set_font(const Font_t *font) {
 
 // --- Утилиты для работы со шрифтами ---
 
-/* static int get_real_char_width(uint8_t relative_idx) { //вариант поиска размера в длину от начала к концу символа
-    if (!current_font) return 0;
-
-    const uint8_t* bitmap = &current_font->data[relative_idx * current_font->char_width * current_font->bytes_per_column];
-    
-    int cols = current_font->char_width;
-*/
-    /* for (int col = cols - 1; col >= 0; col--) {
-        const uint8_t* col_ptr = &bitmap[col * current_font->bytes_per_column];
-        // Проверяем все байты в столбце
-        for (int i = 0; i < current_font->bytes_per_column; i++) {
-            if (col_ptr[i] != 0) {
-                return col + 1;
-            }
-        }
-    } */
-   // Проходим по столбцам СПРАВА НАЛЕВО (чтобы найти ПОСЛЕДНИ ненулевой столбец)
-   /* for (int col = cols - 1; col >= 0; col--) {
-        const uint8_t* col_ptr = &bitmap[col * current_font->bytes_per_column];
-
-        // Проверяем все пиксели в этом столбце так же, как в lcd_draw_char_to_buffer
-        for (int row = 0; row < current_font->char_height; row++) {
-            uint8_t byte_idx = row / 8;
-            uint8_t bit_idx  = row % 8;
-
-            uint8_t col_byte;
-            if (current_font->bytes_per_column == 2) {
-                col_byte = col_ptr[byte_idx];
-            } else if (current_font->bytes_per_column == 3) {
-                col_byte = col_ptr[byte_idx];
-            } else {
-                continue;
-            }
-
-            // Если хоть один пиксель установлен — этот столбец нужен
-            if (col_byte & (1u << bit_idx)) {
-                return col + 1;  // +1, т.к. col=0 → 1 столбец, col=10 → 11 столбцов
-            }
-        }
-    }
-
-    return 1; // хотя бы 1 колонка
-} */
-
 static int get_real_char_width(uint8_t relative_idx) { //вариант поиска размера в длину от конца к началу символа
     if (!current_font || !current_font->data) return 0;
 

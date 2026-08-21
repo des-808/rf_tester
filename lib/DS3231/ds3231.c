@@ -191,7 +191,7 @@ float DS3231_GetTemperature(I2C_HandleTypeDef *hi2c) {
 }
 
 // Включение квадратного генератора (частота: 1, 1024, 4096, 8192 Гц)
-DS3231_Status_t DS3231_EnableSquareWave(I2C_HandleTypeDef *hi2c, uint8_t frequency) {
+DS3231_Status_t DS3231_EnableSquareWave(I2C_HandleTypeDef *hi2c, uint16_t frequency) {
     uint8_t control;
     DS3231_Status_t ret = DS3231_ReadReg(hi2c, DS3231_REG_CONTROL, &control);
     if (ret != DS3231_OK) return ret;
