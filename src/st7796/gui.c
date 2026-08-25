@@ -482,8 +482,6 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     ST7796_SetRotation(rotation);
     
     // Полностью очищаем прошлый пул памяти графики
-    // ВАЖНО: Это освобождает память, но не обнуляет данные в старых буферах, если они останутся.
-    // Однако, так как мы используем reset_pool, мы теряем доступ ко всем старым данным.
     heap_caps_reset_pool();
     
     // Принудительно зануляем указатели .data, чтобы движок понял, что память очищена!
@@ -493,15 +491,28 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     main_screen_sprite.data = NULL;
     main_screen_sprite.is_allocated = false;
 
-    // Сбрасываем счетчики строк и списка
-    GUI_Panel_ClearStrings(&digits_node);
-    ui_bands_listbox.children_count = 0;
-    panel_rows_count = 0; 
+    // === КРИТИЧЕСКИ ВАЖНО: ПОЛНЫЙ СБРОС ПУЛА ЭЛЕМЕНТОВ ===
+    panel_rows_count = 0;
+    
+    // Зануляем весь пул panel_rows чтобы избежать мусора
+    memset(panel_rows, 0, sizeof(panel_rows));
 
-    // Сброс глобальных указателей на динамику, чтобы избежать использования "зombie" элементов
+    // Сброс всех статических нод статус-бара
+    status_bar_node.children_count = 0;
+    status_icons_node.children_count = 0;
+    status_clock_node.children_count = 0;
+    status_icon_battery_node.children_count = 0;
+    status_icon_bt_node.children_count = 0;
+    status_icon_wifi_node.children_count = 0;
+    status_icon_ntp_node.children_count = 0;
+    status_icon_mode_node.children_count = 0;
+    status_icon_spacer_node.children_count = 0;
+
+    // Сброс глобальных указателей на динамику
     ui_swr_row = NULL;
     ui_btn_row = NULL;
     ui_touch_row = NULL;
+    current_menu_listbox = NULL;
 
     extern uint16_t Display_Width;
     extern uint16_t Display_Height;
@@ -554,8 +565,11 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     // ЭТАП 2: НАПОЛНЕНИЕ КОНТЕНТОМ
     // ====================================================================
 
-    // Создаем ListBox для меню
+    // Создаем ListBox для меню в GUI_ShowMenuAdvancedMeasurementScreen
     if (digits_node.children_count < MAX_ELEMENT_CHILDREN) {
+        if (panel_rows_count >= MAX_PANEL_ROWS) {
+            while(1); // Защита от переполнения пула panel_rows
+        }
         UIElement_t* menu_lb = &panel_rows[panel_rows_count++];
         memset(menu_lb, 0, sizeof(UIElement_t));
         
@@ -1861,6 +1875,11 @@ void GUI_Panel_ClearStrings(UIElement_t* parent) {
         parent->children_count = 0;
     }
     panel_rows_count = 0;
+    
+    // Полное зануление пула panel_rows
+    if (sizeof(panel_rows) > 0) {
+        memset(panel_rows, 0, sizeof(panel_rows));
+    }
 }
 
 void Draw_GeneralText_Callback(UIElement_t* el) {
@@ -2839,6 +2858,10 @@ void GUI_InvalidateStatusBar(void) {
 // ==========================================
 
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
+    // === ПОЛНЫЙ СБРОС СТАТУС-БАРА ===
+    status_bar_node.children_count = 0;
+    status_icons_node.children_count = 0;
+    
     status_clock_sprite.data = NULL;          status_clock_sprite.is_allocated = false;
     status_icon_battery_sprite.data = NULL;   status_icon_battery_sprite.is_allocated = false;
     status_icon_bt_sprite.data = NULL;        status_icon_bt_sprite.is_allocated = false;

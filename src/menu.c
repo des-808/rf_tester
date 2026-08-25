@@ -284,12 +284,12 @@ void Menu_Init(void) {
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
     if (!listbox_container || !items) return;
 
-    // Возвращаем строки в пул (чтобы использовать их для нового меню)
+    // Получаем текущее количество детей (для отладки)
     uint8_t prev_children = listbox_container->children_count;
     
     // Сброс визуальных детей
     listbox_container->children_count = 0; 
-    panel_rows_count -= prev_children;
+    // Не вычитаем panel_rows_count — он уже обнулён в GUI_ShowMenuAdvancedMeasurementScreen
     
     // Сброс логики прокрутки (начальные значения — 0)
     listbox_container->props.list_box.scroll_offset = 0;
