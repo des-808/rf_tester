@@ -256,6 +256,9 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index);
 // Включить/выключить отладочную отрисовку геометрии элементов и скроллбара
 extern bool ui_debug_draw;
 
+// Сохранённое состояние меню при повороте экрана
+extern uint8_t saved_menu_scroll_offset;
+extern int16_t saved_menu_selected_index;
 
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid);
 void GUI_InvalidateStatusBar(void);

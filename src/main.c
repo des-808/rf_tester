@@ -32,6 +32,7 @@
 #include "dma2d.h"
 #include "ft6336u.h"
 #include "gui.h"
+#include "lcd_backlight.h"
 #include "bmi160_h7.h"
 #include "ds3231.h"
 #include "menu.h"
@@ -101,6 +102,13 @@ volatile uint32_t exti_counter = 0;               // Счетчик прерыв
 
 volatile uint8_t bmi160_irq_received = 0;
 uint8_t current_display_orientation = 0; // 0 - Книжная по умолчанию
+
+// Переменные времени из DS3231
+extern uint8_t currentHour, currentMinute;
+volatile uint8_t ds3231_irq_received = 0;  // Флаг прерывания от DS3231 (1 Гц)
+static uint8_t ds3231_prev_minute = 0xFF; // Для отслеживания изменения минуты
+DS3231_Time_t ds3231_time;
+
 /* USER CODE END PFP */
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
@@ -228,6 +236,9 @@ int main(void)
   HAL_Delay(50);
   PCF8574_Init(&pcf_handle, &hi2c1, 0x3C);
   Buttons_Init(&btn_s, &pcf_handle);
+  DS3231_Init(&hi2c1);
+  // Включаем генерацию 1 Гц на выход INT/SQW DS3231
+  DS3231_EnableSquareWave(&hi2c1, 1);
   //FT6336U_Init(&ft6336u, &hi2c1, 0x38);  // адрес 0x38
   INIT_FT6336U();
   //HAL_SD_GetCardCID(&hmmc1, &pCID);
@@ -238,7 +249,8 @@ int main(void)
   }
 	HAL_Delay(150);
   /* USER CODE BEGIN 2 */
-  ST7796_Init();
+   ST7796_Init();
+   LCD_Backlight_Init();
 
   // Используем Segoe Print 12 по умолчанию
   //lcd_set_font(&font_segoe_struct);
@@ -254,78 +266,137 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   Menu_Init();
   //GUI_ShowAdvancedMeasurementScreen(current_display_orientation);
   GUI_ShowMenuAdvancedMeasurementScreen(current_display_orientation);
+ 
+   
+    /* ds3231_time.Second = 0;   // 0–59
+    ds3231_time.Minute = 51;   // 0–59
+    ds3231_time.Hour = 17;     // 0–23 (24-hour) или 1–12 (12-hour)
+    //ds3231_time.AM_PM = 1;    // 0 = AM, 1 = PM (только для 12-часового режима)
+    ds3231_time.Day = 1;      // 1–7 (см. DS3231_Day_t)
+    ds3231_time.Date = 24;     // 1–31
+    ds3231_time.Month = 8;    // 1–12
+    ds3231_time.Year = 26;     // 0–99 (последние 2 цифры года, напр. 25 = 2025)
+  DS3231_SetTime(&hi2c1,&ds3231_time); */
+  // Инициализация времени из DS3231
+  if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
+    currentHour = ds3231_time.Hour;
+    currentMinute = ds3231_time.Minute;
+    ds3231_prev_minute = ds3231_time.Minute;
+    ds3231_irq_received = 1; // Запускаем первый цикл обновления
+  }
+  
+  
   /* USER CODE END 2 */ 
 
   /* Infinite loop */
    /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
-// ====================================================================
-if (bmi160_irq_received) 
-    {
-      bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
-      // Запрашиваем у датчика целевую ориентацию (0, 1, 2 или 3)
-      uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
-      // Если положение устройства физически изменилось
-      if (next_orientation != current_display_orientation) 
+   // Объявление переменной времени DS3231 для использования в цикле
+   //DS3231_Time_t ds3231_time;
+   
+   while (1)
+   {
+     /* USER CODE END WHILE */
+
+     // ====================================================================
+     // Обработка прерывания от BMI160 (ориентация экрана)
+     // ====================================================================
+      if (bmi160_irq_received) 
       {
-        current_display_orientation = next_orientation;
-        //GUI_ShowAdvancedMeasurementScreen(next_orientation);
-        GUI_ShowMenuAdvancedMeasurementScreen(next_orientation);
+        bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
+        // Запрашиваем у датчика целевую ориентацию (0, 1, 2 или 3)
+        uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
+        // Если положение устройства физически изменилось
+        if (next_orientation != current_display_orientation) 
+        {
+          // Сохраняем состояние меню ПЕРЕД перестройкой
+          extern UIElement_t* current_menu_listbox;
+          if (current_menu_listbox) {
+            saved_menu_scroll_offset = current_menu_listbox->props.list_box.scroll_offset;
+            saved_menu_selected_index = current_menu_listbox->props.list_box.selected_index;
+          }
+          
+          current_display_orientation = next_orientation;
+          GUI_ShowMenuAdvancedMeasurementScreen(next_orientation);
+        }
       }
-    }
 
-    // ====================================================================
-    // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574) -> АВТОМАТИЗИРОВАННАЯ
-    // ====================================================================
+     // ====================================================================
+     // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
+     // ====================================================================
+     Buttons_Update(&btn_s);
+     uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
+     if (btn_raw != 0xFF) {
+         Buzzer_Short();
+     }
+     PCF8574_AcknowledgeChanges(&pcf_handle);
+
+     MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
+     if (key_short != KEY_NONE) {
+       Menu_ProcessInput(key_short);
+     }
+
+     // ====================================================================
+     // 2. ОБРАБОТКА ТАЧСКРИНА
+     // ====================================================================
+     if (ft6336u.has_touch) {
+         uint16_t raw_x, raw_y;
+         FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
+         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
+         ft6336u.has_touch = false;
+         Buzzer_Short();
+         Menu_ProcessTouch(last_touch_x, last_touch_y);
+     }
+
+      // ====================================================================
+      // 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ИЗ DS3231 (по прерыванию 1 Гц)
+      // ====================================================================
+      /* if (ds3231_irq_received) {
+          ds3231_irq_received = 0;
+          
+          if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
+              // Обновляем только когда изменилась минута
+              if (ds3231_time.Minute != ds3231_prev_minute) {
+                  currentHour = ds3231_time.Hour;
+                  currentMinute = ds3231_time.Minute;
+                  ds3231_prev_minute = ds3231_time.Minute;
+                  GUI_InvalidateStatusBar();
+              }
+          }
+      } */
+
+     if (ds3231_irq_received) {
+    ds3231_irq_received = 0;
     
-    // Обновляем внутреннее состояние кнопок (тайминги, дребезг)
-    Buttons_Update(&btn_s);
-
-    // Получаем информацию о текущем физическом состоянии для отладки (опционально)
-    uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
-    if (btn_raw != 0xFF) {
-        //UI_SetText(ui_btn_row, "Btn 0x%02X", btn_raw);
-         Buzzer_Short(); // Раскомментируйте, если хотите звук на любое нажатие
+    if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
+        // Сохраняем предыдущие значения для сравнения
+        static uint8_t prev_minute = 0xFF;
+        
+        if (ds3231_time.Minute != prev_minute) {
+            currentHour = ds3231_time.Hour;
+            currentMinute = ds3231_time.Minute;
+            prev_minute = ds3231_time.Minute;
+            GUI_InvalidateStatusBar();
+        }
     }
-    PCF8574_AcknowledgeChanges(&pcf_handle);
-
-    // --- Обработка короткого нажатия (Клик) ---
-    MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
-    if (key_short != KEY_NONE) {
-      Menu_ProcessInput(key_short);
-    }
-
-    // ====================================================================
-    // 2. ОБРАБОТКА ТАЧСКРИНА (Клик по строкам StackPanel / ListBox)
-    // ====================================================================
-    if (ft6336u.has_touch) {
-        uint16_t raw_x, raw_y;
-        FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y); // Считываем аппаратную точку
-        // Конвертируем сырые координаты под текущую ориентацию экрана
-        Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-      
-
-        ft6336u.has_touch = false; // Обязательный сброс аппаратного флага тача!
-        Buzzer_Short(); // Выдаем короткий писк подтверждения клика
-        Menu_ProcessTouch(last_touch_x, last_touch_y);
-    }
-
-    // ====================================================================
-    // 3. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
-    // ====================================================================
-    // Вызывается непрерывно на каждой итерации. Measurement_Handler обновляет данные в фоне.
-    //Measurement_Handler();
-    // Функция отрисовки UI — отправляет изменившиеся спрайты по SPI DMA
-    UI_DrawTree(&root_grid);
-
-    // Разгрузочная пауза для стабильной работы аппаратного DMA SPI и Watchdog
-    HAL_Delay(10); 
-    
-    /* USER CODE BEGIN 3 */
-  }
 }
+
+    // ====================================================================
+    // 4. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
+    // ====================================================================
+    UI_DrawTree(&root_grid);
+    
+    // 5. ПЛАВНАЯ АНИМАЦИЯ ПОДСВЕТКИ (неблокирующая)
+    // ====================================================================
+    LCD_Backlight_SmoothUpdate();
+    
+    // Разгрузочная пауза для DMA SPI и Watchdog
+    HAL_Delay(10); 
+     
+     /* USER CODE BEGIN 3 */
+   }
+}
+
+
 
 static void Scroll_ListBox(int8_t direction) {
     uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
@@ -359,7 +430,6 @@ static void Scroll_ListBox(int8_t direction) {
     }
 }
 
-
 void INIT_FT6336U(void){
     // 1. Сброс FT6336U
     HAL_GPIO_WritePin(CTP_RESET_GPIO_Port, CTP_RESET_Pin, GPIO_PIN_RESET);
@@ -377,9 +447,6 @@ void INIT_FT6336U(void){
         // Ошибка: не найден сенсор
     }
 }
-
-
-
 /**
   * @brief System Clock Configuration
   * @retval None

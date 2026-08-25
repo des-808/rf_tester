@@ -89,8 +89,6 @@ void Error_Handler(void);
 #define INT_DS3231_Pin GPIO_PIN_5
 #define INT_DS3231_GPIO_Port GPIOC
 #define INT_DS3231_EXTI_IRQn EXTI9_5_IRQn
-#define LCD_LED_PWM_Pin GPIO_PIN_0
-#define LCD_LED_PWM_GPIO_Port GPIOB
 #define BTN_ON_OFF_Pin GPIO_PIN_1
 #define BTN_ON_OFF_GPIO_Port GPIOB
 #define EXTI_PCF8574_Pin GPIO_PIN_7
@@ -101,8 +99,10 @@ void Error_Handler(void);
 #define BMI160_INT_EXTI_IRQn EXTI9_5_IRQn
 #define LCD_RESET_Pin GPIO_PIN_9
 #define LCD_RESET_GPIO_Port GPIOE
-#define LCD_LED_Pin GPIO_PIN_10
-#define LCD_LED_GPIO_Port GPIOE
+//#define LCD_LED_Pin GPIO_PIN_10
+//#define LCD_LED_GPIO_Port GPIOE
+#define LCD_LED_PWM_Pin GPIO_PIN_0
+#define LCD_LED_PWM_GPIO_Port GPIOB
 #define LCD_CS_Pin GPIO_PIN_11
 #define LCD_CS_GPIO_Port GPIOE
 #define LCD_SCK_Pin GPIO_PIN_12

@@ -29,6 +29,8 @@
 #include "pcf8574.h"
 #include "ft6336u.h"
 extern PCF8574_HandleTypeDef pcf_handle;
+extern volatile uint8_t ds3231_irq_received;
+extern volatile uint8_t bmi160_irq_received;
 /* USER CODE END TD */
 
 /* Private define ------------------------------------------------------------*/
@@ -61,7 +63,7 @@ extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 extern DMA_HandleTypeDef hdma_spi4_tx;
 extern SPI_HandleTypeDef hspi4;
 extern DMA2D_HandleTypeDef hdma2d;
-extern uint8_t bmi160_irq_received;
+//extern uint8_t bmi160_irq_received;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -298,10 +300,10 @@ void EXTI9_5_IRQHandler(void)
       //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); //Отладка: мигнуть LED
   }
 
-  // Для DS3231 (если используется):
+  // Для DS3231 (1 Гц прерывание):
   if (__HAL_GPIO_EXTI_GET_IT(INT_DS3231_Pin) != RESET) {
       __HAL_GPIO_EXTI_CLEAR_IT(INT_DS3231_Pin);
-      // RTC_IRQHandler();
+      ds3231_irq_received = 1; // Ставим флаг для main loop
   }
 
   // Для BMI160 

@@ -17,6 +17,10 @@ UIElement_t digits_node;   // Наша правая панель (использ
 UIElement_t digits_panel;  // Спрайт-контейнер панели (используется в GUI_BuildProInterface)
 UIElement_t ui_bands_listbox; // Сам контейнер ListBox
 
+// Сохранение состояния меню при повороте экрана
+uint8_t saved_menu_scroll_offset = 0;
+int16_t saved_menu_selected_index = -1;
+
 // Флаг отладки: если true — рисуем границы и текстовые метки геометрии ListBox/scrollbar
 bool ui_debug_draw = true;
 
@@ -579,6 +583,24 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
         
         // Вызываем отрисовку, используя то, что сейчас "активно" в меню
         Menu_Draw(menu_lb, current_menu_items, current_menu_count);
+        
+        // Восстанавливаем состояние ПОСЛЕ Menu_Draw (оно сбрасывается в Menu_Draw)
+        if (current_menu_count > 0) {
+            menu_lb->props.list_box.selected_index = saved_menu_selected_index;
+            if (menu_lb->props.list_box.selected_index < 0) 
+                menu_lb->props.list_box.selected_index = 0;
+            if (menu_lb->props.list_box.selected_index >= (int16_t)current_menu_count) 
+                menu_lb->props.list_box.selected_index = (int16_t)(current_menu_count - 1);
+            
+            // Восстанавливаем scroll_offset, но не больше максимально возможного
+            menu_lb->props.list_box.scroll_offset = saved_menu_scroll_offset;
+            uint8_t visible_items = menu_lb->h / menu_lb->font->char_height;
+            if (visible_items == 0) visible_items = 1;
+            uint8_t max_offset = (current_menu_count > visible_items) ? 
+                                 (uint8_t)(current_menu_count - visible_items) : 0;
+            if (menu_lb->props.list_box.scroll_offset > max_offset)
+                menu_lb->props.list_box.scroll_offset = max_offset;
+        }
     }
     
     // ====================================================================
@@ -2612,8 +2634,8 @@ UI_SetGridColsCount(&status_bar_grid, 3);
 UI_SetGridColProportional(&status_bar_grid, 1, 1); */
 
 
-uint8_t currentHour = 07;
-uint8_t currentMinute = 05;
+uint8_t currentHour = 00;
+uint8_t currentMinute = 00;
 uint8_t battery_Level = 99;
 
 //extern int batteryLevel;
@@ -2758,7 +2780,15 @@ void GUI_InvalidateStatusBar(void) {
     // Помечаем все иконки статус-бара как dirty
     // Эти иконки используют ОТДЕЛЬНЫЕ маленькие спрайты (status_icon_bt_sprite и т.д.)
     // и рисуются через UI_DrawTree(&root_grid) в main loop
-    if (status_clock_sprite.data)        { status_clock_sprite.needs_render = true; }
+    
+    // Часы
+    if (status_clock_sprite.data) {
+        status_clock_sprite.needs_render = true;
+        status_clock_sprite.dirty_x1 = 0; status_clock_sprite.dirty_y1 = 0;
+        status_clock_sprite.dirty_x2 = status_clock_sprite.w - 1;
+        status_clock_sprite.dirty_y2 = status_clock_sprite.h - 1;
+    }
+    
     if (status_icon_battery_sprite.data) { status_icon_battery_sprite.needs_render = true; }
     if (status_icon_bt_sprite.data)      { status_icon_bt_sprite.needs_render = true; }
     if (status_icon_wifi_sprite.data)    { status_icon_wifi_sprite.needs_render = true; }

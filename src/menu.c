@@ -1,6 +1,7 @@
 #include "menu.h"
 #include "gui.h"
 #include "st7796.h"
+#include "lcd_backlight.h"
 #include <string.h>
 
 // === ВНЕШНИЕ ПЕРЕМЕННЫЕ (Ваш код) ===
@@ -17,6 +18,8 @@ extern void rs485ToggleBluetoothMode();
 extern uint8_t rs485BaudIndex;
 extern uint8_t oledBrightness;
 extern int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff;
+
+uint8_t lcd_backlight_level = 5; // Локальная копия для меню (0-10)
 extern void toggleWiFi();
 extern void manualSyncTimeWithNTP();
 extern void clearWiFiCredentials();
@@ -39,6 +42,10 @@ uint8_t current_menu_count = 0;
 
 // External reference to panel_rows counter from gui.c
 extern uint8_t panel_rows_count;
+
+// Сохранённое состояние меню (из gui.c)
+extern uint8_t saved_menu_scroll_offset;
+extern int16_t saved_menu_selected_index;
 
 // === СТЕК НАВИГАЦИИ ===
 MenuState_t menu_stack[MAX_MENU_DEPTH];
@@ -127,6 +134,12 @@ static void StatusBar_Update_Callback() {
     GUI_InvalidateStatusBar();
 }
 
+// Колбэк для обновления подсветки экрана
+static void Backlight_Update_Callback() {
+    LCD_Backlight_SetLevel(lcd_backlight_level);
+    GUI_InvalidateStatusBar();
+}
+
 // --- Подменю передачи ---
 static MenuItem_t buttonSubMenu[] = {
     { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1 },
@@ -160,7 +173,7 @@ static MenuItem_t cc1101SubMenu[] = {
 // --- Подменю настроек ---
 static MenuItem_t settingsSubMenu[] = {
     { "RS485", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &rs485BaudIndex }, 0, 7, 1 },
-    { "Light", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &oledBrightness }, 1, 10, 1 },
+    { "LED Backlight", 0, ITEM_TYPE_VALUE, 0, Backlight_Update_Callback, { .ptr_value = &lcd_backlight_level }, 0, 10, 1 },
     { "BT", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1 },
     { "WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = toggleWiFi } },
     { "NTP Auto", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1 },
@@ -239,6 +252,9 @@ void Menu_Init(void) {
     current_menu_listbox = NULL;
     menu_stack_top = -1;  // Очищаем стек
     Menu_SetMainMenu(); // Инициализируем указатели на начало
+    
+    // Синхронизируем уровень подсветки с main.c
+    lcd_backlight_level = LCD_Backlight_GetLevel();
 }
 
 /* void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
@@ -275,7 +291,7 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
     listbox_container->children_count = 0; 
     panel_rows_count -= prev_children;
     
-    // Сброс логики прокрутки
+    // Сброс логики прокрутки (начальные значения — 0)
     listbox_container->props.list_box.scroll_offset = 0;
     listbox_container->props.list_box.selected_index = 0;
 
@@ -390,6 +406,12 @@ void Menu_ProcessInput(uint8_t key) {
         case KEY_UP:
             if (idx > 0) { 
                 lb->props.list_box.selected_index--; 
+                // Сохраняем scroll_offset при навигации
+                uint8_t visible_items = lb->h / lb->font->char_height;
+                if (visible_items == 0) visible_items = 1;
+                if (lb->props.list_box.selected_index < (int16_t)lb->props.list_box.scroll_offset) {
+                    lb->props.list_box.scroll_offset = (uint8_t)lb->props.list_box.selected_index;
+                }
                 UI_RenderListBoxItem(lb, idx);
                 UI_RenderListBoxItem(lb, lb->props.list_box.selected_index);
             }
@@ -397,6 +419,12 @@ void Menu_ProcessInput(uint8_t key) {
         case KEY_DOWN:
             if (idx < current_menu_count - 1) { 
                 lb->props.list_box.selected_index++; 
+                // Сохраняем scroll_offset при навигации
+                uint8_t visible_items = lb->h / lb->font->char_height;
+                if (visible_items == 0) visible_items = 1;
+                if (lb->props.list_box.selected_index >= (int16_t)(lb->props.list_box.scroll_offset + visible_items)) {
+                    lb->props.list_box.scroll_offset = (uint8_t)(lb->props.list_box.selected_index - visible_items + 1);
+                }
                 UI_RenderListBoxItem(lb, idx);
                 UI_RenderListBoxItem(lb, lb->props.list_box.selected_index);
             }
@@ -430,8 +458,14 @@ void Menu_ProcessInput(uint8_t key) {
         strcmp(label, "NTP Auto") == 0 || strcmp(label, "Buzzer") == 0) {
         
         snprintf(new_text, sizeof(new_text), "%s: %s", label, (val ? "On" : "Off"));
-    } else if (strcmp(label, "Light") == 0) {
+    } else if (strcmp(label, "OLED Light") == 0) {
         snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
+    } else if (strcmp(label, "LED Backlight") == 0) {
+        if (val == 0) {
+            snprintf(new_text, sizeof(new_text), "%s: Off", label);
+        } else {
+            snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
+        }
     } else {
         // Универсальный вариант для Sys, Room, Freq и т.д.
         snprintf(new_text, sizeof(new_text), "%s: %d", label, val);

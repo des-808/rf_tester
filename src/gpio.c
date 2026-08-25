@@ -61,8 +61,9 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, NRF24L01_CE_Pin|CTP_RESET_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, LCD_RESET_Pin|LCD_LED_Pin|LCD_CS_Pin|LCD_DC_Pin
-                          |NRF24L01_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOE, LCD_RESET_Pin|LCD_CS_Pin|LCD_DC_Pin
+                           |NRF24L01_CS_Pin, GPIO_PIN_SET);
+  // LCD_LED на PB0 управляется через PWM (TIM1_CH2N), PE10 удалён
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(CC1101_CS_GPIO_Port, CC1101_CS_Pin, GPIO_PIN_SET);
@@ -141,11 +142,13 @@ void MX_GPIO_Init(void)
   HAL_GPIO_Init(LCD_RESET_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PEPin PEPin PEPin */
-  GPIO_InitStruct.Pin = LCD_LED_Pin|LCD_CS_Pin|LCD_DC_Pin;
+  GPIO_InitStruct.Pin = LCD_CS_Pin|LCD_DC_Pin|NRF24L01_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  // LCD_LED теперь на PB0 (PWM TIM1_CH2N), PE10 удалён
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = NRF24L01_CS_Pin;
