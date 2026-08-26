@@ -23,6 +23,7 @@
 #include "quadspi.h"
 #include "rtc.h"
 #include "sdmmc.h"
+#include "sd_card.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -30,12 +31,7 @@
 #include "gpio.h"
 #include "flash.h"
 #include "dma2d.h"
-#include "ft6336u.h"
-#include "gui.h"
-#include "lcd_backlight.h"
-#include "bmi160_h7.h"
-#include "ds3231.h"
-#include "menu.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -43,6 +39,13 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+#include "ft6336u.h"
+#include "gui.h"
+#include "lcd_backlight.h"
+#include "bmi160_h7.h"
+#include "ds3231.h"
+#include "menu.h"
+
 #include "font.h"
 
 #include "buttons.h"
@@ -214,17 +217,22 @@ int main(void)
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  HAL_GPIO_WritePin(CTP_RESET_GPIO_Port,CTP_RESET_Pin,GPIO_PIN_SET);
-  MX_DMA_Init();
-  MX_UART4_Init();
-  MX_QUADSPI_Init();
-  MX_RTC_Init();
-  //MX_SDMMC1_MMC_Init();
-  MX_SPI4_Init();
+   /* Initialize all configured peripherals */
+    MX_GPIO_Init();
+    
+    // Инициализация SD карты (SD mode, не MMC)
+    MX_SDMMC1_SD_Init();
+    SD_Card_Init();
+   
+   HAL_GPIO_WritePin(CTP_RESET_GPIO_Port,CTP_RESET_Pin,GPIO_PIN_SET);
+   MX_DMA_Init();
+   MX_UART4_Init();
+   MX_QUADSPI_Init();
+    MX_RTC_Init();
+    MX_SPI4_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+     LCD_Backlight_Init();
   MX_DMA2D_Init();
   MX_USB_DEVICE_Init();
   MX_UART5_Init();
@@ -250,7 +258,7 @@ int main(void)
 	HAL_Delay(150);
   /* USER CODE BEGIN 2 */
    ST7796_Init();
-   LCD_Backlight_Init();
+
 
   // Используем Segoe Print 12 по умолчанию
   //lcd_set_font(&font_segoe_struct);
@@ -389,8 +397,20 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
     // ====================================================================
     LCD_Backlight_SmoothUpdate();
     
+    // ====================================================================
+    // 6. МОНИТОРИНГ SD-КАРТЫ
+    // ====================================================================
+    static uint32_t sd_check_tick = 0;
+    if (HAL_GetTick() - sd_check_tick > 2000) {
+        sd_check_tick = HAL_GetTick();
+        // Простая проверка наличия карты (без вывода на экран)
+        if (!SD_Card_IsPresent()) {
+            // Карта извлечена или не инициализирована
+        }
+    }
+    
     // Разгрузочная пауза для DMA SPI и Watchdog
-    HAL_Delay(10); 
+    HAL_Delay(10);
      
      /* USER CODE BEGIN 3 */
    }
