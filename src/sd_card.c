@@ -9,7 +9,6 @@
 extern SD_HandleTypeDef hsd1;
 
 static SD_CardInfo_t s_card_info = {0};
-static bool s_init_done = false;
 
 // ============================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -46,38 +45,52 @@ static void CSD_To_Bytes(uint8_t *dst, const uint32_t *csd) {
 // ============================================================
 
 SD_Status_t SD_Card_Init(void) {
-    s_init_done = false;
     memset(&s_card_info, 0, sizeof(SD_CardInfo_t));
+    s_card_info.present = false;
+    return SD_NOT_PRESENT;
+}
+
+
+
+/**
+ * @brief   Полная инициализация SD (может блокироваться ~100мс)
+ *          Вызывать ТОЛЬКО когда карта точно в слоте!
+ * @retval  SD_Status_t
+ */
+SD_Status_t SD_Card_Detect(void) {
+    if(!SD_Card_IsPhysicallyPresent()){return SD_NOT_PRESENT;}
+    // Если уже инициализирована — выходим
+    if (s_card_info.present) return SD_OK;
     
-    // HAL_SD_Init уже вызван в MX_SDMMC1_SD_Init()
-    // HAL_SD_GetCardInfo заполняет hsd1.SdCard и hsd1.CSD/hsd1.CID
-    if (HAL_SD_GetCardInfo(&hsd1, &hsd1.SdCard) != HAL_OK) {
-        s_init_done = false;
+    // Карта в слоте — инициализируем HAL
+    if (HAL_SD_Init(&hsd1) != HAL_OK) {
+        s_card_info.present = false;
         return SD_INIT_FAILED;
     }
     
-    // Заполняем нашу структуру из HAL-структуры
+    // Получаем информацию о карте
+    HAL_SD_CardInfoTypeDef cardInfo;
+    if (HAL_SD_GetCardInfo(&hsd1, &cardInfo) != HAL_OK) {
+        s_card_info.present = false;
+        return SD_NOT_PRESENT;
+    }
+    
     s_card_info.present = true;
-    s_card_info.type = (SD_CardType_t)hsd1.SdCard.CardType;
-    s_card_info.version = (hsd1.SdCard.CardType == MMC_HIGH_CAPACITY_CARD) ? 2 : 1;
-    s_card_info.block_count = hsd1.SdCard.LogBlockNbr;
-    s_card_info.capacity_mb = (hsd1.SdCard.LogBlockSize * hsd1.SdCard.LogBlockNbr) / (1024 * 1024);
+    s_card_info.type = (SD_CardType_t)cardInfo.CardType;
+    s_card_info.version = (cardInfo.CardType == MMC_HIGH_CAPACITY_CARD) ? 2 : 1;
+    s_card_info.block_count = cardInfo.LogBlockNbr;
+    s_card_info.capacity_mb = (cardInfo.LogBlockSize * cardInfo.LogBlockNbr) / (1024 * 1024);
     s_card_info.bus_width = (hsd1.Init.BusWide == SDMMC_BUS_WIDE_4B) ? 4 : 1;
     
-    // Копируем CID (uint32_t[4] -> uint8_t[16])
     CSD_To_Bytes(s_card_info.cid, hsd1.CID);
-    
-    // Копируем CSD (uint32_t[4] -> uint8_t[16])
     CSD_To_Bytes(s_card_info.csd, hsd1.CSD);
     
-    // Определяем write-protect по CSD
     s_card_info.writable = true;
     uint8_t wp_group = (s_card_info.csd[5] >> 6) & 0x03;
     if (wp_group == 0x01 || wp_group == 0x02) {
         s_card_info.writable = false;
     }
     
-    s_init_done = true;
     return SD_OK;
 }
 
@@ -87,8 +100,8 @@ SD_Status_t SD_Card_Init(void) {
 
 SD_Status_t SD_Card_GetInfo(SD_CardInfo_t *info) {
     if (!info) return SD_ERROR;
-    if (!s_init_done) {
-        SD_Status_t ret = SD_Card_Init();
+    if (!s_card_info.present) {
+        SD_Status_t ret = SD_Card_Detect();
         if (ret != SD_OK) {
             memset(info, 0, sizeof(SD_CardInfo_t));
             info->present = false;
@@ -99,13 +112,29 @@ SD_Status_t SD_Card_GetInfo(SD_CardInfo_t *info) {
     return SD_OK;
 }
 
+// ============================================================
+// ПРОВЕРКА НАЛИЧИЯ КАРТЫ
+// ============================================================
+
+bool SD_Card_IsPhysicallyPresent(void) {
+    // PD4 замкнут на GND при вставленной карте
+    return (HAL_GPIO_ReadPin(SD_CD_GPIO_Port, SD_CD_Pin) == GPIO_PIN_SET);
+}
+
 bool SD_Card_IsPresent(void) {
-    if (!s_init_done) SD_Card_Init();
-    return s_card_info.present;
+    return SD_Card_IsPhysicallyPresent();
+}
+
+SD_Status_t SD_Card_CheckPresent(void) {
+    if (SD_Card_IsPhysicallyPresent()) {
+        s_card_info.present = true;
+        return SD_OK;
+    }
+    s_card_info.present = false;
+    return SD_NOT_PRESENT;
 }
 
 bool SD_Card_IsWriteProtected(void) {
-    if (!s_init_done) SD_Card_Init();
     return !s_card_info.writable;
 }
 
@@ -118,7 +147,6 @@ SD_Status_t SD_Card_ReadBlock(uint32_t block_addr, uint8_t *buffer) {
 }
 
 SD_Status_t SD_Card_ReadBlocks(uint32_t block_addr, uint32_t block_count, uint8_t *buffer) {
-    if (!s_init_done) return SD_INIT_FAILED;
     if (!s_card_info.present) return SD_ERROR;
     if (!buffer) return SD_ERROR;
     if (block_count == 0) return SD_ERROR;
@@ -143,7 +171,6 @@ SD_Status_t SD_Card_WriteBlock(uint32_t block_addr, const uint8_t *buffer) {
 }
 
 SD_Status_t SD_Card_WriteBlocks(uint32_t block_addr, uint32_t block_count, const uint8_t *buffer) {
-    if (!s_init_done) return SD_INIT_FAILED;
     if (!s_card_info.present) return SD_ERROR;
     if (!buffer) return SD_ERROR;
     if (block_count == 0) return SD_ERROR;

@@ -66,16 +66,37 @@ SD_Status_t SD_Card_Init(void);
 SD_Status_t SD_Card_GetInfo(SD_CardInfo_t *info);
 
 /**
- * @brief   Check if SD card is present
+ * @brief   Check if SD card is present (non-blocking, ~2ms max)
  * @retval  true if present
  */
 bool SD_Card_IsPresent(void);
+
+/**
+ * @brief   Check physical card detect pin (PD4)
+ * @retval  true if card is physically in the slot
+ */
+bool SD_Card_IsPhysicallyPresent(void);
+
+/**
+ * @brief   Non-blocking SD card presence check with status code.
+ *          Returns cached state if card already detected.
+ *          Only blocks up to 10ms for CMD8 poll on first detection.
+ * @retval  SD_OK             Card present and ready for SD_Card_Detect()
+ * @retval  SD_NOT_PRESENT    Card not detected
+ */
+SD_Status_t SD_Card_CheckPresent(void);
 
 /**
  * @brief   Check if SD card is write-protected
  * @retval  true if write-protected
  */
 bool SD_Card_IsWriteProtected(void);
+
+/**
+ * @brief   Detect and initialize SD card (may block if card present)
+ * @retval  SD_Status_t
+ */
+SD_Status_t SD_Card_Detect(void);
 
 /**
  * @brief   Read single block (512 bytes)

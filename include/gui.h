@@ -221,6 +221,8 @@ void Draw_Icon_WiFi_Callback(UIElement_t* el);
 void Buzzer_On_Off_();
 void Draw_Icon_Buzzer_Callback(UIElement_t* el);
 
+void Draw_Icon_SD_Callback(UIElement_t* el);
+
 extern UIElement_t status_icon_buzzer_node;
 extern Sprite_t status_icon_buzzer_sprite;
 
@@ -262,4 +264,5 @@ extern int16_t saved_menu_selected_index;
 
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid);
 void GUI_InvalidateStatusBar(void);
+void GUI_UpdateSDStatus(void);
 #endif // GUI_H

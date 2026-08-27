@@ -39,4 +39,20 @@ bool LCD_Backlight_SmoothOn(uint32_t duration_ms, uint8_t target_level, uint32_t
 // Должен вызываться регулярно (каждые step_ms мс)
 void LCD_Backlight_SmoothUpdate(void);
 
+
+//static uint32_t LCD_Backlight_LevelToCCR2(uint8_t level);
+
+uint8_t LCD_Backlight_PWMToLevel(uint32_t ccr2);
+
+
+
+
+
+
+
+
+
+
+
+
 #endif

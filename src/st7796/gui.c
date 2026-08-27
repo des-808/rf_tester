@@ -1,5 +1,6 @@
 #include "gui.h"
 #include "menu.h"
+#include "sd_card.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -55,6 +56,7 @@ static Sprite_t status_icon_ntp_sprite;
  Sprite_t status_icon_buzzer_sprite;
 static Sprite_t status_icon_mode_sprite;
 static Sprite_t status_spacer_sprite;
+static Sprite_t status_sd_sprite;        // Спрайт статуса SD
 
 // Узлы иконок
 static UIElement_t status_icon_battery_node;
@@ -64,10 +66,12 @@ static UIElement_t status_icon_ntp_node;
  UIElement_t status_icon_buzzer_node;
 static UIElement_t status_icon_mode_node;
 static UIElement_t status_icon_spacer_node;
+static UIElement_t status_sd_node;       // Узел статуса SD
 
 // Размеры
 #define STATUS_BAR_HEIGHT 25
 #define CLOCK_WIDTH 70
+#define SD_STATUS_WIDTH 24
 
 /* Глобальные объекты спрайтов для экранов интерфейса */
 Sprite_t status_bar_sprite;
@@ -2792,6 +2796,40 @@ void Draw_Icon_NTP_Callback(UIElement_t* el) {
 }
 
 // ==========================================
+// ИКОНКА SD-КАРТЫ
+// ==========================================
+
+bool s_sd_gui_state = false;  // Кэшированное состояние SD
+
+void Draw_Icon_SD_Callback(UIElement_t* el) {
+    if (!el || !el->sprite || !el->sprite->data) return;
+    Sprite_t* s = el->sprite;
+
+    Sprite_fill(s, RGB565_BLACK);
+    
+    lcd_set_font(&font_arial_9_struct);
+    
+    uint16_t sd_color = s_sd_gui_state ? RGB565_GREEN : RGB565_RED;
+    
+    const char* sd_text = s_sd_gui_state ? "SD" : "--";
+    lcd_print_to_buffer(2, 7, sd_color, sd_text, RGB565_BLACK, s);
+    
+    s->dirty_x1 = 0; s->dirty_y1 = 0;
+    s->dirty_x2 = s->w - 1; s->dirty_y2 = s->h - 1;
+    s->needs_render = true;
+}
+
+void GUI_UpdateSDStatus(void) {
+    s_sd_gui_state = SD_Card_IsPresent();
+    if (status_sd_node.sprite) {
+        status_sd_node.sprite->needs_render = true;
+        status_sd_node.sprite->dirty_x1 = 0; status_sd_node.sprite->dirty_y1 = 0;
+        status_sd_node.sprite->dirty_x2 = status_sd_node.sprite->w - 1;
+        status_sd_node.sprite->dirty_y2 = status_sd_node.sprite->h - 1;
+    }
+}
+
+// ==========================================
 // ПЕРЕРИСОВКА СТАТУС-БАРA ПРИ ИЗМЕНЕНИИ СОСТОЯНИЙ
 // ==========================================
 
@@ -2814,6 +2852,7 @@ void GUI_InvalidateStatusBar(void) {
     if (status_icon_ntp_sprite.data)     { status_icon_ntp_sprite.needs_render = true; }
     if (status_icon_buzzer_sprite.data)  { status_icon_buzzer_sprite.needs_render = true;}
     if (status_icon_mode_sprite.data)    { status_icon_mode_sprite.needs_render = true; }
+    if (status_sd_sprite.data)           { status_sd_sprite.needs_render = true; }
 
     if (status_icon_bt_sprite.data) {
         status_icon_bt_sprite.needs_render = true;
@@ -2851,8 +2890,18 @@ void GUI_InvalidateStatusBar(void) {
         status_icon_mode_sprite.dirty_x2 = status_icon_mode_sprite.w - 1;
         status_icon_mode_sprite.dirty_y2 = status_icon_mode_sprite.h - 1;
     }
+    
+    // SD-иконка
+    if (status_sd_sprite.data) {
+        status_sd_sprite.needs_render = true;
+        status_sd_sprite.dirty_x1 = 0; status_sd_sprite.dirty_y1 = 0;
+        status_sd_sprite.dirty_x2 = status_sd_sprite.w - 1;
+        status_sd_sprite.dirty_y2 = status_sd_sprite.h - 1;
+    }
 }
 
+// ==========================================
+// ФУНКЦИЯ СОЗДАНИЯ СТАТУС-БАРa
 // ==========================================
 // ФУНКЦИЯ СОЗДАНИЯ СТАТУС-БАРA
 // ==========================================
@@ -2869,6 +2918,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_ntp_sprite.data = NULL;       status_icon_ntp_sprite.is_allocated = false;
     status_icon_buzzer_sprite.data = NULL;    status_icon_buzzer_sprite.is_allocated = false;
     status_icon_mode_sprite.data = NULL;      status_icon_mode_sprite.is_allocated = false;
+    status_sd_sprite.data = NULL;             status_sd_sprite.is_allocated = false;
     status_spacer_sprite.data = NULL;         status_spacer_sprite.is_allocated = false;
     // 1. Инициализация корневого контейнера статус-бара (Grid)
     status_bar_node.type = UI_TYPE_GRID;
@@ -2927,19 +2977,22 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     UI_SetGridRowsCount(&status_icons_node, 1);
     UI_SetGridRowPixel(&status_icons_node, 0, STATUS_BAR_HEIGHT);
     
-    UI_SetGridColsCount(&status_icons_node, 7); 
+    UI_SetGridColsCount(&status_icons_node, 8); 
     
     // --- РАСПРЕДЕЛЕНИЕ КОЛОНОК ---
     // Колонка 0: СПЕЙСЕР (занимает 100% оставшегося места, прижимая остальные вправо)
     UI_SetGridColPercent(&status_icons_node, 0, 100); 
     
-    // Колонки 1, 2, 3: Фиксированная ширина под иконки
-    UI_SetGridColPixel(&status_icons_node, 1, 16);   // rs485toBt
-    UI_SetGridColPixel(&status_icons_node, 2, 16);   // buzzer
-    UI_SetGridColPixel(&status_icons_node, 3, 16);   // ntp
-    UI_SetGridColPixel(&status_icons_node, 4, 16);   // Wi-Fi
-    UI_SetGridColPixel(&status_icons_node, 5, 16);   // Bluetooth
-    UI_SetGridColPixel(&status_icons_node, 6, 50);   // Battery
+    // Колонки 1-7: Фиксированная ширина под иконки
+    UI_SetGridColPixel(&status_icons_node, 1, SD_STATUS_WIDTH);   // SD card
+    UI_SetGridColPixel(&status_icons_node, 2, 16);   // rs485toBt
+    UI_SetGridColPixel(&status_icons_node, 3, 16);   // buzzer
+    UI_SetGridColPixel(&status_icons_node, 4, 16);   // ntp
+    UI_SetGridColPixel(&status_icons_node, 5, 16);   // Wi-Fi
+    UI_SetGridColPixel(&status_icons_node, 6, 16);   // Bluetooth
+    UI_SetGridColPixel(&status_icons_node, 7, 50);   // Battery
+    //UI_SetGridColPixel(&status_icons_node, 5, 16);   // Bluetooth
+    //UI_SetGridColPixel(&status_icons_node, 6, 50);   // Battery
 
     status_bar_node.children[status_bar_node.children_count++] = &status_icons_node;
 
@@ -2951,7 +3004,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- Батарея ---
     status_icon_battery_node.type = UI_TYPE_SPRITE;
     status_icon_battery_node.grid_row = 0; // В стеке игнорируется
-    status_icon_battery_node.grid_col = 6;
+    status_icon_battery_node.grid_col = 7;
     status_icon_battery_node.render_callback = Draw_Icon_Battery_Callback;
     status_icon_battery_node.background_color = RGB565_BLACK;
     status_icon_battery_node.sprite = &status_icon_battery_sprite;
@@ -2969,10 +3022,29 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
         status_icons_node.children[status_icons_node.children_count++] = &status_icon_battery_node;
     }
 
+    // --- SD Card Status ---
+    status_sd_node.type = UI_TYPE_SPRITE;
+    status_sd_node.grid_row = 0;
+    status_sd_node.grid_col = 1;
+    status_sd_node.render_callback = Draw_Icon_SD_Callback;
+    status_sd_node.background_color = RGB565_BLACK;
+    status_sd_node.sprite = &status_sd_sprite;
+    status_sd_node.w = SD_STATUS_WIDTH;
+    status_sd_node.h = STATUS_BAR_HEIGHT;
+
+    status_sd_sprite.w = SD_STATUS_WIDTH;
+    status_sd_sprite.h = STATUS_BAR_HEIGHT;
+    status_sd_sprite.data = (uint16_t*)malloc(SD_STATUS_WIDTH * STATUS_BAR_HEIGHT * 2);
+    status_sd_sprite.is_allocated = (status_sd_sprite.data != NULL);
+
+    if (status_sd_sprite.is_allocated) {
+        status_icons_node.children[status_icons_node.children_count++] = &status_sd_node;
+    }
+
     // --- Bluetooth ---
     status_icon_bt_node.type = UI_TYPE_SPRITE;
     status_icon_bt_node.grid_row = 0;
-    status_icon_bt_node.grid_col = 5;
+    status_icon_bt_node.grid_col = 6;
     status_icon_bt_node.render_callback = Draw_Icon_Bluetooth_Callback;
     status_icon_bt_node.background_color = RGB565_BLACK;
     status_icon_bt_node.sprite = &status_icon_bt_sprite;
@@ -2991,7 +3063,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- Wi-Fi ---
     status_icon_wifi_node.type = UI_TYPE_SPRITE;
     status_icon_wifi_node.grid_row = 0;
-    status_icon_wifi_node.grid_col = 4;
+    status_icon_wifi_node.grid_col = 5;
     status_icon_wifi_node.render_callback = Draw_Icon_WiFi_Callback;
     status_icon_wifi_node.background_color = RGB565_BLACK;
     status_icon_wifi_node.sprite = &status_icon_wifi_sprite;
@@ -3011,7 +3083,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- NTP ---
     status_icon_ntp_node.type = UI_TYPE_SPRITE;
     status_icon_ntp_node.grid_row = 0;
-    status_icon_ntp_node.grid_col = 3;
+    status_icon_ntp_node.grid_col = 4;
     status_icon_ntp_node.render_callback = Draw_Icon_NTP_Callback;
     status_icon_ntp_node.background_color = RGB565_BLACK;
     status_icon_ntp_node.sprite = &status_icon_ntp_sprite;
@@ -3030,7 +3102,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- BUZZER ---
     status_icon_buzzer_node.type = UI_TYPE_SPRITE;
     status_icon_buzzer_node.grid_row = 0;
-    status_icon_buzzer_node.grid_col = 2;
+    status_icon_buzzer_node.grid_col = 3;
     status_icon_buzzer_node.render_callback = Draw_Icon_Buzzer_Callback;
     status_icon_buzzer_node.background_color = RGB565_BLACK;
     status_icon_buzzer_node.sprite = &status_icon_buzzer_sprite;
@@ -3049,7 +3121,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // --- RS485ToBt ---
     status_icon_mode_node.type = UI_TYPE_SPRITE;
     status_icon_mode_node.grid_row = 0;
-    status_icon_mode_node.grid_col = 1;
+    status_icon_mode_node.grid_col = 2;
     status_icon_mode_node.render_callback = Draw_Icon_RS485ToBT_Callback;
     status_icon_mode_node.background_color = RGB565_BLACK;
     status_icon_mode_node.sprite = &status_icon_mode_sprite;

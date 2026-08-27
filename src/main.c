@@ -35,6 +35,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "sd_fs.h"
+#include "sd_log.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -223,6 +225,8 @@ int main(void)
     // Инициализация SD карты (SD mode, не MMC)
     MX_SDMMC1_SD_Init();
     SD_Card_Init();
+    
+    
    
    HAL_GPIO_WritePin(CTP_RESET_GPIO_Port,CTP_RESET_Pin,GPIO_PIN_SET);
    MX_DMA_Init();
@@ -255,7 +259,16 @@ int main(void)
   if (!BMI160_Init(&hi2c1, BMI160_I2C_ADDR_VCC)) {
       while(1); // Ошибка
   }
-	HAL_Delay(150);
+  HAL_Delay(150);
+  
+  // Инициализация SD-карты (неблокирующая — система работает и без карты)
+  SD_Status_t sd_st = SD_Card_Init();
+  if (sd_st != SD_OK) {
+      // Карта не вставлена или ошибка — продолжаем работу
+  }
+  
+  SD_Log_Init();
+  
   /* USER CODE BEGIN 2 */
    ST7796_Init();
 
@@ -274,7 +287,6 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   Menu_Init();
   //GUI_ShowAdvancedMeasurementScreen(current_display_orientation);
   GUI_ShowMenuAdvancedMeasurementScreen(current_display_orientation);
- 
    
     /* ds3231_time.Second = 0;   // 0–59
     ds3231_time.Minute = 51;   // 0–59
@@ -398,14 +410,27 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
     LCD_Backlight_SmoothUpdate();
     
     // ====================================================================
-    // 6. МОНИТОРИНГ SD-КАРТЫ
+    // 6. МОНИТОРИНГ SD-КАРТЫ (по CD-пину) + ОБНОВЛЕНИЕ GUI
     // ====================================================================
     static uint32_t sd_check_tick = 0;
-    if (HAL_GetTick() - sd_check_tick > 2000) {
+    static bool sd_last_state = false;
+    if (HAL_GetTick() - sd_check_tick > 500) {
         sd_check_tick = HAL_GetTick();
-        // Простая проверка наличия карты (без вывода на экран)
-        if (!SD_Card_IsPresent()) {
-            // Карта извлечена или не инициализирована
+        
+        // Проверка только по CD-пину (мгновенно)
+        bool card_in_slot = SD_Card_IsPhysicallyPresent();
+        
+        // Если состояние изменилось — перерисовываем иконку
+        if (card_in_slot != sd_last_state) {
+            sd_last_state = card_in_slot;
+            GUI_UpdateSDStatus();
+        }
+        
+        if (!card_in_slot) {
+            // Карта извлечена — останавливаем логирование
+            if (SD_Log_IsActive()) {
+                SD_Log_Stop();
+            }
         }
     }
     

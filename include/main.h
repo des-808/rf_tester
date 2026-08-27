@@ -129,6 +129,8 @@ void Error_Handler(void);
 #define FLASH_MOSI_GPIO_Port GPIOD
 #define FLASH_SCK_Pin GPIO_PIN_3
 #define FLASH_SCK_GPIO_Port GPIOB
+#define SD_CD_Pin GPIO_PIN_4
+#define SD_CD_GPIO_Port GPIOD
 #define FLASH_MISO_Pin GPIO_PIN_4
 #define FLASH_MISO_GPIO_Port GPIOB
 #define ESP32_RX_Pin GPIO_PIN_0
