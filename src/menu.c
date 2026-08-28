@@ -284,9 +284,6 @@ void Menu_Init(void) {
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
     if (!listbox_container || !items) return;
 
-    // Получаем текущее количество детей (для отладки)
-    uint8_t prev_children = listbox_container->children_count;
-    
     // Сброс визуальных детей
     listbox_container->children_count = 0; 
     // Не вычитаем panel_rows_count — он уже обнулён в GUI_ShowMenuAdvancedMeasurementScreen
@@ -515,5 +512,5 @@ void toggleWiFi() {
     GUI_InvalidateStatusBar();
 }
 void manualSyncTimeWithNTP(){}
-void clearWiFiCredentials(){}
+extern void clearWiFiCredentials(void);
 void cc1101ApplySettingsFromMenu(){}

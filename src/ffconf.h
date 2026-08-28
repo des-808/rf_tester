@@ -90,7 +90,9 @@
 / Locale and Namespace Configurations
 /---------------------------------------------------------------------------*/
 
+#ifndef _CODE_PAGE
 #define _CODE_PAGE	437
+#endif
 /* This option specifies the OEM code page to be used on the target system.
 /  Incorrect setting of the code page can cause a file open failure.
 /

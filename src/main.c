@@ -53,6 +53,7 @@
 #include "buttons.h"
 #include "i2c_scanner.h"
 #include "buzzer.h"
+#include "settings_manager.h"
 #include <string.h>
 /* USER CODE END PTD */
 
@@ -269,6 +270,9 @@ int main(void)
   
   SD_Log_Init();
   
+  /* Инициализация настроек (W25Q Flash) */
+  SettingsManager_Init();
+  
   /* USER CODE BEGIN 2 */
    ST7796_Init();
 
@@ -370,35 +374,21 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
       // ====================================================================
       // 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ИЗ DS3231 (по прерыванию 1 Гц)
       // ====================================================================
-      /* if (ds3231_irq_received) {
-          ds3231_irq_received = 0;
-          
-          if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
-              // Обновляем только когда изменилась минута
-              if (ds3231_time.Minute != ds3231_prev_minute) {
-                  currentHour = ds3231_time.Hour;
-                  currentMinute = ds3231_time.Minute;
-                  ds3231_prev_minute = ds3231_time.Minute;
-                  GUI_InvalidateStatusBar();
-              }
-          }
-      } */
-
      if (ds3231_irq_received) {
-    ds3231_irq_received = 0;
+      ds3231_irq_received = 0;
     
-    if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
-        // Сохраняем предыдущие значения для сравнения
-        static uint8_t prev_minute = 0xFF;
-        
-        if (ds3231_time.Minute != prev_minute) {
-            currentHour = ds3231_time.Hour;
-            currentMinute = ds3231_time.Minute;
-            prev_minute = ds3231_time.Minute;
-            GUI_InvalidateStatusBar();
-        }
+      if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
+          // Сохраняем предыдущие значения для сравнения
+          static uint8_t prev_minute = 0xFF;
+          
+          if (ds3231_time.Minute != prev_minute) {
+              currentHour = ds3231_time.Hour;
+              currentMinute = ds3231_time.Minute;
+              prev_minute = ds3231_time.Minute;
+              GUI_InvalidateStatusBar();
+          }
+      }
     }
-}
 
     // ====================================================================
     // 4. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
