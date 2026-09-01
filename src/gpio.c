@@ -108,7 +108,7 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = CC1101_GDO0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(CC1101_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(CC1101_GDO0_GPIO_Port, &GPIO_InitStruct);
 
 
   GPIO_InitStruct.Pin = CTP_INT_Pin;

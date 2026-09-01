@@ -33,14 +33,14 @@ int buzzerOnOff = 1;
 bool bluetoothMode = true;
 bool rs485toBt = true;
 
-// Переменные для меню
+// Переменные для меню (синхронизированы с ESP32 defaults)
 uint8_t rs485BaudIndex = 0;
 uint8_t oledBrightness = 5;
-uint16_t cc1101FreqFixed = 433000;
-uint16_t cc1101BitRateFixed = 200;
-uint8_t cc1101RxBwIndex = 3;
-uint8_t cc1101Modulation = 0;
-uint8_t cc1101PowerIndex = 0;
+uint16_t cc1101FreqFixed   = 43396;  /* 433.96 МГц */
+uint16_t cc1101BitRateFixed = 960;   /* 9.60 kbps (1.2..600) */
+uint8_t cc1101RxBwIndex    = 11;     /* 406 kHz (0..15) */
+uint8_t cc1101Modulation   = 1;      /* 0=GFSK, 1=OOK */
+uint8_t cc1101PowerIndex   = 3;      /* -10 dBm */
 
 // Глобальные объекты для статус-бара
 static UIElement_t status_bar_node;      // Контейнер Grid
@@ -580,11 +580,12 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
         // Инициализируем как ListBox
         menu_lb->type = UI_TYPE_LIST_BOX;
         menu_lb->sprite = &main_screen_sprite; // Общий спрайт панели
-        menu_lb->font = &font_segoe_struct;//font_arial_9_struct;
+        menu_lb->font = &font_arial_9_struct;
         
         // Настройки высоты: можно сделать фиксированной или авто
         menu_lb->props.list_box.height_mode = UI_LISTBOX_HEIGHT_FIXED;
         menu_lb->props.list_box.pixel_height = 0; // Высота блока меню
+        menu_lb->props.list_box.item_padding = MENU_LISTBOX_ITEM_PADDING;
         
         digits_node.children[digits_node.children_count++] = menu_lb;
         
@@ -612,7 +613,9 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
             
             // Восстанавливаем scroll_offset, но не больше максимально возможного
             menu_lb->props.list_box.scroll_offset = saved_menu_scroll_offset;
-            uint8_t visible_items = menu_lb->h / menu_lb->font->char_height;
+            uint8_t pad = (menu_lb->props.list_box.item_padding > 0) ? menu_lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+            uint16_t item_h = menu_lb->font->char_height + pad;
+            uint8_t visible_items = menu_lb->h / item_h;
             if (visible_items == 0) visible_items = 1;
             uint8_t max_offset = (current_menu_count > visible_items) ? 
                                  (uint8_t)(current_menu_count - visible_items) : 0;
@@ -860,10 +863,13 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
         }
     } 
    
-     // ШАГ 4: Математика ListBox (с учетом скролла и резерва под скроллбар)
-    if (element->type == UI_TYPE_LIST_BOX) {
-        uint16_t font_h = (current_font != NULL) ? current_font->char_height : 16;
-        uint16_t item_h = font_h + 6;
+      // ШАГ 4: Математика ListBox (с учетом скролла и резерва под скроллбар)
+     if (element->type == UI_TYPE_LIST_BOX) {
+         // ИСПОЛЬЗУЕМ element->font, а НЕ current_font — иначе item_h не совпадёт
+         // с тем, что считается в UI_ListBox_ProcessTouch / Menu_ProcessTouch
+         uint16_t font_h = (element->font != NULL) ? element->font->char_height : 16;
+         uint8_t pad = (element->props.list_box.item_padding > 0) ? element->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+         uint16_t item_h = font_h + pad;
         uint16_t parent_h = element->h;
 
         // Высота ListBox должна быть привязана к высоте, которую выделил родитель.
@@ -1922,7 +1928,7 @@ void Draw_GeneralText_Callback(UIElement_t* el) {
     
     // Получаем метрики строки и шрифта
     int str_w = lcd_get_str_width(el->text_content); // Текст берется из САМОГО элемента!
-    uint16_t font_h = current_font->char_height;
+    uint16_t font_h = (el->font != NULL) ? el->font->char_height : 16;
 
     int16_t text_x = local_x; 
     int16_t text_y = local_y; 
@@ -2061,11 +2067,13 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
     el->sprite = target_sprite;
     el->children_count = 0;
     el->props.list_box.selected_index = -1;
+    el->props.list_box.last_leaf_selected = -1;
     el->props.list_box.scroll_offset = 0;
 
     el->props.list_box.height_mode = UI_LISTBOX_HEIGHT_AUTO;
     el->props.list_box.visible_row_count = 4;  // можно переопределить позже
     el->props.list_box.pixel_height = 0;// 192;     // можно переопределить позже
+    el->props.list_box.item_padding = MENU_LISTBOX_ITEM_PADDING;
     // Устанавливаем шрифт по умолчанию для ListBox
     el->font = &font_arial_9_struct;
 }
@@ -2073,6 +2081,7 @@ void UI_InitListBox(UIElement_t* el, Sprite_t* target_sprite) {
 void Menu_ClearListbox(UIElement_t* listbox) {
     // Сбрасываем состояние выбора, иначе "фантом" старого индекса выберет новую строку
     listbox->props.list_box.selected_index = -1; 
+    listbox->props.list_box.last_leaf_selected = -1;
     listbox->touch_state.drag_last_y = -1;
     listbox->touch_state.drag_active = false;
     
@@ -2155,13 +2164,15 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
     
     // Ширина равна ширине листа минус паддинги и ширина возможного скроллбара
     uint8_t scrollbar_w = 10;
-    bool has_scrollbar = (listbox_elem->children_count + 1 > listbox_elem->h / (listbox_elem->font->char_height + 6));
+    uint8_t pad = (listbox_elem->props.list_box.item_padding > 0) ? listbox_elem->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+    uint16_t item_h = listbox_elem->font->char_height + pad;
+    bool has_scrollbar = (listbox_elem->children_count + 1 > listbox_elem->h / item_h);
     uint16_t available_width = listbox_elem->w - (2 * LISTBOX_PADDING_X) - (has_scrollbar ? scrollbar_w : 0);
     
     item->w = available_width;
     
-    // Высота зависит от высоты шрифта
-    item->h = listbox_elem->font->char_height + 6; // Шрифт + 6px внутренних отступов (ваш item_h)
+    // Высота зависит от высоты шрифта + padding из свойств ListBox
+    item->h = item_h;
 
     // Координаты X и Y здесь относительны родительского контейнера (будут учтены layout-менеджером)
     // Для простоты кладем их со стандартным левым паддингом
@@ -2217,9 +2228,14 @@ void UI_RenderListBox(UIElement_t* el) {
     }
 
     // --- ШАГ 2: Подготовка параметров шрифта и скроллбара ---
-    lcd_set_font(&font_arial_9_struct);
-    uint16_t font_h = current_font->char_height;
-    uint16_t item_h = font_h + 6; // Высота строки с отступами
+    // ИСПОЛЬЗУЕМ el->font — должен совпадать с тем, что в MeasureAndArrange / ProcessTouch
+    lcd_set_font((el->font != NULL) ? el->font : &font_arial_9_struct);
+    uint16_t font_h = (el->font != NULL) ? el->font->char_height : font_arial_9_struct.char_height;
+    uint8_t pad = (el->props.list_box.item_padding > 0) ? el->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+    uint16_t item_h = font_h + pad; // Высота строки с отступами
+    
+    // Отладка: проверяем консистентность item_h
+    // printf("URLB: font_h=%d pad=%d item_h=%d el->h=%d children=%d\n", font_h, pad, item_h, el->h, el->children_count);
     
     uint8_t start = el->props.list_box.scroll_offset;
     uint8_t visible_count = (el->h + item_h - 1) / item_h;
@@ -2238,6 +2254,7 @@ void UI_RenderListBox(UIElement_t* el) {
     if (content_w < 8) content_w = 8;
 
     // --- ШАГ 3: Отрисовка видимых элементов ---
+    printf("URLB: children_count=%d start=%d visible=%d\n", el->children_count, start, visible_count);
     for (uint8_t i = 0; i < el->children_count; i++) {
         if (i >= start && i < (start + visible_count)) {
             UIElement_t* child = (UIElement_t*)el->children[i];
@@ -2254,7 +2271,7 @@ void UI_RenderListBox(UIElement_t* el) {
             int16_t cly = row_abs_y - s->y;
 
             // Цвет фона элемента (выделен или нет)
-            uint16_t bg_color = (i == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
+            uint16_t bg_color = (i == el->props.list_box.last_leaf_selected) ? 0x10A5 : RGB565_BLACK;
 
             // --- ВАЖНО: Очищаем фон под текстом ЭТОЙ строки ---
             // Рисуем прямоугольник фона для строки. 
@@ -2276,7 +2293,10 @@ void UI_RenderListBox(UIElement_t* el) {
             int16_t text_y = cly + (item_h - font_h) / 2; // Центрирование по вертикали
 
             if (child->text_content[0] != '\0') {
+                printf("URLB[%d]: text='%s' sprite=%p data=%p\n", i, child->text_content, (void*)s, (void*)s->data);
                 lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg_color, s);
+            } else {
+                printf("URLB[%d]: text_content[0]='\\0'\n", i);
             }
         }
     }
@@ -2354,8 +2374,10 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
     
     // Проверяем, что элемент видим
     uint8_t start = el->props.list_box.scroll_offset;
-    uint8_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-    uint16_t item_h = font_h + 6;
+    // ИСПОЛЬЗУЕМ el->font — должен совпадать с тем, что в ProcessTouch / FindElement
+    uint16_t font_h = (el->font != NULL) ? el->font->char_height : font_arial_9_struct.char_height;
+    uint8_t pad = (el->props.list_box.item_padding > 0) ? el->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+    uint16_t item_h = font_h + pad;
     uint8_t visible_count = (el->h + item_h - 1) / item_h;
     if (visible_count == 0) visible_count = 1;
     
@@ -2386,7 +2408,7 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
     UIElement_t* child = (UIElement_t*)el->children[item_index];
     if (!child) return;
     
-    uint16_t bg_color = (item_index == el->props.list_box.selected_index) ? 0x10A5 : RGB565_BLACK;
+    uint16_t bg_color = (item_index == el->props.list_box.last_leaf_selected) ? 0x10A5 : RGB565_BLACK;
     
     // --- ОЧИСТКА ФОНА СТРОКИ ---
     for (int16_t y = cly; y < cly + item_h; y++) {
@@ -2435,8 +2457,10 @@ static UIElement_t* UI_FindElementRecursive(UIElement_t* element, uint16_t tx, u
     if (!UI_PointInElement(element, tx, ty)) return NULL;
 
     if (element->type == UI_TYPE_LIST_BOX) {
-        uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-        uint16_t item_h = font_h + 6;
+        // ИСПОЛЬЗУЕМ element->font — должен совпадать с тем, что в ProcessTouch / Render
+        uint16_t font_h = (element->font != NULL) ? element->font->char_height : font_arial_9_struct.char_height;
+        uint8_t pad = (element->props.list_box.item_padding > 0) ? element->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+        uint16_t item_h = font_h + pad;
         int16_t local_y = ty - element->y;
         uint8_t start = element->props.list_box.scroll_offset;
         uint8_t visible = (element->h + item_h - 1) / item_h;
@@ -2499,7 +2523,8 @@ int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty)
     }
 
     uint16_t font_h = (listbox->font != NULL) ? listbox->font->char_height : font_arial_9_struct.char_height;
-    uint16_t item_h = font_h + 6; // Высота строки с отступами
+    uint8_t pad = (listbox->props.list_box.item_padding > 0) ? listbox->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+    uint16_t item_h = font_h + pad; // Высота строки с отступами
     int16_t local_y = ty - listbox->y;
 
     // 2. Расчеты размеров контента
@@ -2561,6 +2586,17 @@ int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty)
             GUI_InvalidateRect(listbox->sprite, listbox->x, listbox->y, listbox->w, listbox->h);
         }
         return target;
+    }
+
+    // 4.5. Сброс drag-состояния при отпускании пальца (точка вне границ ListBox)
+    if (ts->drag_active && !IsPointInRect(tx, ty, listbox->x, listbox->y, listbox->w, listbox->h)) {
+        ts->drag_active = false;
+        ts->drag_last_y = -1;
+        // Восстанавливаем выделение на последнем видимом элементе
+        if (listbox->props.list_box.selected_index < 0 && listbox->props.list_box.scroll_offset < listbox->children_count) {
+            listbox->props.list_box.selected_index = (int8_t)listbox->props.list_box.scroll_offset;
+        }
+        return -1;
     }
 
     // 5. Детекция начала активного перетаскивания (Drag threshold)

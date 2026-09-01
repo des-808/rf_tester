@@ -43,6 +43,9 @@ typedef struct MenuItem {
         uint8_t step;
     } value_limits;
     
+    // Размер значения в байтах (1 = uint8_t, 2 = uint16_t) — 0 = auto-detect по типу памяти
+    uint8_t value_size;
+    
 } MenuItem_t;
 
 
@@ -65,6 +68,7 @@ typedef struct {
     uint8_t count;              // Количество пунктов
     uint8_t selected_index;     // Выбранный элемент (для восстановления скролла)
     uint8_t scroll_offset;      // Смещение прокрутки (для восстановления)
+    int8_t last_leaf_selected;  // Выделение последнего листового элемента
 } MenuState_t;
 
 // Глобальные переменные состояния
@@ -72,6 +76,9 @@ extern UIElement_t* current_menu_listbox;
 extern MenuItem_t* current_menu_items;
 extern uint8_t current_menu_count;
 extern uint8_t main_menu_count;
+
+/* Флаг длинного нажатия (1 = удерживали Enter 5+ циклов) */
+extern uint8_t menu_long_press_active;
 
 // Стек навигации
 extern MenuState_t menu_stack[MAX_MENU_DEPTH];

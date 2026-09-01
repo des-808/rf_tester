@@ -8,6 +8,7 @@
 
 #include "settings_manager.h"
 #include "settings_storage.h"
+#include "radio_config_bridge.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -71,12 +72,13 @@ static void settings_set_defaults(Settings_t* s) {
     s->ntp_sync_enabled    = 0;
     s->buzzer_enabled      = 1;
 
-    /* CC1101 (fixed-point x100) */
-    s->cc1101_freq_fixed   = 43390;  /* 433.90 МГц */
-    s->cc1101_bitrate_fixed = 960;   /* 9.60 kbps */
-    s->cc1101_rxbw_index   = 11;     /* 406 kHz */
-    s->cc1101_modulation   = 1;      /* GFSK */
-    s->cc1101_power_index  = 7;      /* max power */
+    /* CC1101 (fixed-point x100) — совпадает с ESP32 defaults */
+    /* Частота: MHz × 100, Битрейт: kbps × 100 */
+    s->cc1101_freq_fixed   = 43396;  /* 433.96 МГц */
+    s->cc1101_bitrate_fixed = 960;   /* 9.60 kbps (1.2..600 kbps) */
+    s->cc1101_rxbw_index   = 11;     /* 406 kHz (0..15) */
+    s->cc1101_modulation   = 1;      /* OOK (0=GFSK, 1=OOK) */
+    s->cc1101_power_index  = 3;      /* -10 dBm */
 }
 
 /* ========================================================================
@@ -118,6 +120,9 @@ void SettingsManager_Apply(void) {
     cc1101RxBwIndex        = g_settings.cc1101_rxbw_index;
     cc1101Modulation       = g_settings.cc1101_modulation;
     cc1101PowerIndex       = g_settings.cc1101_power_index;
+
+    /* Применяем CC1101 настройки к hardware */
+    Bridge_ApplyCC1101Settings();
 }
 
 /* ========================================================================

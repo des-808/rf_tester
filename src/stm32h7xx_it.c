@@ -212,7 +212,9 @@ void SysTick_Handler(void)
 void EXTI2_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI2_IRQn 0 */
-
+  extern void CC1101_Gdo0Interrupt(void);
+  CC1101_Gdo0Interrupt();
+  __HAL_GPIO_EXTI_CLEAR_FLAG(CC1101_GDO0_Pin);
   /* USER CODE END EXTI2_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(CC1101_GDO0_Pin);
   /* USER CODE BEGIN EXTI2_IRQn 1 */

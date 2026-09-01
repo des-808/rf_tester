@@ -15,6 +15,7 @@
 
 #define SHRIFT_HEIGHT 18
 #define SHRIFT_OTSTUP_TOP_BOTTOM 4
+#define MENU_LISTBOX_ITEM_PADDING 12  // Вертикальные отступы между элементами ListBox (добавка к высоте шрифта)
 
 // Layout параметры для dynamic ListBox
 #define LISTBOX_MIN_ITEM_HEIGHT 16   // мин. высота одного пункта (шрифт + padding)
@@ -83,12 +84,14 @@ typedef struct {
 
 // --- Свойства для ListBox ---
 typedef struct {
-    int8_t selected_index; // Какой элемент выбран (-1 если никто)
-    uint8_t scroll_offset; // Для прокрутки, если элементов много
+    int8_t selected_index;     // Навигация: текущая позиция фокуса
+    int8_t last_leaf_selected; // Выделение листа: последний выбранный листовой элемент (radio behavior)
+    uint8_t scroll_offset;     // Для прокрутки, если элементов много
 
-    uint8_t height_mode;         // 0: auto, 1: fixed
-    uint8_t visible_row_count;   // используется, если height_mode == 0
-    uint16_t pixel_height;       // используется, если height_mode == 1
+    uint8_t height_mode;           // 0: auto, 1: fixed
+    uint8_t visible_row_count;     // используется, если height_mode == 0
+    uint16_t pixel_height;         // используется, если height_mode == 1
+    uint8_t item_padding;          // Вертикальные отступы между элементами (добавка к высоте шрифта), по умолчанию 6
 } ListBoxProps_t;
 
 typedef enum {
@@ -265,4 +268,12 @@ extern int16_t saved_menu_selected_index;
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid);
 void GUI_InvalidateStatusBar(void);
 void GUI_UpdateSDStatus(void);
+
+/* Глобальные переменные настроек радиомодулей (определены в gui.c) */
+extern uint16_t cc1101FreqFixed;
+extern uint16_t cc1101BitRateFixed;
+extern uint8_t  cc1101RxBwIndex;
+extern uint8_t  cc1101Modulation;
+extern uint8_t  cc1101PowerIndex;
+
 #endif // GUI_H

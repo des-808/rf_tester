@@ -55,6 +55,7 @@ typedef struct {
 
 void FT6336U_Init(FT6336U_HandleTypeDef *ts, I2C_HandleTypeDef *hi2c, uint8_t address);
 uint8_t FT6336U_ReadReg(FT6336U_HandleTypeDef *ts, uint8_t reg);
+bool FT6336U_WriteReg(FT6336U_HandleTypeDef *ts, uint8_t reg, uint8_t data);
 bool FT6336U_ReadRegs(FT6336U_HandleTypeDef *ts, uint8_t reg, uint8_t *data, uint8_t len);
 bool FT6336U_ReadData(FT6336U_HandleTypeDef *ts);
 uint8_t FT6336U_GetTouchNum(FT6336U_HandleTypeDef *ts);

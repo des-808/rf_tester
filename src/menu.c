@@ -3,6 +3,7 @@
 #include "st7796.h"
 #include "lcd_backlight.h"
 #include <string.h>
+#include <stdio.h>
 
 // === ВНЕШНИЕ ПЕРЕМЕННЫЕ (Ваш код) ===
 // Предполагаем, что эти переменные объявлены где-то в main.c или globals.h
@@ -27,13 +28,51 @@ extern void clearWiFiCredentials();
 // Для перерисовки статус-бара
 extern void GUI_InvalidateStatusBar(void);
 
-// Для CC1101
-extern uint16_t cc1101FreqFixed;
-extern uint16_t cc1101BitRateFixed;
-extern uint8_t cc1101RxBwIndex;
-extern uint8_t cc1101Modulation;
-extern uint8_t cc1101PowerIndex;
-extern void cc1101ApplySettingsFromMenu();
+/* Мост к CC1101 hardware */
+#include "radio_config_bridge.h"
+void cc1101ApplySettingsFromMenu(void);
+
+/* Авто-применение при изменении параметра */
+static void Cc1101_AutoApplyFreq(void)
+{
+    Settings_t* s = SettingsManager_GetMutable();
+    if (!s) return;
+    s->cc1101_freq_fixed = cc1101FreqFixed;
+    markSettingDirty();
+    Bridge_ApplyCC1101Param(BRIDGE_PARAM_FREQ);
+}
+static void Cc1101_AutoApplyBitrate(void)
+{
+    Settings_t* s = SettingsManager_GetMutable();
+    if (!s) return;
+    s->cc1101_bitrate_fixed = cc1101BitRateFixed;
+    markSettingDirty();
+    Bridge_ApplyCC1101Param(BRIDGE_PARAM_BITRATE);
+}
+static void Cc1101_AutoApplyRxBw(void)
+{
+    Settings_t* s = SettingsManager_GetMutable();
+    if (!s) return;
+    s->cc1101_rxbw_index = cc1101RxBwIndex;
+    markSettingDirty();
+    Bridge_ApplyCC1101Param(BRIDGE_PARAM_RXBW);
+}
+static void Cc1101_AutoApplyMod(void)
+{
+    Settings_t* s = SettingsManager_GetMutable();
+    if (!s) return;
+    s->cc1101_modulation = cc1101Modulation;
+    markSettingDirty();
+    Bridge_ApplyCC1101Param(BRIDGE_PARAM_MODULATION);
+}
+static void Cc1101_AutoApplyPower(void)
+{
+    Settings_t* s = SettingsManager_GetMutable();
+    if (!s) return;
+    s->cc1101_power_index = cc1101PowerIndex;
+    markSettingDirty();
+    Bridge_ApplyCC1101Param(BRIDGE_PARAM_POWER);
+}
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ МЕНЮ ===
 UIElement_t* current_menu_listbox = NULL;
@@ -142,16 +181,16 @@ static void Backlight_Update_Callback() {
 
 // --- Подменю передачи ---
 static MenuItem_t buttonSubMenu[] = {
-    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1 },
-    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1 },
-    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1 },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1, 0 },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1, 0 },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1, 0 },
     { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Key } },
 };
 
 static MenuItem_t pagerSubMenu[] = {
-    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1 },
-    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1 },
-    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1 },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1, 0 },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1, 0 },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1, 0 },
     { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Pager } },
 };
 
@@ -160,46 +199,96 @@ static MenuItem_t transmitterSubMenu[] = {
     { "Pager", 0, ITEM_TYPE_SUBMENU, sizeof(pagerSubMenu)/sizeof(pagerSubMenu[0]), NULL, { .submenu_items = pagerSubMenu } },
 };
 
-// --- Подменю CC1101 ---
-static MenuItem_t cc1101SubMenu[] = {
-    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 100, 6000, 10 },
-    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1 },
-    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1 },
-    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
-};
-
-// --- Подменю настроек ---
-static MenuItem_t settingsSubMenu[] = {
-    { "RS485", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &rs485BaudIndex }, 0, 7, 1 },
-    { "LED Backlight", 0, ITEM_TYPE_VALUE, 0, Backlight_Update_Callback, { .ptr_value = &lcd_backlight_level }, 0, 10, 1 },
-    { "BT", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1 },
-    { "WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = toggleWiFi } },
-    { "NTP Auto", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1 },
-    { "Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = manualSyncTimeWithNTP } },
-    { "Buzzer", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1 },
-    { "CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]), NULL, { .submenu_items = cc1101SubMenu } },
-    { "Forget WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
-};
-
 // --- Главное меню ---
 static MenuItem_t getCallMenu[] = {
     { "1.Transmitter", 0, ITEM_TYPE_SUBMENU, sizeof(transmitterSubMenu)/sizeof(transmitterSubMenu[0]), NULL, { .submenu_items = transmitterSubMenu } },
     { "2.Receiver", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = enterReceiverMode } },
 };
 
+// --- Подменю CC1101 ---
+static MenuItem_t cc1101SubMenu[] = {
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyFreq, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyBitrate, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyRxBw, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyMod, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyPower, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
+};
+
+// --- Меню CC1101 ---
+static MenuItem_t cc1101Menu[] = {
+    { "1. GetCall", 0, ITEM_TYPE_SUBMENU, sizeof(getCallMenu)/sizeof(getCallMenu[0]), NULL, { .submenu_items = getCallMenu } },
+    { "2. RSSI Plotter", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
+    { "3. Settings CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]), NULL, { .submenu_items = cc1101SubMenu }, },
+};
+
+static MenuItem_t nrf24l01SubMenu[] = {
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } }
+};
+
+static MenuItem_t sx1262SubMenu[] = {
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
+};
+
+
+static MenuItem_t irda_SubMenu[] = {
+    { "Freq", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
+};
+
+static MenuItem_t irda_Menu[] = {
+    { "1. IR RX", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, },
+    { "2. R TX", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, },
+    { "3. IR Settings", 0, ITEM_TYPE_SUBMENU, sizeof(irda_SubMenu)/sizeof(irda_SubMenu[0]), NULL, { .submenu_items = irda_SubMenu }, },
+};
+
+// --- Подменю настроек ---
+static MenuItem_t settingsSubMenu[] = {
+    { " RS485", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &rs485BaudIndex }, 0, 7, 1, 0 },
+    { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0 },
+    { " RS485_To_Bt", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = rs485ToggleBluetoothMode } },
+    { " WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = toggleWiFi } },
+    { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0 },
+    { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = manualSyncTimeWithNTP } },
+    { " Buzzer", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0 },
+    { " LED Backlight", 0, ITEM_TYPE_VALUE, 0, Backlight_Update_Callback, { .ptr_value = &lcd_backlight_level }, 0, 10, 1, 1 },
+    { " Forget WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
+};
+
+static MenuItem_t radioMenu[] = {
+    { "1. CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101Menu)/sizeof(cc1101Menu[0]), NULL, { .submenu_items = cc1101Menu }, },
+    { "2. NRF24l01", 0, ITEM_TYPE_SUBMENU, sizeof(nrf24l01SubMenu)/sizeof(nrf24l01SubMenu[0]), NULL, { .submenu_items = nrf24l01SubMenu }, },
+    { "3. SX1262", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, },
+};
+
 static MenuItem_t mainMenu[] = {
-    { "1.GetCall", 0, ITEM_TYPE_SUBMENU, sizeof(getCallMenu)/sizeof(getCallMenu[0]), NULL, { .submenu_items = getCallMenu } },
-    { "2.RS485_To_Bt", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = rs485ToggleBluetoothMode } },
-    { "3.NC", 2, ITEM_TYPE_INFO },
-    { "4.Settings", 1, ITEM_TYPE_SUBMENU, sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]), NULL, { .submenu_items = settingsSubMenu } },
-    { "5.About", 0, ITEM_TYPE_INFO },
-    { "6.RSSI Plotter", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
+    { "1. Radio", 0, ITEM_TYPE_SUBMENU, sizeof(radioMenu)/sizeof(radioMenu[0]), NULL, { .submenu_items = radioMenu } },
+    { "2. IR", 0, ITEM_TYPE_SUBMENU, sizeof(irda_Menu)/sizeof(irda_Menu[0]), NULL, { .submenu_items = irda_Menu } },
+    { "3. NC", 2, ITEM_TYPE_INFO },
+    { "4. Settings", 1, ITEM_TYPE_SUBMENU, sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]), NULL, { .submenu_items = settingsSubMenu } },
+    { "5. About", 0, ITEM_TYPE_INFO },
+    
 };
 
 // Глобальная переменная для размера
 uint8_t main_menu_count = sizeof(mainMenu) / sizeof(mainMenu[0]);
+
+/* Флаг длинного нажатия (устанавливается в Menu_ProcessInput) */
+uint8_t menu_long_press_active = 0;
 
 // === РЕАЛИЗАЦИЯ ФУНКЦИЙ ===
 
@@ -222,6 +311,7 @@ void Menu_PushMenu(MenuItem_t* items, uint8_t count) {
     menu_stack[menu_stack_top].count = current_menu_count;
     menu_stack[menu_stack_top].selected_index = lb->props.list_box.selected_index;
     menu_stack[menu_stack_top].scroll_offset = lb->props.list_box.scroll_offset;
+    menu_stack[menu_stack_top].last_leaf_selected = lb->props.list_box.last_leaf_selected;
     
     // Переключаемся на новое подменю
     Menu_Draw(lb, items, count);
@@ -246,6 +336,7 @@ void Menu_PopMenu(UIElement_t* listbox) {
     Menu_Draw(listbox, prev_state->items, prev_state->count);
     listbox->props.list_box.selected_index = prev_state->selected_index;
     listbox->props.list_box.scroll_offset = prev_state->scroll_offset;
+    listbox->props.list_box.last_leaf_selected = prev_state->last_leaf_selected;
 }
 
 void Menu_Init(void) {
@@ -291,6 +382,7 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
     // Сброс логики прокрутки (начальные значения — 0)
     listbox_container->props.list_box.scroll_offset = 0;
     listbox_container->props.list_box.selected_index = 0;
+    listbox_container->props.list_box.last_leaf_selected = 0;
 
     // Заполнение новыми данными
     for (uint8_t i = 0; i < count; i++) {
@@ -303,7 +395,10 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
     current_menu_count = count;
 
     // Обновляем текст всех элементов ListBox с текущими значениями параметров
+    printf("MDraw: count=%d children_count=%d\n", count, listbox_container->children_count);
     for (uint8_t i = 0; i < count; i++) {
+        printf("  [%d] type=%d children[i]=%p\n", i, items[i].type, 
+               (i < listbox_container->children_count) ? (void*)listbox_container->children[i] : (void*)0);
         if (items[i].type == ITEM_TYPE_VALUE && 
             (uint8_t)i < listbox_container->children_count) {
             Update_MenuItem_Text(listbox_container->children[i], &items[i]);
@@ -319,13 +414,22 @@ void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count)
     }
 }
 
-// Хелпер для изменения значения
-static void AdjustValue(void* ptr, int min, int max, int step, int direction) {
-    int val = *(int*)ptr;
+// Хелпер для изменения uint16_t
+static void AdjustValue16(void* ptr, int min, int max, int step, int direction) {
+    uint16_t val = *(uint16_t*)ptr;
     val += direction * step;
-    if (val < min) val = max;
-    if (val > max) val = min;
-    *(int*)ptr = val;
+    if (val < (uint16_t)min) val = (uint16_t)max;
+    if (val > (uint16_t)max) val = (uint16_t)min;
+    *(uint16_t*)ptr = val;
+}
+
+// Хелпер для изменения uint8_t
+static void AdjustValue8(void* ptr, int min, int max, int step, int direction) {
+    uint8_t val = *(uint8_t*)ptr;
+    val += direction * step;
+    if (val < (uint8_t)min) val = (uint8_t)max;
+    if (val > (uint8_t)max) val = (uint8_t)min;
+    *(uint8_t*)ptr = val;
 }
 
 /**
@@ -353,23 +457,56 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
             break;
 
         case ITEM_TYPE_VALUE: {
-            int old_val = *(int*)item->data.ptr_value;
+            /* Определяем размер: value_size==1 => uint8_t, иначе => uint16_t */
+            uint16_t old_val16;
+            uint8_t  old_val8;
             
-            AdjustValue(item->data.ptr_value, 
-                        item->value_limits.min_val, 
-                        item->value_limits.max_val, 
-                        item->value_limits.step, 
-                        1); // direction = +1 (Enter/Tap всегда увеличивает)
-
-            if (*(int*)item->data.ptr_value != old_val && ui_item) {
-                Update_MenuItem_Text(ui_item, item);
-                
-                // Отрисовка только изменившейся строки
-                UI_RenderListBoxItem(listbox, selected_index);
-                
-                // Вызов колбэка обновления статус-бара (если есть)
-                if (item->on_value_changed) {
-                    item->on_value_changed();
+            /* Безопасное чтение старого значения */
+            if (item->value_size == 1) {
+                memcpy(&old_val8, item->data.ptr_value, 1);
+            } else {
+                memcpy(&old_val16, item->data.ptr_value, 2);
+            }
+            
+            /* Определяем шаг: длинное нажатие = больший шаг */
+            uint8_t step = item->value_limits.step;
+            if (menu_long_press_active) {
+                if (strcmp(item->text, "Freq MHz") == 0 || strcmp(item->text, "BitRate") == 0) {
+                    step = 100;  /* 1.00 MHz / 1.00 kbps */
+                } else {
+                    step = step * 10;  /* шаг x10 */
+                }
+            }
+            
+            if (item->value_size == 1) {
+                AdjustValue8(item->data.ptr_value, 
+                            item->value_limits.min_val, 
+                            item->value_limits.max_val, 
+                            step, 
+                            1);
+                uint8_t new_val;
+                memcpy(&new_val, item->data.ptr_value, 1);
+                if (new_val != old_val8 && ui_item) {
+                    Update_MenuItem_Text(ui_item, item);
+                    UI_RenderListBoxItem(listbox, selected_index);
+                    if (item->on_value_changed) {
+                        item->on_value_changed();
+                    }
+                }
+            } else {
+                AdjustValue16(item->data.ptr_value, 
+                            item->value_limits.min_val, 
+                            item->value_limits.max_val, 
+                            step, 
+                            1);
+                uint16_t new_val;
+                memcpy(&new_val, item->data.ptr_value, 2);
+                if (new_val != old_val16 && ui_item) {
+                    Update_MenuItem_Text(ui_item, item);
+                    UI_RenderListBoxItem(listbox, selected_index);
+                    if (item->on_value_changed) {
+                        item->on_value_changed();
+                    }
                 }
             }
             break;
@@ -399,12 +536,21 @@ void Menu_ProcessInput(uint8_t key) {
 
     if (idx >= current_menu_count) return;
 
+    /* Счётчик длинного нажатия для KEY_ENTER */
+    static uint16_t enter_hold_counter = 0;
+    
     switch (key) {
         case KEY_UP:
+            enter_hold_counter = 0;
+            menu_long_press_active = 0;
             if (idx > 0) { 
                 lb->props.list_box.selected_index--; 
+                // Синхронизируем выделение с навигацией
+                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
                 // Сохраняем scroll_offset при навигации
-                uint8_t visible_items = lb->h / lb->font->char_height;
+                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+                uint16_t item_h = lb->font->char_height + pad;
+                uint8_t visible_items = lb->h / item_h;
                 if (visible_items == 0) visible_items = 1;
                 if (lb->props.list_box.selected_index < (int16_t)lb->props.list_box.scroll_offset) {
                     lb->props.list_box.scroll_offset = (uint8_t)lb->props.list_box.selected_index;
@@ -414,10 +560,16 @@ void Menu_ProcessInput(uint8_t key) {
             }
             break;
         case KEY_DOWN:
+            enter_hold_counter = 0;
+            menu_long_press_active = 0;
             if (idx < current_menu_count - 1) { 
                 lb->props.list_box.selected_index++; 
+                // Синхронизируем выделение с навигацией
+                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
                 // Сохраняем scroll_offset при навигации
-                uint8_t visible_items = lb->h / lb->font->char_height;
+                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+                uint16_t item_h = lb->font->char_height + pad;
+                uint8_t visible_items = lb->h / item_h;
                 if (visible_items == 0) visible_items = 1;
                 if (lb->props.list_box.selected_index >= (int16_t)(lb->props.list_box.scroll_offset + visible_items)) {
                     lb->props.list_box.scroll_offset = (uint8_t)(lb->props.list_box.selected_index - visible_items + 1);
@@ -428,7 +580,12 @@ void Menu_ProcessInput(uint8_t key) {
             break;
             
         case KEY_ENTER:
-            Menu_ExecuteSelected(lb, idx); // Вся сложная логика здесь
+            enter_hold_counter++;
+            /* Длинное нажатие = 5+ циклов удержания */
+            if (enter_hold_counter >= 5) {
+                menu_long_press_active = 1;
+            }
+            Menu_ExecuteSelected(lb, idx);
             break;
 
         case KEY_CANCEL:
@@ -443,34 +600,84 @@ void Menu_ProcessInput(uint8_t key) {
  *        Так как UI_ListBox_AddItem копирует строку в ui_item->text_content,
  *        нам нужно переформатировать её, если это тип ITEM_TYPE_VALUE.
  */
- void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
-    if (!ui_item || !menu_item || menu_item->type != ITEM_TYPE_VALUE) return;
+    void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
+       if (!ui_item || !menu_item || menu_item->type != ITEM_TYPE_VALUE) return;
 
-    const char* label = menu_item->text;
-    int val = *(int*)menu_item->data.ptr_value;
-    char new_text[64];
+       const char* label = menu_item->text;
+       char new_text[64];
+       
+       // Безопасное чтение: копируем в локальную переменную
+       uint16_t val16;
+       uint8_t  val8;
+       
+       if (menu_item->value_size == 1) {
+           memcpy(&val8, menu_item->data.ptr_value, 1);
+       } else {
+           memcpy(&val16, menu_item->data.ptr_value, 2);
+       }
+       
+       int val = menu_item->value_size == 1 ? (int)val8 : (int)val16;
+       
+       // Отладка: выводим все ITEM_TYPE_VALUE
+       printf("UMIT: '%s' size=%d val=%d ptr=%p sprite=%p\n", label, menu_item->value_size, val, menu_item->data.ptr_value, ui_item->sprite);
 
-    // Улучшенное форматирование для разных типов настроек
-    if (strcmp(label, "BT") == 0 || strcmp(label, "WiFi") == 0 || 
-        strcmp(label, "NTP Auto") == 0 || strcmp(label, "Buzzer") == 0) {
-        
-        snprintf(new_text, sizeof(new_text), "%s: %s", label, (val ? "On" : "Off"));
-    } else if (strcmp(label, "OLED Light") == 0) {
-        snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
-    } else if (strcmp(label, "LED Backlight") == 0) {
-        if (val == 0) {
-            snprintf(new_text, sizeof(new_text), "%s: Off", label);
-        } else {
-            snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
-        }
-    } else {
-        // Универсальный вариант для Sys, Room, Freq и т.д.
-        snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
-    }
+      // Форматирование для CC1101 Freq (fixed-point MHz × 100)
+      if (strcmp(label, "Freq MHz") == 0) {
+          float freq_mhz = val / 100.0f;
+          snprintf(new_text, sizeof(new_text), "%s: %.2f", label, freq_mhz);
+      }
+      // Форматирование для CC1101 BitRate (fixed-point kbps × 100)
+      else if (strcmp(label, "BitRate") == 0) {
+          float br_kbps = val / 100.0f;
+          snprintf(new_text, sizeof(new_text), "%s: %.2f", label, br_kbps);
+      }
+      // Форматирование для Modulation (0=GFSK, 1=OOK)
+      else if (strcmp(label, "Mod") == 0) {
+          const char* mod_str = (val == 0) ? "GFSK" : "OOK";
+          snprintf(new_text, sizeof(new_text), "%s: %s", label, mod_str);
+      }
+      // Форматирование для Power (cc1101PowerIndex — uint8_t, читаем 1 байт)
+      else if (strcmp(label, "Power") == 0) {
+          static const int8_t power_dbm[] = { -30, -20, -15, -10, -3, 0, 5, 10 };
+          if (val < 8) {
+              snprintf(new_text, sizeof(new_text), "%s: %d dBm", label, power_dbm[val]);
+          } else {
+              snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
+          }
+      }
+      // Форматирование для RxBw (индекс 0..15 → kHz из таблицы ESP32)
+      else if (strcmp(label, "RxBw") == 0) {
+          static const char* rxbw_str[] = {
+              "58k", "68k", "81k", "102k", "116k", "135k", "162k", "203k",
+              "232k", "270k", "325k", "406k", "464k", "541k", "650k", "812k"
+          };
+          if (val < 16) {
+              snprintf(new_text, sizeof(new_text), "%s: %s", label, rxbw_str[val]);
+          } else {
+              snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
+          }
+      }
+      // Улучшенное форматирование для разных типов настроек
+      else if (strcmp(label, "BT") == 0 || strcmp(label, "WiFi") == 0 || 
+          strcmp(label, "NTP Auto") == 0 || strcmp(label, "Buzzer") == 0) {
+          
+          snprintf(new_text, sizeof(new_text), "%s: %s", label, (val ? "On" : "Off"));
+      } else if (strcmp(label, "OLED Light") == 0) {
+          snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
+      } else if (strcmp(label, "LED Backlight") == 0) {
+          if (val == 0) {
+              snprintf(new_text, sizeof(new_text), "%s: Off", label);
+          } else {
+              snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
+          }
+      } else {
+          // Универсальный вариант для Sys, Room, Freq и т.д.
+          snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
+      }
 
-    strncpy(ui_item->text_content, new_text, sizeof(ui_item->text_content) - 1);
-    ui_item->text_content[sizeof(ui_item->text_content) - 1] = '\0';
-}
+      strncpy(ui_item->text_content, new_text, sizeof(ui_item->text_content) - 1);
+      ui_item->text_content[sizeof(ui_item->text_content) - 1] = '\0';
+  }
 
 void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
     if (!current_menu_listbox || !current_menu_items) return;
@@ -478,18 +685,59 @@ void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
 
     if (lb->touch_state.drag_active) return;
 
-    int8_t selected = UI_ListBox_ProcessTouch(lb, tx, ty);
-    if (selected < 0 || (uint8_t)selected >= current_menu_count) return;
+    MenuItem_t* item = NULL;
+    UIElement_t* ui_item = NULL;
+    int8_t selected = -1;
 
-    MenuItem_t* item = &current_menu_items[selected];
-    UIElement_t* ui_item = ((uint8_t)selected < lb->children_count) ? (UIElement_t*)lb->children[selected] : NULL;
-
-    if (item->type == ITEM_TYPE_VALUE && ui_item) {
-        Update_MenuItem_Text(ui_item, item);
+    // Для VALUE/ACTION — не меняем selected_index (навигация), только last_leaf_selected (выделение)
+    // UI_ListBox_ProcessTouch меняет selected_index — нам это не нужно для листовых пунктов
+    int16_t local_y = ty - lb->y;
+    uint16_t font_h = (lb->font != NULL) ? lb->font->char_height : font_arial_9_struct.char_height;
+    uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+    uint16_t item_h = font_h + pad;
+    int8_t target = lb->props.list_box.scroll_offset + (int8_t)(local_y / item_h);
+    
+    if (target >= 0 && (uint8_t)target < lb->children_count && 
+        target >= 0 && (uint8_t)target < current_menu_count) {
+        selected = target;
+        item = &current_menu_items[selected];
+        ui_item = (UIElement_t*)lb->children[selected];
     }
+    
+    if (selected < 0) return;
 
-    // Используем ту же общую функцию выполнения
-    Menu_ExecuteSelected(lb, (uint8_t)selected);
+    switch (item->type) {
+        case ITEM_TYPE_VALUE:
+            if (ui_item) Update_MenuItem_Text(ui_item, item);
+            // Выделение листа без смены навигации
+            if (lb->props.list_box.last_leaf_selected != selected) {
+                int8_t old = lb->props.list_box.last_leaf_selected;
+                lb->props.list_box.last_leaf_selected = selected;
+                if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
+                UI_RenderListBoxItem(lb, selected);
+            }
+            Menu_ExecuteSelected(lb, (uint8_t)selected);
+            break;
+            
+        case ITEM_TYPE_ACTION:
+            // Выделение листа без смены навигации
+            if (lb->props.list_box.last_leaf_selected != selected) {
+                int8_t old = lb->props.list_box.last_leaf_selected;
+                lb->props.list_box.last_leaf_selected = selected;
+                if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
+                UI_RenderListBoxItem(lb, selected);
+            }
+            Menu_ExecuteSelected(lb, (uint8_t)selected);
+            break;
+            
+        case ITEM_TYPE_SUBMENU:
+            // SUBMENU не выделяем — переходим в подменю
+            Menu_ExecuteSelected(lb, (uint8_t)selected);
+            break;
+            
+        default:
+            break;
+    }
 }
 
 
@@ -513,4 +761,25 @@ void toggleWiFi() {
 }
 void manualSyncTimeWithNTP(){}
 extern void clearWiFiCredentials(void);
-void cc1101ApplySettingsFromMenu(){}
+void cc1101ApplySettingsFromMenu(void)
+{
+    /* Обновляем настройки из переменных меню */
+    Settings_t* settings = SettingsManager_GetMutable();
+    if (!settings) return;
+
+    settings->cc1101_freq_fixed   = cc1101FreqFixed;
+    settings->cc1101_bitrate_fixed = cc1101BitRateFixed;
+    settings->cc1101_rxbw_index   = cc1101RxBwIndex;
+    settings->cc1101_modulation   = cc1101Modulation;
+    settings->cc1101_power_index  = cc1101PowerIndex;
+
+    /* Сохраняем в Flash */
+    markSettingDirty();
+    saveAllSettings();
+
+    /* Применяем к CC1101 hardware */
+    Bridge_ApplyCC1101Settings();
+
+    /* Перерисовываем статус-бар */
+    GUI_InvalidateStatusBar();
+}

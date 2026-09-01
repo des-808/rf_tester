@@ -23,13 +23,11 @@ void FT6336U_Init(FT6336U_HandleTypeDef *ts, I2C_HandleTypeDef *hi2c, uint8_t ad
     }
     ts->touch_num = 0;
 
-    // Проверка ID (опционально)
-    uint8_t id;
-    if (HAL_I2C_Master_Receive(ts->hi2c, ts->address | 1, &id, 1, 100) == HAL_OK) {
-        // прочитали ID (но FT6336U не поддерживает прямой read ID без регистра)
-        // можно считать через Write-then-Read, но пока просто инициализация
-    }
+    // G_MODE = 0x00: Polling/Level Mode
+    // INT pin: LOW = touch present, HIGH = no touch
+    FT6336U_WriteReg(ts, FT6336U_MODE_REGISTER, FT6336U_MODE_NORMAL);
 }
+    
 
 // Вспомогательная функция: читать 1 байт из регистра
 uint8_t FT6336U_ReadReg(FT6336U_HandleTypeDef *ts, uint8_t reg) {
@@ -39,8 +37,11 @@ uint8_t FT6336U_ReadReg(FT6336U_HandleTypeDef *ts, uint8_t reg) {
     return data;
 }
 
-uint8_t FT6336U_ReadReg(FT6336U_HandleTypeDef *ts, uint8_t reg);
-bool FT6336U_ReadRegs(FT6336U_HandleTypeDef *ts, uint8_t reg, uint8_t *data, uint8_t len);
+// Записать 1 байт в регистр (Write-then-Read для FT6336U не нужен)
+bool FT6336U_WriteReg(FT6336U_HandleTypeDef *ts, uint8_t reg, uint8_t data) {
+    return HAL_I2C_Master_Transmit(ts->hi2c, ts->address, &reg, 1, 100) == HAL_OK;
+}
+
 // Читать n байт из регистра (Write-then-Read)
 bool FT6336U_ReadRegs(FT6336U_HandleTypeDef *ts, uint8_t reg, uint8_t *data, uint8_t len) {
     HAL_I2C_Master_Transmit(ts->hi2c, ts->address, &reg, 1, 100);

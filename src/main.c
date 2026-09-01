@@ -359,17 +359,46 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
        Menu_ProcessInput(key_short);
      }
 
-     // ====================================================================
-     // 2. ОБРАБОТКА ТАЧСКРИНА
-     // ====================================================================
-     if (ft6336u.has_touch) {
-         uint16_t raw_x, raw_y;
-         FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
-         Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-         ft6336u.has_touch = false;
-         Buzzer_Short();
-         Menu_ProcessTouch(last_touch_x, last_touch_y);
-     }
+      // ====================================================================
+      // 2. ОБРАБОТКА ТАЧСКРИНА (Polling Mode — G_MODE = 0x00)
+      // EXTI4 (FALLING): INT→LOW = палец на экране → вызывает FT6336U_ReadData()
+      // Фоллбэк: периодический опрос I2C, если EXTI не сработал
+      // ====================================================================
+      static uint32_t last_touch_tick = 0;
+      static uint32_t last_i2c_poll_tick = 0;
+      
+      // Периодический опрос I2C — фоллбэк если EXTI не сработал
+      // Когда палец на экране — каждые 20 мс (обновление координат)
+      // Когда нет касания — каждые 100 мс (экономия I2C)
+      if (HAL_GetTick() - last_i2c_poll_tick > (ft6336u.has_touch ? 20 : 100)) {
+          last_i2c_poll_tick = HAL_GetTick();
+          FT6336U_ReadData(&ft6336u);
+      }
+      
+      if (ft6336u.has_touch) {
+          uint16_t raw_x, raw_y;
+          FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
+          Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
+          ft6336u.has_touch = false;
+          Buzzer_Short();
+          Menu_ProcessTouch(last_touch_x, last_touch_y);
+          /* Сброс таймаута: палец всё ещё на экране */
+          last_touch_tick = HAL_GetTick();
+      } else {
+          /* Нет событий тача > 150мс — считаем что палец отпущен */
+          if (last_touch_tick != 0) {
+              uint32_t elapsed = HAL_GetTick() - last_touch_tick;
+              if (elapsed > 150) {
+                  last_touch_tick = 0;
+                  /* Сброс drag-состояния во всех ListBox */
+                  extern UIElement_t* current_menu_listbox;
+                  if (current_menu_listbox) {
+                      current_menu_listbox->touch_state.drag_active = false;
+                      current_menu_listbox->touch_state.drag_last_y = -1;
+                  }
+              }
+          }
+      }
 
       // ====================================================================
       // 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ИЗ DS3231 (по прерыванию 1 Гц)
@@ -435,7 +464,8 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
 
 static void Scroll_ListBox(int8_t direction) {
     uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-    uint16_t item_h = font_h + 6;
+    uint8_t pad = (ui_bands_listbox.props.list_box.item_padding > 0) ? ui_bands_listbox.props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+    uint16_t item_h = font_h + pad;
     uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
     if (visible == 0) visible = 1;
     
