@@ -53,6 +53,7 @@
 #include "buttons.h"
 #include "i2c_scanner.h"
 #include "buzzer.h"
+#include "vibrator.h"
 #include "settings_manager.h"
 #include <string.h>
 /* USER CODE END PTD */
@@ -98,6 +99,7 @@ extern UIElement_t* ui_btn_row;   // Указатель на элемент кн
 extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
 extern UIElement_t* ui_swr_row;   // Указатель на элемент КСВ из gui.c
 extern UIElement_t ui_bands_listbox; // Контейнер ListBox из gui.c
+extern int buzzerOnOff, vibroOnOff;
 
 uint16_t last_touch_x = 0;              // Координата X для логики меню
 uint16_t last_touch_y = 0;              // Координата Y для логики меню
@@ -344,15 +346,19 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
         }
       }
 
-     // ====================================================================
-     // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
-     // ====================================================================
-     Buttons_Update(&btn_s);
-     uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
-     if (btn_raw != 0xFF) {
-         Buzzer_Short();
-     }
-     PCF8574_AcknowledgeChanges(&pcf_handle);
+      // ====================================================================
+      // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
+      // ====================================================================
+      Buttons_Update(&btn_s);
+      uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
+      static uint8_t btn_last_state = 0xFF;
+      if (btn_raw != btn_last_state && btn_raw != 0xFF) {
+          /* Сработала кнопка (edge detection) */
+          if (buzzerOnOff) Buzzer_Short();
+          if (vibroOnOff) Vibrator_Pulse(30);
+      }
+      btn_last_state = btn_raw;
+      PCF8574_AcknowledgeChanges(&pcf_handle);
 
      MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
      if (key_short != KEY_NONE) {
@@ -375,13 +381,14 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
           FT6336U_ReadData(&ft6336u);
       }
       
-      if (ft6336u.has_touch) {
-          uint16_t raw_x, raw_y;
-          FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
-          Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-          ft6336u.has_touch = false;
-          Buzzer_Short();
-          Menu_ProcessTouch(last_touch_x, last_touch_y);
+       if (ft6336u.has_touch) {
+           uint16_t raw_x, raw_y;
+           FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
+           Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
+           ft6336u.has_touch = false;
+           if (buzzerOnOff) Buzzer_Short();
+           if (vibroOnOff) Vibrator_Pulse(30);
+           Menu_ProcessTouch(last_touch_x, last_touch_y);
           /* Сброс таймаута: палец всё ещё на экране */
           last_touch_tick = HAL_GetTick();
       } else {
@@ -452,6 +459,10 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
             }
         }
     }
+    
+    /* Неблокирующие Update для buzzer и vibrator */
+    Buzzer_Update();
+    Vibrator_Update();
     
     // Разгрузочная пауза для DMA SPI и Watchdog
     HAL_Delay(10);

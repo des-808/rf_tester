@@ -18,7 +18,7 @@ extern void rs485ToggleBluetoothMode();
 // Для настроек
 extern uint8_t rs485BaudIndex;
 extern uint8_t oledBrightness;
-extern int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff;
+extern int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, vibroOnOff;
 
 uint8_t lcd_backlight_level = 5; // Локальная копия для меню (0-10)
 extern void toggleWiFi();
@@ -59,9 +59,18 @@ static void Cc1101_AutoApplyRxBw(void)
 }
 static void Cc1101_AutoApplyMod(void)
 {
+    /* Индекс 0..6 → реальное значение модуляции CC1101 */
+    static const uint8_t mod_values[] = {
+        CC1101_MOD_ASK, CC1101_MOD_FSK, CC1101_MOD_2FSK,
+        CC1101_MOD_GFSK, CC1101_MOD_OOK, CC1101_MOD_4FSK, CC1101_MOD_MSK
+    };
+    
     Settings_t* s = SettingsManager_GetMutable();
     if (!s) return;
-    s->cc1101_modulation = cc1101Modulation;
+    
+    if (cc1101Modulation < 7) {
+        s->cc1101_modulation = mod_values[cc1101Modulation];
+    }
     markSettingDirty();
     Bridge_ApplyCC1101Param(BRIDGE_PARAM_MODULATION);
 }
@@ -173,6 +182,42 @@ static void StatusBar_Update_Callback() {
     GUI_InvalidateStatusBar();
 }
 
+static void Bluetooth_Update_Callback() {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->bluetooth_enabled = bluetoothEnabled;
+        markSettingDirty();
+    }
+    GUI_InvalidateStatusBar();
+}
+
+static void NTP_Update_Callback() {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->ntp_sync_enabled = ntpSyncEnabled;
+        markSettingDirty();
+    }
+    GUI_InvalidateStatusBar();
+}
+
+static void Buzzer_Update_Callback() {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->buzzer_enabled = buzzerOnOff;
+        markSettingDirty();
+    }
+    GUI_InvalidateStatusBar();
+}
+
+static void Vibro_Update_Callback() {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->vibro_enabled = vibroOnOff;
+        markSettingDirty();
+    }
+    GUI_InvalidateStatusBar();
+}
+
 // Колбэк для обновления подсветки экрана
 static void Backlight_Update_Callback() {
     LCD_Backlight_SetLevel(lcd_backlight_level);
@@ -210,7 +255,7 @@ static MenuItem_t cc1101SubMenu[] = {
     { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyFreq, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
     { "BitRate", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyBitrate, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyRxBw, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyMod, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyMod, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyPower, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
     { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
 };
@@ -226,7 +271,7 @@ static MenuItem_t nrf24l01SubMenu[] = {
     { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
     { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
     { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } }
 };
@@ -235,7 +280,7 @@ static MenuItem_t sx1262SubMenu[] = {
     { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
     { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
     { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
 };
@@ -245,7 +290,7 @@ static MenuItem_t irda_SubMenu[] = {
     { "Freq", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
     { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 1, 1, 1 },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
     { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
 };
@@ -259,12 +304,13 @@ static MenuItem_t irda_Menu[] = {
 // --- Подменю настроек ---
 static MenuItem_t settingsSubMenu[] = {
     { " RS485", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &rs485BaudIndex }, 0, 7, 1, 0 },
-    { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0 },
+    { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, Bluetooth_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0 },
     { " RS485_To_Bt", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = rs485ToggleBluetoothMode } },
     { " WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = toggleWiFi } },
-    { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0 },
+    { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, NTP_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0 },
     { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = manualSyncTimeWithNTP } },
-    { " Buzzer", 0, ITEM_TYPE_VALUE, 0, StatusBar_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0 },
+    { " Buzzer", 0, ITEM_TYPE_VALUE, 0, Buzzer_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0 },
+    { " Vibro", 0, ITEM_TYPE_VALUE, 0, Vibro_Update_Callback, { .ptr_value = &vibroOnOff }, 0, 1, 1, 0 },
     { " LED Backlight", 0, ITEM_TYPE_VALUE, 0, Backlight_Update_Callback, { .ptr_value = &lcd_backlight_level }, 0, 10, 1, 1 },
     { " Forget WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
 };
@@ -275,12 +321,16 @@ static MenuItem_t radioMenu[] = {
     { "3. SX1262", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, },
 };
 
+/* Forward declaration for spectrum analyzer */
+extern void Menu_SpectrumAnalyzer(void);
+
 static MenuItem_t mainMenu[] = {
     { "1. Radio", 0, ITEM_TYPE_SUBMENU, sizeof(radioMenu)/sizeof(radioMenu[0]), NULL, { .submenu_items = radioMenu } },
     { "2. IR", 0, ITEM_TYPE_SUBMENU, sizeof(irda_Menu)/sizeof(irda_Menu[0]), NULL, { .submenu_items = irda_Menu } },
-    { "3. NC", 2, ITEM_TYPE_INFO },
-    { "4. Settings", 1, ITEM_TYPE_SUBMENU, sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]), NULL, { .submenu_items = settingsSubMenu } },
-    { "5. About", 0, ITEM_TYPE_INFO },
+    { "3. Spectrum", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_SpectrumAnalyzer } },
+    { "4. NC", 2, ITEM_TYPE_INFO },
+    { "5. Settings", 1, ITEM_TYPE_SUBMENU, sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]), NULL, { .submenu_items = settingsSubMenu } },
+    { "6. About", 0, ITEM_TYPE_INFO },
     
 };
 
@@ -348,30 +398,6 @@ void Menu_Init(void) {
     lcd_backlight_level = LCD_Backlight_GetLevel();
 }
 
-/* void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
-    if (!listbox_container || !items) return;
-
-    // Очищаем старые элементы (здесь должен быть цикл удаления старых children,
-    // чтобы избежать утечек памяти/ссылок!)
-    for (uint8_t i = 0; i < listbox_container->children_count; i++) {
-        free(listbox_container->children[i]); // Или возврат в пул объектов
-    }
-    listbox_container->children_count = 0;
-
-    listbox_container->props.list_box.scroll_offset = 0;
-    listbox_container->props.list_box.selected_index = 0;
-
-    // Заполняем новыми данными
-    for (uint8_t i = 0; i < count; i++) {
-        //UI_ListBox_AddItem(listbox_container, items[i].text, items[i].icon_id);
-        UI_ListBox_AddItem(listbox_container, items[i].text);
-    }
-
-    current_menu_items = items;
-    current_menu_count = count;
-
-    GUI_InvalidateSprite(listbox_container->sprite); // Просим GUI перерисовать всё с учетом новых иконок
-} */
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count) {
     if (!listbox_container || !items) return;
 
@@ -631,11 +657,17 @@ void Menu_ProcessInput(uint8_t key) {
           float br_kbps = val / 100.0f;
           snprintf(new_text, sizeof(new_text), "%s: %.2f", label, br_kbps);
       }
-      // Форматирование для Modulation (0=GFSK, 1=OOK)
-      else if (strcmp(label, "Mod") == 0) {
-          const char* mod_str = (val == 0) ? "GFSK" : "OOK";
-          snprintf(new_text, sizeof(new_text), "%s: %s", label, mod_str);
-      }
+       // Форматирование для Modulation (индекс 0..6 → название)
+       else if (strcmp(label, "Mod") == 0) {
+           static const char* mod_str[] = {
+               "ASK", "FSK", "2FSK", "GFSK", "OOK", "4FSK", "MSK"
+           };
+           if (val >= 0 && val < 7) {
+               snprintf(new_text, sizeof(new_text), "%s: %s", label, mod_str[val]);
+           } else {
+               snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
+           }
+       }
       // Форматирование для Power (cc1101PowerIndex — uint8_t, читаем 1 байт)
       else if (strcmp(label, "Power") == 0) {
           static const int8_t power_dbm[] = { -30, -20, -15, -10, -3, 0, 5, 10 };
@@ -767,11 +799,20 @@ void cc1101ApplySettingsFromMenu(void)
     Settings_t* settings = SettingsManager_GetMutable();
     if (!settings) return;
 
+    /* Индекс 0..6 → реальное значение модуляции CC1101 */
+    static const uint8_t mod_values[] = {
+        CC1101_MOD_ASK, CC1101_MOD_FSK, CC1101_MOD_2FSK,
+        CC1101_MOD_GFSK, CC1101_MOD_OOK, CC1101_MOD_4FSK, CC1101_MOD_MSK
+    };
+    
     settings->cc1101_freq_fixed   = cc1101FreqFixed;
     settings->cc1101_bitrate_fixed = cc1101BitRateFixed;
     settings->cc1101_rxbw_index   = cc1101RxBwIndex;
-    settings->cc1101_modulation   = cc1101Modulation;
     settings->cc1101_power_index  = cc1101PowerIndex;
+    
+    if (cc1101Modulation < 7) {
+        settings->cc1101_modulation = mod_values[cc1101Modulation];
+    }
 
     /* Сохраняем в Flash */
     markSettingDirty();
@@ -782,4 +823,37 @@ void cc1101ApplySettingsFromMenu(void)
 
     /* Перерисовываем статус-бар */
     GUI_InvalidateStatusBar();
+}
+
+/* ========================================================================
+ *  Spectrum Analyzer Menu Entry
+ * ======================================================================== */
+
+void Menu_SpectrumAnalyzer(void) {
+    /* Запускаем спектроанализатор */
+    /* В полной реализации здесь будет:
+     * 1. Инициализация RfSpectrum_t
+     * 2. Запуск сканирования
+     * 3. Рендеринг на дисплей
+     * 4. Ожидание выхода (кнопка Cancel)
+     */
+    
+    printf("Menu_SpectrumAnalyzer: START\n");
+    
+    /* TODO: Реализовать полный спектроанализатор */
+    /*
+    RfSpectrum_t spectrum;
+    RfSpectrum_Init(&spectrum, 24000, 96000, 320);
+    
+    while (!buttonPressed(KEY_CANCEL)) {
+        RfSpectrum_Scan(&spectrum);
+        RfSpectrum_FindPeak(&spectrum);
+        RfSpectrum_Render(&spectrum, 10, 40, 300, 200);
+        HAL_Delay(100);
+    }
+    
+    RfSpectrum_Stop(&spectrum);
+    */
+    
+    printf("Menu_SpectrumAnalyzer: END\n");
 }

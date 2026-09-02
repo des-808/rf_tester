@@ -164,22 +164,44 @@ uint8_t W25Qx_Get_Parameter(W25Qx_Parameter *Para)
 uint8_t W25Qx_Read(uint8_t* pData, uint32_t ReadAddr, uint32_t Size)
 {
 	uint8_t cmd[4];
+	uint32_t addr = ReadAddr;
+	uint32_t remaining = Size;
+	uint8_t* pBuf = pData;
 
-	/* Configure the command */
+	/* Configure the base command */
 	cmd[0] = READ_CMD;
-	cmd[1] = (uint8_t)(ReadAddr >> 16);
-	cmd[2] = (uint8_t)(ReadAddr >> 8);
-	cmd[3] = (uint8_t)(ReadAddr);
-	
-	W25Qx_Enable();
-	/* Send the read ID command */
-	HAL_SPI_Transmit(&hspi1, cmd, 4, W25QXXXX_TIMEOUT_VALUE);	
-	/* Reception of the data */
-	if (HAL_SPI_Receive(&hspi1, pData,Size,W25QXXXX_TIMEOUT_VALUE) != HAL_OK)
+
+	while (remaining > 0)
   {
-    return W25Qx_ERROR;
-  }
-	W25Qx_Disable();
+		/* 24-bit address */
+		cmd[1] = (uint8_t)(addr >> 16);
+		cmd[2] = (uint8_t)(addr >> 8);
+		cmd[3] = (uint8_t)(addr);
+
+		/* Determine chunk size (up to 256 bytes = page size) */
+		uint32_t chunk = remaining;
+		if (chunk > W25QXXXX_PAGE_SIZE)
+			chunk = W25QXXXX_PAGE_SIZE;
+
+		W25Qx_Enable();
+		/* Send 4-byte command (READ + 24-bit address) */
+		if (HAL_SPI_Transmit(&hspi1, cmd, 4, W25QXXXX_TIMEOUT_VALUE) != HAL_OK)
+		{
+			W25Qx_Disable();
+			return W25Qx_ERROR;
+		}
+		/* Receive data using TransmitReceive (dummy TX generates clocks) */
+		if (HAL_SPI_TransmitReceive(&hspi1, cmd, pBuf, chunk, W25QXXXX_TIMEOUT_VALUE) != HAL_OK)
+		{
+			W25Qx_Disable();
+			return W25Qx_ERROR;
+		}
+		W25Qx_Disable();
+
+		pBuf   += chunk;
+		addr   += chunk;
+		remaining -= chunk;
+	}
 	return W25Qx_OK;
 }
 

@@ -9,6 +9,8 @@
 #include "settings_manager.h"
 #include "settings_storage.h"
 #include "radio_config_bridge.h"
+#include "json_config.h"
+#include "sd_fs.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -18,7 +20,7 @@
  * ======================================================================== */
 extern uint8_t  rs485BaudIndex;
 extern uint8_t  oledBrightness;
-extern int      bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff;
+extern int      bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, vibroOnOff;
 
 /* CC1101 */
 extern uint16_t cc1101FreqFixed;
@@ -71,6 +73,7 @@ static void settings_set_defaults(Settings_t* s) {
     s->wifi_enabled        = 0;
     s->ntp_sync_enabled    = 0;
     s->buzzer_enabled      = 1;
+    s->vibro_enabled       = 1;
 
     /* CC1101 (fixed-point x100) — совпадает с ESP32 defaults */
     /* Частота: MHz × 100, Битрейт: kbps × 100 */
@@ -97,7 +100,7 @@ static bool settings_validate(const Settings_t* s) {
     if (s->cc1101_freq_fixed < CC1101_FREQ_MIN || s->cc1101_freq_fixed > CC1101_FREQ_MAX) return false;
     if (s->cc1101_bitrate_fixed < CC1101_BITRATE_MIN || s->cc1101_bitrate_fixed > CC1101_BITRATE_MAX) return false;
     if (s->cc1101_rxbw_index > CC1101_RXBW_MAX) return false;
-    if (s->cc1101_modulation > CC1101_MOD_MAX) return false;
+    if (s->cc1101_modulation > CC1101_MOD_MSK) return false;
     if (s->cc1101_power_index > CC1101_PWR_MAX) return false;
 
     return true;
@@ -114,12 +117,24 @@ void SettingsManager_Apply(void) {
     wifiEnabled            = g_settings.wifi_enabled;
     ntpSyncEnabled         = g_settings.ntp_sync_enabled;
     buzzerOnOff            = g_settings.buzzer_enabled;
+    vibroOnOff             = g_settings.vibro_enabled;
 
     cc1101FreqFixed        = (uint16_t)g_settings.cc1101_freq_fixed;
     cc1101BitRateFixed     = (uint16_t)g_settings.cc1101_bitrate_fixed;
     cc1101RxBwIndex        = g_settings.cc1101_rxbw_index;
-    cc1101Modulation       = g_settings.cc1101_modulation;
     cc1101PowerIndex       = g_settings.cc1101_power_index;
+    
+    /* Конвертируем реальное значение модуляции в индекс 0..6 */
+    switch (g_settings.cc1101_modulation) {
+        case 0x00: cc1101Modulation = 0; break;  /* ASK */
+        case 0x04: cc1101Modulation = 1; break;  /* FSK */
+        case 0x06: cc1101Modulation = 2; break;  /* 2FSK */
+        case 0x07: cc1101Modulation = 3; break;  /* GFSK */
+        case 0x08: cc1101Modulation = 4; break;  /* OOK */
+        case 0x0C: cc1101Modulation = 5; break;  /* 4FSK */
+        case 0x0E: cc1101Modulation = 6; break;  /* MSK */
+        default:   cc1101Modulation = 3; break;  /* GFSK по умолчанию */
+    }
 
     /* Применяем CC1101 настройки к hardware */
     Bridge_ApplyCC1101Settings();
@@ -263,4 +278,66 @@ const Settings_t* SettingsManager_Get(void) {
 
 Settings_t* SettingsManager_GetMutable(void) {
     return &g_settings;
+}
+
+/* ========================================================================
+ *  JSON Configuration API
+ * ======================================================================== */
+
+bool SettingsManager_SaveToJson(const char* filepath) {
+    /* Сериализуем настройки в JSON */
+    char json_buf[JSON_CONFIG_BUF_SIZE];
+    if (!SettingsToJson(&g_settings, json_buf, sizeof(json_buf))) {
+        printf("SettingsManager_SaveToJson: serialization failed\n");
+        return false;
+    }
+    
+    /* Сохраняем на SD */
+    FILE* f = SD_FS_Open(filepath, SD_FS_MODE_CREATE);
+    if (!f) {
+        printf("SettingsManager_SaveToJson: failed to open %s\n", filepath);
+        return false;
+    }
+    
+    int written = SD_FS_Write(json_buf, strlen(json_buf));
+    SD_FS_Close(f);
+    
+    if (written < 0) {
+        printf("SettingsManager_SaveToJson: write failed\n");
+        return false;
+    }
+    
+    printf("SettingsManager_SaveToJson: saved to %s (%d bytes)\n", filepath, written);
+    return true;
+}
+
+bool SettingsManager_LoadFromJson(const char* filepath) {
+    /* Читаем JSON с SD */
+    FILE* f = SD_FS_Open(filepath, SD_FS_MODE_READ);
+    if (!f) {
+        printf("SettingsManager_LoadFromJson: failed to open %s\n", filepath);
+        return false;
+    }
+    
+    char json_buf[JSON_CONFIG_BUF_SIZE];
+    int len = SD_FS_Read(json_buf, sizeof(json_buf) - 1);
+    SD_FS_Close(f);
+    
+    if (len <= 0) {
+        printf("SettingsManager_LoadFromJson: read failed\n");
+        return false;
+    }
+    
+    json_buf[len] = '\0';
+    
+    if (!JsonToSettings(json_buf, &g_settings)) {
+        printf("SettingsManager_LoadFromJson: JSON parse failed\n");
+        return false;
+    }
+    
+    /* Применяем настройки */
+    SettingsManager_Apply();
+    
+    printf("SettingsManager_LoadFromJson: loaded successfully\n");
+    return true;
 }

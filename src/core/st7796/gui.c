@@ -30,6 +30,7 @@ int bluetoothEnabled = 1;
 int wifiEnabled = 1;
 int ntpSyncEnabled = 1;
 int buzzerOnOff = 1;
+int vibroOnOff = 1;
 bool bluetoothMode = true;
 bool rs485toBt = true;
 

@@ -36,17 +36,24 @@ static const int8_t tx_power_dbm[] = {
 /* ======================================================================== */
 
 /**
- * @brief Конвертация индекса модуляции из Settings в CC1101
+ * @brief Конвертация модуляции из Settings (хранит реальные значения CC1101_MOD_*)
  *
- *  ESP32: 0 = GFSK, 1 = OOK
+ *  Теперь settings->cc1101_modulation хранит прямое значение:
+ *  CC1101_MOD_ASK, CC1101_MOD_FSK, CC1101_MOD_2FSK, и т.д.
  */
-static CC1101_Modulation_t bridge_ModulationFromSettings(uint8_t idx)
+static CC1101_Modulation_t bridge_ModulationFromSettings(uint8_t val)
 {
-    switch (idx) {
-        case 0: return CC1101_MOD_GFSK;
-        case 1: return CC1101_MOD_OOK;
-        default: return CC1101_MOD_GFSK;
+    switch (val) {
+        case CC1101_MOD_ASK:    return CC1101_MOD_ASK;
+        case CC1101_MOD_FSK:    return CC1101_MOD_FSK;
+        case CC1101_MOD_2FSK:   return CC1101_MOD_2FSK;
+        case CC1101_MOD_GFSK:   return CC1101_MOD_GFSK;
+        case CC1101_MOD_OOK:    return CC1101_MOD_OOK;
+        case CC1101_MOD_4FSK:   return CC1101_MOD_4FSK;
+        case CC1101_MOD_MSK:    return CC1101_MOD_MSK;
+        default:                return CC1101_MOD_GFSK;
     }
+}
 }
 
 /**

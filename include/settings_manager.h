@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "settings_types.h"
 
 /* ========================================================================
  *  Settings Manager — STM32H7 + W25Q SPI Flash
@@ -26,10 +27,6 @@
 /* --- Valid key (как в xz: EEPROM_VALID_KEY = 0x57) --- */
 #define EEPROM_VALID_KEY          0x57U
 #define WIFI_VALID_KEY            0x57U
-
-/* --- Размеры --- */
-#define MAX_SSID_LEN              32
-#define MAX_PASS_LEN              64
 
 /* --- Индексы скоростей RS485 --- */
 #define RS485_BAUD_MIN            0U
@@ -66,41 +63,6 @@
 #define ROOM_MAX                  32U
 #define BTN_MIN                   1U
 #define BTN_MAX                   9U
-
-/* ========================================================================
- *  Структура настроек (совпадает с xz/settingsManager.cpp)
- * ======================================================================== */
-typedef struct {
-    /* --- Магия и версия (для валидации) --- */
-    uint32_t magic;
-    uint32_t version;
-
-    /* --- Передатчик --- */
-    uint8_t  sys;             /* 1-32 */
-    uint8_t  room;            /* 1-32 */
-    uint8_t  btn;             /* 1-9 */
-
-    /* --- Общие настройки --- */
-    uint8_t  rs485_baud_index;          /* 0-7 */
-    uint8_t  oled_brightness;           /* 1-10 */
-    uint8_t  bluetooth_enabled;         /* 0/1 */
-    uint8_t  wifi_enabled;              /* 0/1 */
-    uint8_t  ntp_sync_enabled;          /* 0/1 */
-    uint8_t  buzzer_enabled;            /* 0/1 */
-
-    /* --- CC1101 (fixed-point x100) --- */
-    uint32_t cc1101_freq_fixed;         /* частота x100 (300-92800) */
-    uint32_t cc1101_bitrate_fixed;      /* битрейт x100 (1-10000) */
-    uint8_t  cc1101_modulation;         /* 0-1 */
-    uint8_t  cc1101_power_index;        /* 0-7 */
-    uint8_t  cc1101_rxbw_index;         /* 0-15 */
-
-    /* --- WiFi credentials --- */
-    uint8_t  wifi_valid;                /* WIFI_VALID_KEY если валидны */
-    char     wifi_ssid[MAX_SSID_LEN + 1];
-    char     wifi_pass[MAX_PASS_LEN + 1];
-
-} Settings_t;
 
 /* ========================================================================
  *  Глобальный флаг: что-то изменилось (как в xz/settingsManager.cpp)
@@ -156,5 +118,23 @@ void clearWiFiCredentials(void);
 /* --- Fixed-point helpers (как в xz) --- */
 uint32_t floatToFixed(float f);
 float    fixedToFloat(uint32_t x);
+
+/* ========================================================================
+ *  JSON Configuration API (опционально, требует json_config.h)
+ * ======================================================================== */
+
+/**
+ * @brief Сохранить настройки в JSON файл на SD
+ * @param filepath Путь к файлу (например, "/settings.json")
+ * @return true если успешно
+ */
+bool SettingsManager_SaveToJson(const char* filepath);
+
+/**
+ * @brief Загрузить настройки из JSON файла на SD
+ * @param filepath Путь к файлу
+ * @return true если успешно
+ */
+bool SettingsManager_LoadFromJson(const char* filepath);
 
 #endif /* SETTINGS_MANAGER_H */

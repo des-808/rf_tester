@@ -1,12 +1,12 @@
 /**
  * ========================================================================
- *  Settings Storage — W25Q SPI Flash backend (implementation)
- *  STM32H7 + W25Q (SPI)
+ *  Settings Storage — W25Q QSPI Flash backend (implementation)
+ *  STM32H7 + W25Q (QSPI)
  * ========================================================================
  */
 
 #include "settings_storage.h"
-#include "w25qxx.h"
+#include "w25qxx_qspi.h"
 #include <string.h>
 
 /* ----------------------------------------------------------------
@@ -32,7 +32,7 @@ static bool load_sector(void) {
         uint32_t chunk = (SETTINGS_FLASH_SIZE - addr < sizeof(check_buf)) 
                          ? (SETTINGS_FLASH_SIZE - addr) : sizeof(check_buf);
         
-        if (W25Qx_Read(check_buf, SETTINGS_FLASH_ADDR + addr, chunk) != W25Qx_OK) {
+        if (W25qxx_Read(check_buf, SETTINGS_FLASH_ADDR + addr, chunk) != w25qxx_OK) {
             return false;
         }
         
@@ -46,7 +46,7 @@ static bool load_sector(void) {
     }
     
     /* Загружаем весь сектор в буфер */
-    if (W25Qx_Read(s_sector_buf, SETTINGS_FLASH_ADDR, SETTINGS_FLASH_SIZE) != W25Qx_OK) {
+    if (W25qxx_Read(s_sector_buf, SETTINGS_FLASH_ADDR, SETTINGS_FLASH_SIZE) != w25qxx_OK) {
         return false;
     }
     
@@ -65,13 +65,26 @@ static bool flush_sector(void) {
     if (!s_sector_dirty) return true;
     
     /* Стираем сектор (4КБ) */
-    if (W25Qx_Erase_Block(SETTINGS_FLASH_ADDR) != W25Qx_OK) {
+    if (W25qxx_EraseSector(SETTINGS_FLASH_ADDR) != w25qxx_OK) {
         return false;
     }
     
-    /* Записываем весь сектор (W25Qx_Write обрабатывает page boundaries) */
-    if (W25Qx_Write(s_sector_buf, SETTINGS_FLASH_ADDR, SETTINGS_FLASH_SIZE) != W25Qx_OK) {
-        return false;
+    /* Записываем постранично (256 байт на страницу) */
+    uint8_t* pBuf = s_sector_buf;
+    uint32_t addr = SETTINGS_FLASH_ADDR;
+    uint32_t remaining = SETTINGS_FLASH_SIZE;
+    
+    while (remaining > 0) {
+        uint32_t chunk = remaining;
+        if (chunk > 256) chunk = 256;
+        
+        if (W25qxx_PageProgram(pBuf, addr, chunk) != w25qxx_OK) {
+            return false;
+        }
+        
+        pBuf   += chunk;
+        addr   += chunk;
+        remaining -= chunk;
     }
     
     s_sector_dirty = false;
@@ -85,10 +98,8 @@ static bool flush_sector(void) {
 bool SettingsStorage_Init(void) {
     if (s_init_done) return true;
     
-    /* Инициализируем W25Q если нужно */
-    if (W25Qx_Init() != W25Qx_OK) {
-        return false;
-    }
+    /* Инициализируем W25Q QSPI */
+    w25qxx_Init();
     
     /* Загружаем сектор в RAM */
     if (!load_sector()) {

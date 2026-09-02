@@ -5,6 +5,7 @@
  */
 
 #include "sd_fs.h"
+#include "sd_card.h"
 #include "ff.h"
 #include "ff_gen_drv.h"
 #include "diskio.h"
