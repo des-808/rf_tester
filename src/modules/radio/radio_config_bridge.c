@@ -54,7 +54,7 @@ static CC1101_Modulation_t bridge_ModulationFromSettings(uint8_t val)
         default:                return CC1101_MOD_GFSK;
     }
 }
-}
+
 
 /**
  * @brief Конвертация мощности из индекса в dBm
