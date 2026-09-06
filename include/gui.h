@@ -227,6 +227,7 @@ void Draw_Icon_Buzzer_Callback(UIElement_t* el);
 void Draw_Icon_SD_Callback(UIElement_t* el);
 
 extern UIElement_t status_icon_buzzer_node;
+extern UIElement_t status_icon_lock_node;
 extern Sprite_t status_icon_buzzer_sprite;
 
 void Draw_StatusBar_Callback(UIElement_t* el);

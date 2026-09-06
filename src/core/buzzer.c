@@ -2,10 +2,10 @@
 
 static uint16_t current_period = 415; // по умолчанию для 2400 Hz
 
-/* Неблокирующий buzzer */
-static uint32_t buzzer_start_tick = 0;
-static uint16_t buzzer_duration   = 0;
-static bool     buzzer_active     = false;
+/* Неблокирующий buzzer — управляется TIM3 прерыванием */
+static volatile uint32_t buzzer_start_tick = 0;
+static volatile uint16_t buzzer_duration   = 0;
+static volatile bool     buzzer_active     = false;
 
 void Buzzer_SetFrequency(uint16_t frequency) {
     if (frequency < 100 || frequency > 10000) return;
@@ -28,7 +28,10 @@ void Buzzer_On(uint16_t frequency) {
 void Buzzer_Off(void) {
     HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3);
     HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
+    __disable_irq();
     buzzer_active = false;
+    buzzer_start_tick = 0;
+    __enable_irq();
 }
 
 void Buzzer_SetDuty(uint16_t duty_percent) {
@@ -38,18 +41,42 @@ void Buzzer_SetDuty(uint16_t duty_percent) {
 
 /* Неблокирующий запуск звука */
 void Buzzer_PlayTone(uint16_t frequency, uint16_t duration_ms) {
-    buzzer_start_tick = HAL_GetTick();
+    /* Останавливаем предыдущий звук */
+    HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3);
+    
+    /* Защищённая запись — прерывание не должно видеть частично обновлённые данные */
+    __disable_irq();
+    buzzer_start_tick = 0;
     buzzer_duration   = duration_ms;
     buzzer_active     = true;
+    __enable_irq();
+    
     Buzzer_On(frequency);
 }
 
-/* Вызывать из main loop — автоматически выключает по таймеру */
-void Buzzer_Update(void) {
+/* Вызывается из TIM3 прерывания каждый 1мс */
+void Buzzer_Ticker(void) {
     if (!buzzer_active) return;
     
-    if (HAL_GetTick() - buzzer_start_tick >= buzzer_duration) {
+    if (buzzer_start_tick == 0) {
+        buzzer_start_tick = 1;  // Первый тик — фиксируем старт
+        return;
+    }
+    
+    buzzer_start_tick++;
+    if (buzzer_start_tick >= buzzer_duration) {
         Buzzer_Off();
+    }
+}
+
+/* Мгновенная остановка (для выключения из меню) */
+void Buzzer_Stop(void) {
+    if (buzzer_active) {
+        HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3);
+        __disable_irq();
+        buzzer_active = false;
+        buzzer_start_tick = 0;
+        __enable_irq();
     }
 }
 
@@ -67,27 +94,33 @@ void Buzzer_Long(void) {
 
 void Buzzer_Beep2(void) {
     Buzzer_PlayTone(2400, 10);
+    HAL_Delay(100);
     Buzzer_PlayTone(2400, 10);
 }
 
 void Buzzer_Beep3(void) {
     Buzzer_PlayTone(2400, 10);
+    HAL_Delay(100);
     Buzzer_PlayTone(2400, 10);
+    HAL_Delay(100);
     Buzzer_PlayTone(2400, 10);
 }
 
 void Buzzer_Alarm(void) {
     for (int i = 0; i < 6; i++) {
         Buzzer_PlayTone(2400, 100);
+        HAL_Delay(50);
     }
 }
 
 void Buzzer_Confirm(void) {
     Buzzer_PlayTone(2400, 10);
+    HAL_Delay(70);
     Buzzer_PlayTone(2400, 10);
 }
 
 void Buzzer_Error(void) {
     Buzzer_PlayTone(2400, 150);
+    HAL_Delay(100);
     Buzzer_PlayTone(2400, 150);
 }

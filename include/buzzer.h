@@ -14,8 +14,11 @@ void Buzzer_SetDuty(uint16_t duty_percent); // 0..100
 /* Неблокирующий запуск */
 void Buzzer_PlayTone(uint16_t frequency, uint16_t duration_ms);
 
-/* Вызывать из main loop — автоматически выключает по таймеру */
-void Buzzer_Update(void);
+/* Вызывается из TIM3 прерывания — не вызывать вручную */
+void Buzzer_Ticker(void);
+
+/* Мгновенная остановка (для выключения из меню) */
+void Buzzer_Stop(void);
 
 /* Проверить, активен ли buzzer */
 bool Buzzer_IsActive(void);

@@ -11,7 +11,8 @@ typedef enum {
     ITEM_TYPE_INFO,        // Просто текст (например "Transmitter")
     ITEM_TYPE_ACTION,      // Действие (кнопка "Send", "Settings")
     ITEM_TYPE_VALUE,       // Значение, которое можно менять (Sys, Room, Freq)
-    ITEM_TYPE_SUBMENU      // Переход в подменю
+    ITEM_TYPE_SUBMENU,     // Переход в подменю
+    ITEM_TYPE_EDIT_MODE    // Режим редактирования значения (временный)
 } MenuItemType_t;
 
 // Структура для иконок (если вы используете их как пиксели/спрайты)
@@ -96,5 +97,9 @@ void Menu_ProcessInput(uint8_t key);
 void Menu_ProcessTouch(uint16_t tx, uint16_t ty);
 
 void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item);
+
+// === РЕЖИМ РЕДАКТИРОВАНИЯ ЗНАЧЕНИЙ ===
+void Menu_EnterEditMode(MenuItem_t* item);
+void Menu_ExitEditMode(void);
 
 #endif

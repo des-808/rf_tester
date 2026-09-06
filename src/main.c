@@ -191,6 +191,9 @@ void LED_Blink(uint32_t delay)
 }
 // Глобальный флаг: true — отрисовать экран, false — ждать изменений
 bool ui_needs_refresh = true; 
+
+/* Флаг блокировки экрана (кнопка BTN_ON_OFF) */
+bool screen_locked = false;
 /* USER CODE END 0 */
 
 /**
@@ -239,6 +242,7 @@ int main(void)
     MX_SPI4_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
      LCD_Backlight_Init();
   MX_DMA2D_Init();
   MX_USB_DEVICE_Init();
@@ -347,63 +351,95 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
       }
 
       // ====================================================================
+      // 0. ОБРАБОТКА КНОПКИ БЛОКИРОВКИ ЭКРАНА (BTN_ON_OFF)
+      // ====================================================================
+      static uint8_t btn_on_off_last = 1;
+      uint8_t btn_on_off_state = HAL_GPIO_ReadPin(BTN_ON_OFF_GPIO_Port, BTN_ON_OFF_Pin);
+      if (btn_on_off_state != btn_on_off_last) {
+          btn_on_off_last = btn_on_off_state;
+          if (btn_on_off_state == 0) {
+              /* Нажатие — переключение блокировки */
+              screen_locked = !screen_locked;
+              
+              if (screen_locked) {
+                  /* Блокировка: выключаем подсветку */
+                  LCD_Backlight_SetLevel(0);
+              } else {
+                  /* Разблокировка: включаем подсветку на последний уровень */
+                  LCD_Backlight_SetLevel(LCD_Backlight_GetLevel() > 0 ? LCD_Backlight_GetLevel() : 5);
+              }
+              if (buzzerOnOff) Buzzer_Short();
+              if (vibroOnOff) Vibrator_Pulse(30);
+          }
+      }
+      
+      // ====================================================================
       // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
       // ====================================================================
-      Buttons_Update(&btn_s);
-      uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
-      static uint8_t btn_last_state = 0xFF;
-      if (btn_raw != btn_last_state && btn_raw != 0xFF) {
-          /* Сработала кнопка (edge detection) */
-          if (buzzerOnOff) Buzzer_Short();
-          if (vibroOnOff) Vibrator_Pulse(30);
-      }
-      btn_last_state = btn_raw;
-      PCF8574_AcknowledgeChanges(&pcf_handle);
+      if (!screen_locked) {
+          Buttons_Update(&btn_s);
+          uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
+          static uint8_t btn_last_state = 0xFF;
+          if (btn_raw != btn_last_state && btn_raw != 0xFF) {
+              /* Сработала кнопка (edge detection) */
+              if (buzzerOnOff) Buzzer_Short();
+              if (vibroOnOff) Vibrator_Pulse(30);
+          }
+          btn_last_state = btn_raw;
+          PCF8574_AcknowledgeChanges(&pcf_handle);
 
-     MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
-     if (key_short != KEY_NONE) {
-       Menu_ProcessInput(key_short);
-     }
+         MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
+         if (key_short != KEY_NONE) {
+           Menu_ProcessInput(key_short);
+         }
+      }
 
       // ====================================================================
       // 2. ОБРАБОТКА ТАЧСКРИНА (Polling Mode — G_MODE = 0x00)
       // EXTI4 (FALLING): INT→LOW = палец на экране → вызывает FT6336U_ReadData()
       // Фоллбэк: периодический опрос I2C, если EXTI не сработал
       // ====================================================================
-      static uint32_t last_touch_tick = 0;
-      static uint32_t last_i2c_poll_tick = 0;
-      
-      // Периодический опрос I2C — фоллбэк если EXTI не сработал
-      // Когда палец на экране — каждые 20 мс (обновление координат)
-      // Когда нет касания — каждые 100 мс (экономия I2C)
-      if (HAL_GetTick() - last_i2c_poll_tick > (ft6336u.has_touch ? 20 : 100)) {
-          last_i2c_poll_tick = HAL_GetTick();
-          FT6336U_ReadData(&ft6336u);
-      }
-      
-       if (ft6336u.has_touch) {
-           uint16_t raw_x, raw_y;
-           FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
-           Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-           ft6336u.has_touch = false;
-           if (buzzerOnOff) Buzzer_Short();
-           if (vibroOnOff) Vibrator_Pulse(30);
-           Menu_ProcessTouch(last_touch_x, last_touch_y);
-          /* Сброс таймаута: палец всё ещё на экране */
-          last_touch_tick = HAL_GetTick();
-      } else {
-          /* Нет событий тача > 150мс — считаем что палец отпущен */
-          if (last_touch_tick != 0) {
-              uint32_t elapsed = HAL_GetTick() - last_touch_tick;
-              if (elapsed > 150) {
-                  last_touch_tick = 0;
-                  /* Сброс drag-состояния во всех ListBox */
-                  extern UIElement_t* current_menu_listbox;
-                  if (current_menu_listbox) {
-                      current_menu_listbox->touch_state.drag_active = false;
-                      current_menu_listbox->touch_state.drag_last_y = -1;
+      if (!screen_locked) {
+          static uint32_t last_touch_tick = 0;
+          static uint32_t last_i2c_poll_tick = 0;
+          
+          // Периодический опрос I2C — фоллбэк если EXTI не сработал
+          // Когда палец на экране — каждые 20 мс (обновление координат)
+          // Когда нет касания — каждые 100 мс (экономия I2C)
+          if (HAL_GetTick() - last_i2c_poll_tick > (ft6336u.has_touch ? 20 : 100)) {
+              last_i2c_poll_tick = HAL_GetTick();
+              FT6336U_ReadData(&ft6336u);
+          }
+          
+           if (ft6336u.has_touch) {
+               uint16_t raw_x, raw_y;
+               FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
+               Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
+               ft6336u.has_touch = false;
+               if (buzzerOnOff) Buzzer_Short();
+               if (vibroOnOff) Vibrator_Pulse(30);
+               Menu_ProcessTouch(last_touch_x, last_touch_y);
+              /* Сброс таймаута: палец всё ещё на экране */
+              last_touch_tick = HAL_GetTick();
+          } else {
+              /* Нет событий тача > 150мс — считаем что палец отпущен */
+              if (last_touch_tick != 0) {
+                  uint32_t elapsed = HAL_GetTick() - last_touch_tick;
+                  if (elapsed > 150) {
+                      last_touch_tick = 0;
+                      /* Сброс drag-состояния во всех ListBox */
+                      extern UIElement_t* current_menu_listbox;
+                      if (current_menu_listbox) {
+                          current_menu_listbox->touch_state.drag_active = false;
+                          current_menu_listbox->touch_state.drag_last_y = -1;
+                      }
                   }
               }
+          }
+      } else {
+          /* В режиме блокировки — очищаем тач чтобы не было случайных срабатываний */
+          if (ft6336u.has_touch) {
+              ft6336u.has_touch = false;
           }
       }
 
@@ -460,12 +496,10 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
         }
     }
     
-    /* Неблокирующие Update для buzzer и vibrator */
-    Buzzer_Update();
-    Vibrator_Update();
-    
-    // Разгрузочная пауза для DMA SPI и Watchdog
-    HAL_Delay(10);
+    static uint32_t main_loop_tick = 0;
+    if (HAL_GetTick() - main_loop_tick > 10) {
+        main_loop_tick = HAL_GetTick();
+    }
      
      /* USER CODE BEGIN 3 */
    }

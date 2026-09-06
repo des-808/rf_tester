@@ -15,6 +15,7 @@
 static uint8_t s_sector_buf[SETTINGS_FLASH_SIZE];
 static bool    s_sector_dirty = false;
 static bool    s_init_done    = false;
+static bool    s_loaded       = false;  /* сектор реально загружен из Flash */
 
 /* ========================================================================
  *  Вспомогательные функции
@@ -53,6 +54,9 @@ static bool load_sector(void) {
     /* Если сектор полностью пустой (0xFF) — инициализируем буфер */
     if (all_ff) {
         memset(s_sector_buf, 0xFF, SETTINGS_FLASH_SIZE);
+        s_loaded = false;
+    } else {
+        s_loaded = true;
     }
     
     return true;
@@ -118,6 +122,18 @@ bool SettingsStorage_Read(void* buf, uint32_t len) {
     
     memcpy(buf, s_sector_buf, len);
     return true;
+}
+
+bool SettingsStorage_IsLoaded(void) {
+    return s_loaded;
+}
+
+bool SettingsStorage_ReadFromFlash(void* buf, uint32_t offset, uint32_t len) {
+    if (!s_init_done) return false;
+    if (!buf || len == 0) return false;
+    if (offset + len > SETTINGS_FLASH_SIZE) return false;
+    
+    return W25qxx_Read(buf, SETTINGS_FLASH_ADDR + offset, len) == w25qxx_OK;
 }
 
 bool SettingsStorage_Write(const void* buf, uint32_t len) {

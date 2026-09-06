@@ -8,6 +8,7 @@
 
 #include "settings_manager.h"
 #include "settings_storage.h"
+#include "lcd_backlight.h"
 #include "radio_config_bridge.h"
 #include "json_config.h"
 #include "sd_fs.h"
@@ -80,7 +81,7 @@ static void settings_set_defaults(Settings_t* s) {
     s->cc1101_freq_fixed   = 43396;  /* 433.96 МГц */
     s->cc1101_bitrate_fixed = 960;   /* 9.60 kbps (1.2..600 kbps) */
     s->cc1101_rxbw_index   = 11;     /* 406 kHz (0..15) */
-    s->cc1101_modulation   = 1;      /* OOK (0=GFSK, 1=OOK) */
+    s->cc1101_modulation   = CC1101_MOD_GFSK;  /* 0x07 = GFSK */
     s->cc1101_power_index  = 3;      /* -10 dBm */
 }
 
@@ -135,6 +136,9 @@ void SettingsManager_Apply(void) {
         case 0x0E: cc1101Modulation = 6; break;  /* MSK */
         default:   cc1101Modulation = 3; break;  /* GFSK по умолчанию */
     }
+
+    /* Применяем подсветку (0 = выкл) */
+    LCD_Backlight_SetLevel(lcd_backlight_level);
 
     /* Применяем CC1101 настройки к hardware */
     Bridge_ApplyCC1101Settings();
@@ -238,9 +242,10 @@ void saveAllSettings(void) {
 
 void loadAllSettings(void) {
     /* Читаем структуру настроек из Flash */
-    bool loaded = SettingsStorage_Read(&g_settings, sizeof(g_settings));
+    SettingsStorage_Read(&g_settings, sizeof(g_settings));
 
-    if (loaded && settings_validate(&g_settings)) {
+    /* Проверяем: данные загружены И валидны */
+    if (SettingsStorage_IsLoaded() && settings_validate(&g_settings)) {
         /* Валидные данные — применяем */
         SettingsManager_Apply();
     } else {

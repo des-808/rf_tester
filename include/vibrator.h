@@ -12,8 +12,8 @@ void Vibrator_On(void);
 void Vibrator_Off(void);
 void Vibrator_Pulse(uint16_t duration_ms);
 
-/* Вызывать из main loop — автоматически выключает по таймеру */
-void Vibrator_Update(void);
+/* Вызывается из TIM3 прерывания — не вызывать вручную */
+void Vibrator_Ticker(void);
 
 /* Проверить, активен ли вибратор */
 bool Vibrator_IsActive(void);

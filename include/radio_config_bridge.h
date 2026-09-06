@@ -50,3 +50,6 @@ void Bridge_UpdatePowerIndexFromHardware(void);
 void Bridge_UpdateFreqFromHardware(void);
 
 #endif /* RADIO_CONFIG_BRIDGE_H */
+
+
+

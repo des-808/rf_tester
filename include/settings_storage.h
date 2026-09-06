@@ -55,6 +55,12 @@ bool SettingsStorage_Init(void);
 bool SettingsStorage_Read(void* buf, uint32_t len);
 
 /**
+ *  @brief  Были ли данные реально загружены из Flash при инициализации.
+ *  @retval true если сектор не пустой
+ */
+bool SettingsStorage_IsLoaded(void);
+
+/**
  *  @brief  Записать N байт настроек во Flash.
  *          Предварительно стирает сектор.
  *  @param  buf    — данные для записи

@@ -26,6 +26,7 @@
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 /* TIM1 init function */
 void MX_TIM1_Init(void)
@@ -142,6 +143,49 @@ void MX_TIM2_Init(void)
 
 }
 
+/* TIM3 init function — 1ms interrupt for buzzer/vibrator */
+void MX_TIM3_Init(void)
+{
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 120-1;        /* 120MHz / 120 = 1MHz (1us tick) */
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000-1;          /* 1000us = 1ms */
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  
+  /* Запускаем таймер с прерыванием */
+  HAL_StatusTypeDef st = HAL_TIM_Base_Start_IT(&htim3);
+  if (st != HAL_OK)
+  {
+    /* Start failed - check TIM3 clock is enabled */
+    Error_Handler();
+  }
+  
+  /* Verify TIM3 is actually running - CR1 register should have CEN=1 */
+  if (!(htim3.Instance->CR1 & TIM_CR1_CEN))
+  {
+    Error_Handler();
+  }
+}
+
 void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* tim_pwmHandle)
 {
 
@@ -166,6 +210,24 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* tim_pwmHandle)
   /* USER CODE BEGIN TIM2_MspInit 1 */
 
   /* USER CODE END TIM2_MspInit 1 */
+  }
+  else if(tim_pwmHandle->Instance==TIM3)
+  {
+    /* TIM3 clock enable */
+    __HAL_RCC_TIM3_CLK_ENABLE();
+  }
+}
+
+void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
+{
+  if(tim_baseHandle->Instance==TIM3)
+  {
+    /* TIM3 clock enable */
+    __HAL_RCC_TIM3_CLK_ENABLE();
+    
+    /* TIM3 interrupt init */
+    HAL_NVIC_SetPriority(TIM3_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(TIM3_IRQn);
   }
 }
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
@@ -248,12 +310,43 @@ void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef* tim_pwmHandle)
 
   /* USER CODE END TIM2_MspDeInit 1 */
   }
+  else if(tim_pwmHandle->Instance==TIM3)
+  {
+    /* TIM3 clock disable */
+    __HAL_RCC_TIM3_CLK_DISABLE();
+    HAL_NVIC_DisableIRQ(TIM3_IRQn);
+  }
+}
+
+void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
+{
+  if(tim_baseHandle->Instance==TIM3)
+  {
+    __HAL_RCC_TIM3_CLK_DISABLE();
+    HAL_NVIC_DisableIRQ(TIM3_IRQn);
+  }
 }
 
 /* USER CODE BEGIN 1 */
 
-// Запуск PWM для подсветки (TIM1_CH2N на PB0) — делается в lcd_backlight.c
-// HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-// htim1.Instance->CCER |= TIM_CCER_CC2NE;
+/* TIM3 interrupt handler — 1ms tick */
+void TIM3_IRQHandler(void)
+{
+    /* Debug: toggle LED to verify TIM3 interrupt is firing */
+    //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    
+    HAL_TIM_IRQHandler(&htim3);
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM3) {
+        /* Обновляем buzzer и vibrator */
+        extern void Buzzer_Ticker(void);
+        extern void Vibrator_Ticker(void);
+        Buzzer_Ticker();
+        Vibrator_Ticker();
+    }
+}
 
 /* USER CODE END 1 */
