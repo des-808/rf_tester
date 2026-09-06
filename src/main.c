@@ -299,12 +299,12 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
   GUI_ShowMenuAdvancedMeasurementScreen(current_display_orientation);
    
     /* ds3231_time.Second = 0;   // 0–59
-    ds3231_time.Minute = 51;   // 0–59
-    ds3231_time.Hour = 17;     // 0–23 (24-hour) или 1–12 (12-hour)
+    ds3231_time.Minute = 44;   // 0–59
+    ds3231_time.Hour = 22;     // 0–23 (24-hour) или 1–12 (12-hour)
     //ds3231_time.AM_PM = 1;    // 0 = AM, 1 = PM (только для 12-часового режима)
-    ds3231_time.Day = 1;      // 1–7 (см. DS3231_Day_t)
-    ds3231_time.Date = 24;     // 1–31
-    ds3231_time.Month = 8;    // 1–12
+    ds3231_time.Day = 7;      // 1–7 (см. DS3231_Day_t)
+    ds3231_time.Date = 6;     // 1–31
+    ds3231_time.Month = 9;    // 1–12
     ds3231_time.Year = 26;     // 0–99 (последние 2 цифры года, напр. 25 = 2025)
   DS3231_SetTime(&hi2c1,&ds3231_time); */
   // Инициализация времени из DS3231

@@ -25,6 +25,20 @@
 #define UI_GRID_DIMENSION_PERCENT 100  // обычный процент
 #define UI_GRID_DIMENSION_PIXEL   0xFFFF  // специальный код: пиксельный размер
 
+// ==========================================
+// НИЖНЯЯ ПАНЕЛЬ КНОПОК (Bottom Bar)
+// ==========================================
+#define BOTTOM_BAR_HEIGHT       40   // Высота всей нижней панели в пикселях
+#define BOTTOM_BAR_BTN_SPACING  10   // Расстояние между кнопками в пикселях
+#define BOTTOM_BAR_COLS         4    // Количество кнопок (Cancel | Up | Down | Enter)
+
+// ==========================================
+// НИЖНЯЯ ПАНЕЛЬ КНОПОК (Bottom Bar)
+// ==========================================
+#define BOTTOM_BAR_HEIGHT       40   // Высота всей нижней панели в пикселях
+#define BOTTOM_BAR_BTN_SPACING  10   // Расстояние между кнопками в пикселях
+#define BOTTOM_BAR_COLS         4    // Количество кнопок (Cancel | Up | Down | Enter)
+
 typedef enum {
     UI_TYPE_GRID,
     UI_TYPE_STACK_PANEL,
@@ -269,6 +283,9 @@ extern int16_t saved_menu_selected_index;
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid);
 void GUI_InvalidateStatusBar(void);
 void GUI_UpdateSDStatus(void);
+
+void GUI_BuildModularBottomBar(UIElement_t* parent_grid);
+int8_t GUI_GetBottomBarTouch(uint16_t tx, uint16_t ty);  // Возвращает 0=Cancel, 1=Up, 2=Down, 3=Enter или -1
 
 /* Глобальные переменные настроек радиомодулей (определены в gui.c) */
 extern uint16_t cc1101FreqFixed;

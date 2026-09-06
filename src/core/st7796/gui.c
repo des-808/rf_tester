@@ -78,6 +78,7 @@ static UIElement_t status_sd_node;       // Узел статуса SD
 Sprite_t status_bar_sprite;
 Sprite_t graph_sprite;
 Sprite_t main_screen_sprite;
+Sprite_t bottom_bar_sprite;
 
 // Пул элементов для строк (выделяем память статически внутри gui.c, чтобы не плодить глобальные имена)
 static UIElement_t panel_rows[MAX_PANEL_ROWS];
@@ -496,6 +497,9 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     main_screen_sprite.data = NULL;
     main_screen_sprite.is_allocated = false;
 
+    bottom_bar_sprite.data = NULL;
+    bottom_bar_sprite.is_allocated = false;
+
     // === КРИТИЧЕСКИ ВАЖНО: ПОЛНЫЙ СБРОС ПУЛА ЭЛЕМЕНТОВ ===
     panel_rows_count = 0;
     
@@ -525,10 +529,12 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     // --- НАСТРОЙКА КОРНЕВОЙ СЕТКИ ---
     root_grid.type = UI_TYPE_GRID;
     root_grid.children_count = 0;
-    root_grid.props.grid.rows_count = 2;
+    root_grid.props.grid.rows_count = 3;
     root_grid.props.grid.cols_count = 1;
 
-    UI_SetGridRowPixel(&root_grid, 0, 25);  //status bar
+    UI_SetGridRowPixel(&root_grid, 0, 25);   // status bar
+    UI_SetGridRowPixel(&root_grid, 2, BOTTOM_BAR_HEIGHT);   // bottom bar (фиксированная высота)
+    
     UI_SetGridColPercent(&root_grid, 0, 100);
 
     // --- СТАТУС-БАР ---
@@ -547,6 +553,9 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     
     UI_SetGridColPercent(&main_work_grid, 0, 100);
     root_grid.children[root_grid.children_count++] = &main_work_grid;
+
+    // --- НИЖНЯЯ ПАНЕЛЬ (добавляем ПОСЛЕ main_work_grid) ---
+    GUI_BuildModularBottomBar(&root_grid);
 
     
 
@@ -2689,11 +2698,6 @@ void UI_SetGridColProportional(UIElement_t* grid_elem, uint8_t col, uint8_t weig
     UI_SetGridColPercent(grid_elem, col, weight_percent);
 }
 
-/* UI_SetGridRowsCount(&status_bar_grid, 1);
-UI_SetGridColsCount(&status_bar_grid, 3);
-UI_SetGridColProportional(&status_bar_grid, 1, 1); */
-
-
 uint8_t currentHour = 00;
 uint8_t currentMinute = 00;
 uint8_t battery_Level = 99;
@@ -2937,8 +2941,6 @@ void GUI_InvalidateStatusBar(void) {
     }
 }
 
-// ==========================================
-// ФУНКЦИЯ СОЗДАНИЯ СТАТУС-БАРa
 // ==========================================
 // ФУНКЦИЯ СОЗДАНИЯ СТАТУС-БАРA
 // ==========================================
@@ -3193,70 +3195,150 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
 }
 
 
-/**
- * @brief Полностью инвариантный render_callback для статус-бара
- * // Функция для отрисовки контента внутри статус-бара
- */
-/* void Draw_StatusBar_Callback(UIElement_t* el) {
-    if (!el || !el->sprite || !el->sprite->data) return;
-    // Извлекаем физический спрайт из элемента
-    Sprite_t* sprite = el->sprite; // Достаем физический спрайт из элемента
+// Глобальные указатели на кнопки нижней панели (для расчёта тач-зон)
+static UIElement_t* s_bottom_btn[BOTTOM_BAR_COLS] = {NULL, NULL, NULL, NULL};
 
-    // 1. Очистка буфера статус-бара цветом RGB565_DARK_GRAY (например, 0x39E7)
-    Sprite_fill(sprite, RGB565_BLACK);
+void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
 
-    // 2. Отрисовка ВРЕМЕНИ (слева, отступ 5 пикселей)
-    lcd_set_font(&font_segoe_struct);
-    char timeBuf[8];
-    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", currentHour, currentMinute);
-    lcd_print_to_buffer(5, 4, RGB565_WHITE, timeBuf, RGB565_DARK_GRAY, sprite);
-
-    // Меняем шрифт для системных иконок и параметров
-    lcd_set_font(&font_arial_9_struct);
-
-    // 3. Динамический инвариантный расчет правого края (смещаемся влево от правого конца спрайта s->w)
-    int16_t curX = sprite->w - 5; // Стартуем в 5 пикселях от правого края экрана
-
-    // --- Батарея (Текст) ---
-    char batBuf[8]; 
-    snprintf(batBuf, sizeof(batBuf), "%d%%", battery_Level);
-    int batWidth = lcd_get_str_width(batBuf);
-    curX -= batWidth; // Сдвигаем маркер влево на ширину текста
-    lcd_print_to_buffer(curX, 4, RGB565_WHITE, batBuf, RGB565_DARK_GRAY, sprite);
-
-    // --- Иконка батареи (ширина 16) ---
-    curX -= 18; // 16 пикселей иконка + 2 пикселя зазор
-    Draw_Bitmap_To_Sprite(sprite, curX, 4, icon_battery_16_16_bits, 16, 16, RGB565_WHITE);
-
-    // --- Bluetooth Mode (RS485→BT) (ширина 10) ---
-    curX -= 12;
-    uint16_t bt_mode_color = bluetoothMode ? RGB565_GREEN : 0x528A; // Зеленый или блекло-серый
-    Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_rs485ToBt_bits, 8, 8), 8, 8, bt_mode_color);
-
-    // --- Buzzer (ширина 8) ---
-    curX -= 10;
-    const uint8_t* icon_buzz = buzzerOnOff ? icon_buzzer_on_bits : icon_buzzer_off_bits;
-    Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_buzz, 8, 8), 8, 8, RGB565_WHITE);
-
-    // --- Auto NTP (ширина 8) ---
-    if (ntpSyncEnabled) {
-        curX -= 10;
-        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_ntp_bits, 8, 8), 8, 8, RGB565_WHITE);
+// --- НИЖНЯЯ НАВИГАЦИОННАЯ ПАНЕЛЬ (Grid 4 колонки: Cancel | Up | Down | Enter) ---
+    static UIElement_t bottom_bar_grid;
+    static UIElement_t bottom_btn_cancel;
+    static UIElement_t bottom_btn_up;
+    static UIElement_t bottom_btn_down;
+    static UIElement_t bottom_btn_enter;
+    
+    // Отдельные спрайты для каждой кнопки (не делят один буфер!)
+    static Sprite_t bottom_btn_cancel_sprite;
+    static Sprite_t bottom_btn_up_sprite;
+    static Sprite_t bottom_btn_down_sprite;
+    static Sprite_t bottom_btn_enter_sprite;
+    
+    // === ПОЛНЫЙ СБРОС при каждом вызове (критично для static переменных) ===
+    bottom_bar_grid.children_count = 0;
+    
+    // Сброс глобальных указателей на кнопки
+    for (int i = 0; i < BOTTOM_BAR_COLS; i++) s_bottom_btn[i] = NULL;
+    
+    bottom_bar_grid.type = UI_TYPE_GRID;
+    bottom_bar_grid.sprite = NULL;  // Контейнер без спрайта (как status_bar_node)
+    bottom_bar_grid.grid_row = 2;  // Строка 2 в root_grid
+    bottom_bar_grid.grid_col = 0;
+    bottom_bar_grid.props.grid.rows_count = 1;
+    bottom_bar_grid.props.grid.cols_count = BOTTOM_BAR_COLS;
+    bottom_bar_grid.background_color = RGB565_BLACK;
+    bottom_bar_grid.font = &font_arial_9_struct;
+    
+    // Колонки по 25% каждая
+    for (int i = 0; i < BOTTOM_BAR_COLS; i++) {
+        UI_SetGridColPercent(&bottom_bar_grid, i, 100 / BOTTOM_BAR_COLS);
+    }
+    
+    parent_grid->children[parent_grid->children_count++] = &bottom_bar_grid;
+    
+    // Создаём 4 кнопки навигации в пуле panel_rows
+    if (panel_rows_count + BOTTOM_BAR_COLS <= MAX_PANEL_ROWS) {
+        // === Cancel (колонка 0) ===
+        UIElement_t* btn = &panel_rows[panel_rows_count++];
+        memset(btn, 0, sizeof(UIElement_t));
+        btn->type = UI_TYPE_BUTTON;
+        btn->sprite = &bottom_btn_cancel_sprite;
+        btn->grid_row = 0;
+        btn->grid_col = 0;
+        btn->h = BOTTOM_BAR_HEIGHT;
+        btn->font = &font_arial_9_struct;
+        btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+        btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
+        btn->background_color = RGB565_BLACK;
+        btn->props.button.normal_color = RGB565_DARK_GRAY;
+        btn->props.button.press_color = RGB565_RED;
+        btn->props.button.is_pressed = false;
+        strncpy(btn->text_content, "Cancel", sizeof(btn->text_content)-1);
+        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        s_bottom_btn[0] = btn;
+        
+        // === Up (колонка 1) ===
+        btn = &panel_rows[panel_rows_count++];
+        memset(btn, 0, sizeof(UIElement_t));
+        btn->type = UI_TYPE_BUTTON;
+        btn->sprite = &bottom_btn_up_sprite;
+        btn->grid_row = 0;
+        btn->grid_col = 1;
+        btn->h = BOTTOM_BAR_HEIGHT;
+        btn->font = &font_arial_9_struct;
+        btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+        btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
+        btn->background_color = RGB565_BLACK;
+        btn->props.button.normal_color = RGB565_DARK_GRAY;
+        btn->props.button.press_color = RGB565_RED;
+        btn->props.button.is_pressed = false;
+        strncpy(btn->text_content, "Up", sizeof(btn->text_content)-1);
+        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        s_bottom_btn[1] = btn;
+        
+        // === Down (колонка 2) ===
+        btn = &panel_rows[panel_rows_count++];
+        memset(btn, 0, sizeof(UIElement_t));
+        btn->type = UI_TYPE_BUTTON;
+        btn->sprite = &bottom_btn_down_sprite;
+        btn->grid_row = 0;
+        btn->grid_col = 2;
+        btn->h = BOTTOM_BAR_HEIGHT;
+        btn->font = &font_arial_9_struct;
+        btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+        btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
+        btn->background_color = RGB565_BLACK;
+        btn->props.button.normal_color = RGB565_DARK_GRAY;
+        btn->props.button.press_color = RGB565_RED;
+        btn->props.button.is_pressed = false;
+        strncpy(btn->text_content, "Down", sizeof(btn->text_content)-1);
+        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        s_bottom_btn[2] = btn;
+        
+        // === Enter (колонка 3) ===
+        btn = &panel_rows[panel_rows_count++];
+        memset(btn, 0, sizeof(UIElement_t));
+        btn->type = UI_TYPE_BUTTON;
+        btn->sprite = &bottom_btn_enter_sprite;
+        btn->grid_row = 0;
+        btn->grid_col = 3;
+        btn->h = BOTTOM_BAR_HEIGHT;
+        btn->font = &font_arial_9_struct;
+        btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
+        btn->vertical_alignment = VERTICAL_ALIGN_CENTER;
+        btn->background_color = RGB565_BLACK;
+        btn->props.button.normal_color = RGB565_DARK_GRAY;
+        btn->props.button.press_color = RGB565_RED;
+        btn->props.button.is_pressed = false;
+        strncpy(btn->text_content, "Enter", sizeof(btn->text_content)-1);
+        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        s_bottom_btn[3] = btn;
     }
 
-    // --- Wi-Fi (ширина 10) ---
-    if (wifiEnabled) {
-        curX -= 12;
-        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_wifi_bits, 8, 8), 8, 8, RGB565_GREEN);
-    }
-
-    // --- Bluetooth (ширина 10) ---
-    if (bluetoothEnabled) {
-        curX -= 12;
-        Draw_Bitmap_To_Sprite(sprite, curX, 8, iconMirrorHorizontal(icon_bluetooth_bits, 8, 8), 8, 8, RGB565_BLUE);
-    }
-
-    // ВНИМАНИЕ: ST7796_PushSprite(sprite) отсюда УДАЛЕН. 
-    // Движок UI сам вызовет отправку по SPI после завершения сборки дерева.
 }
- */
+
+// ==========================================
+// ФУНКЦИЯ ДЛЯ РАСЧЁТА ТУЧ-ЗОН НИЖНЕЙ ПАНЕЛИ
+// ==========================================
+// Возвращает индекс нажатой кнопки (0-3) или -1 если не по кнопкам
+// tx, ty — абсолютные координаты тача (уже конвертированные)
+int8_t GUI_GetBottomBarTouch(uint16_t tx, uint16_t ty) {
+    if (!s_bottom_btn[0]) return -1;  // Кнопки ещё не созданы
+    
+    // Получаем абсолютные координаты нижней панели из первого элемента
+    UIElement_t* first_btn = s_bottom_btn[0];
+    int16_t bar_y = first_btn->y;
+    uint16_t bar_h = first_btn->h;
+    
+    // Проверяем Y (вся панель)
+    if (ty < bar_y || ty >= bar_y + bar_h) return -1;
+    
+    // Проверяем X по каждой кнопке
+    for (int i = 0; i < BOTTOM_BAR_COLS; i++) {
+        if (!s_bottom_btn[i]) continue;
+        if (tx >= s_bottom_btn[i]->x && tx < s_bottom_btn[i]->x + s_bottom_btn[i]->w) {
+            return i;  // 0=Cancel, 1=Up, 2=Down, 3=Enter
+        }
+    }
+    
+    return -1;  // Тач в панели, но не по кнопкам
+}

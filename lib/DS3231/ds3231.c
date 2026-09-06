@@ -29,7 +29,7 @@ static DS3231_Status_t DS3231_ReadReg(I2C_HandleTypeDef *hi2c, uint8_t reg, uint
     return DS3231_OK;
 }
 
-// Инициализация (включает осциллятор, если был остановлен)
+// Инициализация (включает осциллятор, если был остановлен, принудительно 24-часовой формат)
 DS3231_Status_t DS3231_Init(I2C_HandleTypeDef *hi2c) {
     uint8_t status;
     DS3231_Status_t ret;
@@ -49,7 +49,16 @@ DS3231_Status_t DS3231_Init(I2C_HandleTypeDef *hi2c) {
     ret = DS3231_ReadReg(hi2c, DS3231_REG_CONTROL, &control);
     if (ret != DS3231_OK) return ret;
     control &= ~DS3231_EOSC;  // clear EOSC
-    return DS3231_WriteReg(hi2c, DS3231_REG_CONTROL, control);
+    ret = DS3231_WriteReg(hi2c, DS3231_REG_CONTROL, control);
+    if (ret != DS3231_OK) return ret;
+
+    // Принудительно устанавливаем 24-часовой формат (бит 6 регистра HOURS = 0)
+    uint8_t hours;
+    ret = DS3231_ReadReg(hi2c, DS3231_REG_HOURS, &hours);
+    if (ret != DS3231_OK) return ret;
+    hours &= ~0x40;  // clear bit 6 (12/24 hour mode)
+    ret = DS3231_WriteReg(hi2c, DS3231_REG_HOURS, hours);
+    return ret;
 }
 
 // Установка времени (24-часовой формат)

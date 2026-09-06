@@ -932,120 +932,181 @@ void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
 
     if (lb->touch_state.drag_active) return;
 
-    /* ===== НИЖНЯЯ ПАНЕЛЬ КНОПОК (y >= 450) ===== */
-    if (ty >= 450 && ty < 480) {
-        // Grid 4 колонки по 25%: Cancel(0-79) | Up(80-159) | Down(160-239) | Enter(240-319)
-        if (tx < 80) {
-            // Cancel — выход из подменю
-            Menu_PopMenu(lb);
-            Buzzer_PlayTone(400, 50);
-            } else if (tx < 160) {
-            // Up — вверх по меню
-            if (lb->props.list_box.selected_index > 0) {
-                uint8_t old_idx = lb->props.list_box.selected_index;
-                lb->props.list_box.selected_index--;
-                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
-                // Scroll up
-                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
-                uint16_t item_h = lb->font->char_height + pad;
-                uint8_t visible_items = lb->h / item_h;
-                if (visible_items == 0) visible_items = 1;
-                if (lb->props.list_box.selected_index < (int16_t)lb->props.list_box.scroll_offset) {
-                    lb->props.list_box.scroll_offset = (uint8_t)lb->props.list_box.selected_index;
+    /* ===== НИЖНЯЯ ПАНЕЛЬ КНОПОК (динамический расчёт + debounce с подтверждением) ===== */
+    static int8_t  last_confirmed_btn = -1;
+    static uint8_t  confirm_count    = 0;
+    static uint32_t last_btn_press_tick = 0;
+    #define BOTTOM_BAR_CONFIRMATIONS  3
+    #define BOTTOM_BAR_CONFIRM_TICK   80  // мс между подтверждениями
+
+    int8_t btn_idx = GUI_GetBottomBarTouch(tx, ty);
+    uint32_t now = HAL_GetTick();
+
+    if (btn_idx >= 0) {
+        // Та же кнопка — считаем подтверждение
+        if (btn_idx == last_confirmed_btn) {
+            if (now - last_btn_press_tick >= BOTTOM_BAR_CONFIRM_TICK) {
+                confirm_count++;
+                last_btn_press_tick = now;
+                if (confirm_count >= BOTTOM_BAR_CONFIRMATIONS) {
+                    // Подтверждено — срабатываем
+                    switch (btn_idx) {
+                        case 0: // Cancel — выход из подменю
+                            Menu_PopMenu(lb);
+                            if (buzzerOnOff) Buzzer_PlayTone(400, 50);
+                            if (vibroOnOff) Vibrator_Pulse(30);
+                            break;
+                        case 1: // Up — вверх по меню
+                            if (lb->props.list_box.selected_index > 0) {
+                                uint8_t old_idx = lb->props.list_box.selected_index;
+                                lb->props.list_box.selected_index--;
+                                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
+                                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+                                uint16_t item_h = lb->font->char_height + pad;
+                                uint8_t visible_items = lb->h / item_h;
+                                if (visible_items == 0) visible_items = 1;
+                                if (lb->props.list_box.selected_index < (int16_t)lb->props.list_box.scroll_offset) {
+                                    lb->props.list_box.scroll_offset = (uint8_t)lb->props.list_box.selected_index;
+                                }
+                                UI_RenderListBoxItem(lb, old_idx);
+                                UI_RenderListBoxItem(lb, (uint8_t)lb->props.list_box.selected_index);
+                            }
+                            if (buzzerOnOff) Buzzer_PlayTone(800, 30);
+                            if (vibroOnOff) Vibrator_Pulse(30);
+                            break;
+                        case 2: // Down — вниз по меню
+                            if (lb->props.list_box.selected_index < (int16_t)current_menu_count - 1) {
+                                uint8_t old_idx = lb->props.list_box.selected_index;
+                                lb->props.list_box.selected_index++;
+                                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
+                                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+                                uint16_t item_h = lb->font->char_height + pad;
+                                uint8_t visible_items = lb->h / item_h;
+                                if (visible_items == 0) visible_items = 1;
+                                if (lb->props.list_box.selected_index >= (int16_t)(lb->props.list_box.scroll_offset + visible_items)) {
+                                    lb->props.list_box.scroll_offset = (uint8_t)(lb->props.list_box.selected_index - visible_items + 1);
+                                }
+                                UI_RenderListBoxItem(lb, old_idx);
+                                UI_RenderListBoxItem(lb, (uint8_t)lb->props.list_box.selected_index);
+                            }
+                            if (buzzerOnOff) Buzzer_PlayTone(800, 30);
+                            if (vibroOnOff) Vibrator_Pulse(30);
+                            break;
+                        case 3: // Enter — выбрать/открыть пункт
+                            {
+                            uint8_t idx = (uint8_t)lb->props.list_box.selected_index;
+                            if (idx < current_menu_count) {
+                                Menu_ExecuteSelected(lb, idx);
+                                if (buzzerOnOff) Buzzer_PlayTone(1000, 50);
+                                if (vibroOnOff) Vibrator_Pulse(30);
+                            }
+                            }
+                            break;
+                    }
+                    // Сброс счётчика
+                    confirm_count = 0;
+                    last_confirmed_btn = -1;
+                    return;
                 }
-                UI_RenderListBoxItem(lb, old_idx);
-                UI_RenderListBoxItem(lb, (uint8_t)lb->props.list_box.selected_index);
             }
-            Buzzer_PlayTone(800, 30);
-            } else if (tx < 240) {
-            // Down — вниз по меню
-            if (lb->props.list_box.selected_index < (int16_t)current_menu_count - 1) {
-                uint8_t old_idx = lb->props.list_box.selected_index;
-                lb->props.list_box.selected_index++;
-                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
-                // Scroll down
-                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
-                uint16_t item_h = lb->font->char_height + pad;
-                uint8_t visible_items = lb->h / item_h;
-                if (visible_items == 0) visible_items = 1;
-                if (lb->props.list_box.selected_index >= (int16_t)(lb->props.list_box.scroll_offset + visible_items)) {
-                    lb->props.list_box.scroll_offset = (uint8_t)(lb->props.list_box.selected_index - visible_items + 1);
-                }
-                UI_RenderListBoxItem(lb, old_idx);
-                UI_RenderListBoxItem(lb, (uint8_t)lb->props.list_box.selected_index);
-            }
-            Buzzer_PlayTone(800, 30);
         } else {
-            // Enter — выбрать/открыть пункт
-            uint8_t idx = (uint8_t)lb->props.list_box.selected_index;
-            if (idx < current_menu_count) {
-                Menu_ExecuteSelected(lb, idx);
-                Buzzer_PlayTone(1000, 50);
-            }
+            // Другая кнопка — сбрасываем счётчик, начинаем заново
+            last_confirmed_btn = btn_idx;
+            confirm_count = 1;
+            last_btn_press_tick = now;
         }
         return;
     }
     /* ===== КОНЕЦ НИЖНЕЙ ПАНЕЛИ ===== */
 
+    /* ===== ПОДТВЕРЖДЕНИЕ КАСАНИЯ ЭЛЕМЕНТОВ МЕНЮ (debounce) ===== */
+    static int8_t  last_menu_touch_item = -1;
+    static uint8_t menu_touch_count = 0;
+    static uint32_t last_menu_touch_tick = 0;
+    #define MENU_ITEM_CONFIRMATIONS  3
+    #define MENU_ITEM_CONFIRM_TICK  100  // мс между подтверждениями
+
     /* ===== РЕЖИМ РЕДАКТИРОВАНИЯ ЗНАЧЕНИЯ (TOUCH) ===== */
     if (edit_mode_active && edit_source_item) {
-        // В режиме редактирования нижняя панель работает как обычно:
-        // Cancel(0-79)/Up(80-159)=увеличить/Down(160-239)=уменьшить/Enter(240-319)=сохранить
-        if (ty >= 450 && ty < 480) {
-            if (tx < 80) {
-                // Cancel — отмена
-                if (edit_value_size == 1) {
-                    *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_original_value;
-                } else {
-                    *(uint16_t*)edit_source_item->data.ptr_value = edit_original_value;
+        // Нижняя панель — динамический расчёт + debounce с подтверждением
+        int8_t edit_btn = GUI_GetBottomBarTouch(tx, ty);
+        if (edit_btn >= 0) {
+            // Та же кнопка — считаем подтверждение
+            if (edit_btn == last_confirmed_btn) {
+                if (now - last_btn_press_tick >= BOTTOM_BAR_CONFIRM_TICK) {
+                    confirm_count++;
+                    last_btn_press_tick = now;
+                    if (confirm_count >= BOTTOM_BAR_CONFIRMATIONS) {
+                        switch (edit_btn) {
+                            case 0: // Cancel — отмена
+                                if (edit_value_size == 1) {
+                                    *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_original_value;
+                                } else {
+                                    *(uint16_t*)edit_source_item->data.ptr_value = edit_original_value;
+                                }
+                                EditMode_Exit();
+                                if (buzzerOnOff) Buzzer_PlayTone(400, 50);
+                                if (vibroOnOff) Vibrator_Pulse(30);
+                                break;
+                            case 1: // Up — увеличить
+                                if (edit_value_size == 1) {
+                                    int8_t v = (int8_t)edit_temp_value;
+                                    v += edit_step;
+                                    if (v > edit_source_item->value_limits.max_val) v = edit_source_item->value_limits.min_val;
+                                    edit_temp_value = (uint16_t)v;
+                                } else {
+                                    int16_t v = (int16_t)edit_temp_value;
+                                    v += edit_step;
+                                    if (v > edit_source_item->value_limits.max_val) v = edit_source_item->value_limits.min_val;
+                                    edit_temp_value = (uint16_t)v;
+                                }
+                                Update_EditDisplay();
+                                if (buzzerOnOff) Buzzer_PlayTone(800, 30);
+                                if (vibroOnOff) Vibrator_Pulse(30);
+                                break;
+                            case 2: // Down — уменьшить
+                                if (edit_value_size == 1) {
+                                    int8_t v = (int8_t)edit_temp_value;
+                                    v -= edit_step;
+                                    if (v < edit_source_item->value_limits.min_val) v = edit_source_item->value_limits.max_val;
+                                    edit_temp_value = (uint16_t)v;
+                                } else {
+                                    int16_t v = (int16_t)edit_temp_value;
+                                    v -= edit_step;
+                                    if (v < edit_source_item->value_limits.min_val) v = edit_source_item->value_limits.max_val;
+                                    edit_temp_value = (uint16_t)v;
+                                }
+                                Update_EditDisplay();
+                                if (buzzerOnOff) Buzzer_PlayTone(800, 30);
+                                if (vibroOnOff) Vibrator_Pulse(30);
+                                break;
+                            case 3: // Enter — сохранить
+                                if (edit_value_size == 1) {
+                                    *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_temp_value;
+                                } else {
+                                    *(uint16_t*)edit_source_item->data.ptr_value = edit_temp_value;
+                                }
+                                if (edit_source_item->on_value_changed) {
+                                    edit_source_item->on_value_changed();
+                                }
+                                EditMode_Exit();
+                                if (buzzerOnOff) Buzzer_PlayTone(1000, 50);
+                                if (vibroOnOff) Vibrator_Pulse(30);
+                                break;
+                        }
+                        confirm_count = 0;
+                        last_confirmed_btn = -1;
+                        return;
+                    }
                 }
-                EditMode_Exit();
-                Buzzer_PlayTone(400, 50);
-        } else if (tx < 160) {
-                // Up — увеличить
-                if (edit_value_size == 1) {
-                    int8_t v = (int8_t)edit_temp_value;
-                    v += edit_step;
-                    if (v > edit_source_item->value_limits.max_val) v = edit_source_item->value_limits.min_val;
-                    edit_temp_value = (uint16_t)v;
-                } else {
-                    int16_t v = (int16_t)edit_temp_value;
-                    v += edit_step;
-                    if (v > edit_source_item->value_limits.max_val) v = edit_source_item->value_limits.min_val;
-                    edit_temp_value = (uint16_t)v;
-                }
-                Update_EditDisplay();
-                Buzzer_PlayTone(800, 30);
-        } else if (tx < 240) {
-                // Down — уменьшить
-                if (edit_value_size == 1) {
-                    int8_t v = (int8_t)edit_temp_value;
-                    v -= edit_step;
-                    if (v < edit_source_item->value_limits.min_val) v = edit_source_item->value_limits.max_val;
-                    edit_temp_value = (uint16_t)v;
-                } else {
-                    int16_t v = (int16_t)edit_temp_value;
-                    v -= edit_step;
-                    if (v < edit_source_item->value_limits.min_val) v = edit_source_item->value_limits.max_val;
-                    edit_temp_value = (uint16_t)v;
-                }
-                Update_EditDisplay();
-                Buzzer_PlayTone(800, 30);
             } else {
-                // Enter — сохранить
-                if (edit_value_size == 1) {
-                    *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_temp_value;
-                } else {
-                    *(uint16_t*)edit_source_item->data.ptr_value = edit_temp_value;
-                }
-                if (edit_source_item->on_value_changed) {
-                    edit_source_item->on_value_changed();
-                }
-                EditMode_Exit();
-                Buzzer_PlayTone(1000, 50);
+                // Другая кнопка — сбрасываем счётчик, начинаем заново
+                last_confirmed_btn = edit_btn;
+                confirm_count = 1;
+                last_btn_press_tick = now;
             }
+            return;
         }
-        return;
     }
 
     MenuItem_t* item = NULL;
@@ -1069,37 +1130,59 @@ void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
     
     if (selected < 0) return;
 
-    switch (item->type) {
-        case ITEM_TYPE_VALUE:
-            if (ui_item) Update_MenuItem_Text(ui_item, item);
-            // Выделение листа без смены навигации
-            if (lb->props.list_box.last_leaf_selected != selected) {
-                int8_t old = lb->props.list_box.last_leaf_selected;
-                lb->props.list_box.last_leaf_selected = selected;
-                if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
-                UI_RenderListBoxItem(lb, selected);
+    // === ПОДТВЕРЖДЕНИЕ: 3 касания на одну область = одно нажатие ===
+    if (now - last_menu_touch_tick >= MENU_ITEM_CONFIRM_TICK) {
+        if (selected == last_menu_touch_item) {
+            // То же самое нажатие — увеличиваем счётчик
+            menu_touch_count++;
+            last_menu_touch_tick = now;
+            
+            if (menu_touch_count >= MENU_ITEM_CONFIRMATIONS) {
+                // Подтверждено — выполняем действие
+                switch (item->type) {
+                    case ITEM_TYPE_VALUE:
+                        if (ui_item) Update_MenuItem_Text(ui_item, item);
+                        // Выделение листа без смены навигации
+                        if (lb->props.list_box.last_leaf_selected != selected) {
+                            int8_t old = lb->props.list_box.last_leaf_selected;
+                            lb->props.list_box.last_leaf_selected = selected;
+                            if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
+                            UI_RenderListBoxItem(lb, selected);
+                        }
+                        Menu_ExecuteSelected(lb, (uint8_t)selected);
+                        break;
+                        
+                    case ITEM_TYPE_ACTION:
+                        // Выделение листа без смены навигации
+                        if (lb->props.list_box.last_leaf_selected != selected) {
+                            int8_t old = lb->props.list_box.last_leaf_selected;
+                            lb->props.list_box.last_leaf_selected = selected;
+                            if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
+                            UI_RenderListBoxItem(lb, selected);
+                        }
+                        Menu_ExecuteSelected(lb, (uint8_t)selected);
+                        break;
+                        
+                    case ITEM_TYPE_SUBMENU:
+                        // SUBMENU не выделяем — переходим в подменю
+                        Menu_ExecuteSelected(lb, (uint8_t)selected);
+                        break;
+                        
+                    default:
+                        break;
+                }
+                // Сброс счётчика
+                menu_touch_count = 0;
+                last_menu_touch_item = -1;
+                return;
             }
-            Menu_ExecuteSelected(lb, (uint8_t)selected);
-            break;
-            
-        case ITEM_TYPE_ACTION:
-            // Выделение листа без смены навигации
-            if (lb->props.list_box.last_leaf_selected != selected) {
-                int8_t old = lb->props.list_box.last_leaf_selected;
-                lb->props.list_box.last_leaf_selected = selected;
-                if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
-                UI_RenderListBoxItem(lb, selected);
-            }
-            Menu_ExecuteSelected(lb, (uint8_t)selected);
-            break;
-            
-        case ITEM_TYPE_SUBMENU:
-            // SUBMENU не выделяем — переходим в подменю
-            Menu_ExecuteSelected(lb, (uint8_t)selected);
-            break;
-            
-        default:
-            break;
+        } else {
+            // Новое нажатие в другой области — сбрасываем, начинаем заново
+            last_menu_touch_item = selected;
+            menu_touch_count = 1;
+            last_menu_touch_tick = now;
+        }
+        return;
     }
 }
 
