@@ -38,6 +38,14 @@ extern void GUI_InvalidateStatusBar(void);
 #include "radio_config_bridge.h"
 void cc1101ApplySettingsFromMenu(void);
 
+/* Таблицы форматирования (локальные, не экспортируются) */
+static const char* mod_str[] = { "ASK", "FSK", "2FSK", "GFSK", "OOK", "4FSK", "MSK" };
+static const int8_t power_dbm[] = { -30, -20, -15, -10, -3, 0, 5, 10 };
+static const char* rxbw_str[] = {
+    "58k", "68k", "81k", "102k", "116k", "135k", "162k", "203k",
+    "232k", "270k", "325k", "406k", "464k", "541k", "650k", "812k"
+};
+
 /* Авто-применение при изменении параметра */
 static void Cc1101_AutoApplyFreq(void)
 {
@@ -495,39 +503,48 @@ static void AdjustValue8(void* ptr, int min, int max, int step, int direction) {
 
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ РЕЖИМА РЕДАКТИРОВАНИЯ ===
 
-/** Форматирует значение в строку с учётом типа параметра */
-static void Format_EditValue(char* buf, size_t buf_size, const char* label, uint16_t val) {
+/** Общая логика форматирования значения по метке */
+static const char* Format_ValueText(const char* label, char* buf, size_t buf_size, uint16_t val) {
     if (strcmp(label, "Freq MHz") == 0) {
-        snprintf(buf, buf_size, "%s: %.2f MHz", label, val / 100.0f);
+        snprintf(buf, buf_size, "%s: %.2f", label, val / 100.0f);
     } else if (strcmp(label, "BitRate") == 0) {
-        snprintf(buf, buf_size, "%s: %.2f kbps", label, val / 100.0f);
+        snprintf(buf, buf_size, "%s: %.2f", label, val / 100.0f);
     } else if (strcmp(label, "Mod") == 0) {
-        static const char* mod_str[] = { "ASK", "FSK", "2FSK", "GFSK", "OOK", "4FSK", "MSK" };
         if (val < 7) {
             snprintf(buf, buf_size, "%s: %s", label, mod_str[val]);
         } else {
             snprintf(buf, buf_size, "%s: %d", label, val);
         }
     } else if (strcmp(label, "Power") == 0) {
-        static const int8_t power_dbm[] = { -30, -20, -15, -10, -3, 0, 5, 10 };
         if (val < 8) {
             snprintf(buf, buf_size, "%s: %d dBm", label, power_dbm[val]);
         } else {
             snprintf(buf, buf_size, "%s: %d", label, val);
         }
     } else if (strcmp(label, "RxBw") == 0) {
-        static const char* rxbw_str[] = {
-            "58k", "68k", "81k", "102k", "116k", "135k", "162k", "203k",
-            "232k", "270k", "325k", "406k", "464k", "541k", "650k", "812k"
-        };
         if (val < 16) {
             snprintf(buf, buf_size, "%s: %s", label, rxbw_str[val]);
         } else {
             snprintf(buf, buf_size, "%s: %d", label, val);
         }
+    } else if (strcmp(label, "BT") == 0 || strcmp(label, "WiFi") == 0 ||
+        strcmp(label, "NTP Auto") == 0 || strcmp(label, "Buzzer") == 0) {
+        snprintf(buf, buf_size, "%s: %s", label, (val ? "On" : "Off"));
+    } else if (strcmp(label, "LED Backlight") == 0) {
+        if (val == 0) {
+            snprintf(buf, buf_size, "%s: Off", label);
+        } else {
+            snprintf(buf, buf_size, "%s: Lvl %d", label, val);
+        }
     } else {
         snprintf(buf, buf_size, "%s: %d", label, val);
     }
+    return buf;
+}
+
+/** Форматирует значение в строку с учётом типа параметра (для режима редактирования) */
+static void Format_EditValue(char* buf, size_t buf_size, const char* label, uint16_t val) {
+    Format_ValueText(label, buf, buf_size, val);
 }
 
 /** Обновляет текст строки редактирования (inline) */
@@ -841,90 +858,28 @@ void Menu_ProcessInput(uint8_t key) {
  *        Так как UI_ListBox_AddItem копирует строку в ui_item->text_content,
  *        нам нужно переформатировать её, если это тип ITEM_TYPE_VALUE.
  */
-    void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
-       if (!ui_item || !menu_item || menu_item->type != ITEM_TYPE_VALUE) return;
+void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
+    if (!ui_item || !menu_item || menu_item->type != ITEM_TYPE_VALUE) return;
 
-       const char* label = menu_item->text;
-       char new_text[64];
-       
-       // Безопасное чтение: копируем в локальную переменную
-       uint16_t val16;
-       uint8_t  val8;
-       
-       if (menu_item->value_size == 1) {
-           memcpy(&val8, menu_item->data.ptr_value, 1);
-       } else {
-           memcpy(&val16, menu_item->data.ptr_value, 2);
-       }
-       
-       int val = menu_item->value_size == 1 ? (int)val8 : (int)val16;
-       
-       // Отладка: выводим все ITEM_TYPE_VALUE
-       printf("UMIT: '%s' size=%d val=%d ptr=%p sprite=%p\n", label, menu_item->value_size, val, menu_item->data.ptr_value, ui_item->sprite);
-
-      // Форматирование для CC1101 Freq (fixed-point MHz × 100)
-      if (strcmp(label, "Freq MHz") == 0) {
-          float freq_mhz = val / 100.0f;
-          snprintf(new_text, sizeof(new_text), "%s: %.2f", label, freq_mhz);
-      }
-      // Форматирование для CC1101 BitRate (fixed-point kbps × 100)
-      else if (strcmp(label, "BitRate") == 0) {
-          float br_kbps = val / 100.0f;
-          snprintf(new_text, sizeof(new_text), "%s: %.2f", label, br_kbps);
-      }
-       // Форматирование для Modulation (индекс 0..6 → название)
-       else if (strcmp(label, "Mod") == 0) {
-           static const char* mod_str[] = {
-               "ASK", "FSK", "2FSK", "GFSK", "OOK", "4FSK", "MSK"
-           };
-           if (val >= 0 && val < 7) {
-               snprintf(new_text, sizeof(new_text), "%s: %s", label, mod_str[val]);
-           } else {
-               snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
-           }
-       }
-      // Форматирование для Power (cc1101PowerIndex — uint8_t, читаем 1 байт)
-      else if (strcmp(label, "Power") == 0) {
-          static const int8_t power_dbm[] = { -30, -20, -15, -10, -3, 0, 5, 10 };
-          if (val < 8) {
-              snprintf(new_text, sizeof(new_text), "%s: %d dBm", label, power_dbm[val]);
-          } else {
-              snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
-          }
-      }
-      // Форматирование для RxBw (индекс 0..15 → kHz из таблицы ESP32)
-      else if (strcmp(label, "RxBw") == 0) {
-          static const char* rxbw_str[] = {
-              "58k", "68k", "81k", "102k", "116k", "135k", "162k", "203k",
-              "232k", "270k", "325k", "406k", "464k", "541k", "650k", "812k"
-          };
-          if (val < 16) {
-              snprintf(new_text, sizeof(new_text), "%s: %s", label, rxbw_str[val]);
-          } else {
-              snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
-          }
-      }
-      // Улучшенное форматирование для разных типов настроек
-      else if (strcmp(label, "BT") == 0 || strcmp(label, "WiFi") == 0 || 
-          strcmp(label, "NTP Auto") == 0 || strcmp(label, "Buzzer") == 0) {
-          
-          snprintf(new_text, sizeof(new_text), "%s: %s", label, (val ? "On" : "Off"));
-      } else if (strcmp(label, "OLED Light") == 0) {
-          snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
-      } else if (strcmp(label, "LED Backlight") == 0) {
-          if (val == 0) {
-              snprintf(new_text, sizeof(new_text), "%s: Off", label);
-          } else {
-              snprintf(new_text, sizeof(new_text), "%s: Lvl %d", label, val);
-          }
-      } else {
-          // Универсальный вариант для Sys, Room, Freq и т.д.
-          snprintf(new_text, sizeof(new_text), "%s: %d", label, val);
-      }
-
-      strncpy(ui_item->text_content, new_text, sizeof(ui_item->text_content) - 1);
-      ui_item->text_content[sizeof(ui_item->text_content) - 1] = '\0';
-  }
+    const char* label = menu_item->text;
+    
+    // Безопасное чтение значения
+    uint16_t val16;
+    uint8_t  val8;
+    
+    if (menu_item->value_size == 1) { memcpy(&val8, menu_item->data.ptr_value, 1);
+    } else { memcpy(&val16, menu_item->data.ptr_value, 2);
+    }
+    
+    uint16_t val = (menu_item->value_size == 1) ? val8 : val16;
+    
+    // Используем общую функцию форматирования
+    char formatted[64];
+    Format_ValueText(label, formatted, sizeof(formatted), val);
+    
+    strncpy(ui_item->text_content, formatted, sizeof(ui_item->text_content) - 1);
+    ui_item->text_content[sizeof(ui_item->text_content) - 1] = '\0';
+}
 
 void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
     if (!current_menu_listbox || !current_menu_items) return;
