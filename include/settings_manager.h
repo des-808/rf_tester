@@ -30,7 +30,8 @@
 
 /* --- Индексы скоростей RS485 --- */
 #define RS485_BAUD_MIN            0U
-#define RS485_BAUD_MAX            7U
+#define RS485_BAUD_MAX            14U
+#define RS485_BAUD_COUNT          (RS485_BAUD_MAX + 1U)
 
 /* --- Индексы полосы пропускания RX CC1101 --- */
 #define CC1101_RXBW_MIN           0U
@@ -46,6 +47,7 @@
 
 /* --- Диапазоны частот CC1101 (fixed-point x100) --- */
 #define CC1101_FREQ_MIN           300U     /* 3.00 МГц */
+#define CC1101_FREQ_MIN           30000U   /* 300.00 МГц */
 #define CC1101_FREQ_MAX           92800U   /* 928.00 МГц */
 
 /* --- Диапазоны битрейта CC1101 (fixed-point x100) --- */

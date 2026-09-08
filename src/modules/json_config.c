@@ -30,7 +30,7 @@ static cJSON* create_default_settings_json(void) {
     cJSON_AddNumberToObject(root, "btn", 1);
     
     /* Общие настройки */
-    cJSON_AddNumberToObject(root, "rs485_baud_index", 4);
+    cJSON_AddNumberToObject(root, "rs485_baud_index", 8);
     cJSON_AddNumberToObject(root, "oled_brightness", 5);
     cJSON_AddBoolToObject(root, "bluetooth_enabled", 0);
     cJSON_AddBoolToObject(root, "wifi_enabled", 0);
@@ -143,7 +143,7 @@ bool JsonToSettings(const char* json, void* settings) {
     s->sys            = get_json_number(root, "sys", 1);
     s->room           = get_json_number(root, "room", 1);
     s->btn            = get_json_number(root, "btn", 1);
-    s->rs485_baud_index   = get_json_number(root, "rs485_baud_index", 4);
+    s->rs485_baud_index   = get_json_number(root, "rs485_baud_index", 8);
     s->oled_brightness    = get_json_number(root, "oled_brightness", 5);
     s->bluetooth_enabled  = get_json_bool(root, "bluetooth_enabled", 0);
     s->wifi_enabled       = get_json_bool(root, "wifi_enabled", 0);

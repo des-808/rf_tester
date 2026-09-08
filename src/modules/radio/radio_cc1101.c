@@ -925,6 +925,15 @@ int CC1101_SetConfig(const CC1101_Config_t* config)
  */
 int CC1101_SetFrequency(uint32_t frequency_hz)
 {
+    if ((frequency_hz < CC1101_FREQ_MIN_HZ) ||
+        (frequency_hz > CC1101_FREQ_MAX_HZ) ||
+        ((frequency_hz > CC1101_FREQ_BAND1_MAX_HZ) &&
+         (frequency_hz < CC1101_FREQ_BAND2_MIN_HZ)) ||
+        ((frequency_hz > CC1101_FREQ_BAND2_MAX_HZ) &&
+         (frequency_hz < CC1101_FREQ_BAND3_MIN_HZ))) {
+        return -1;
+    }
+
     CC1101_Idle();
 
     /* Расчёт по формуле из datasheet: FSCHZ = FREQ / (26 MHz / 2^19) */

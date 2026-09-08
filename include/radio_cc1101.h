@@ -122,6 +122,13 @@ typedef struct {
     uint8_t chan;               /* Номер канала (0 = channel off) */
 } CC1101_Config_t;
 
+#define CC1101_FREQ_MIN_HZ          300000000UL
+#define CC1101_FREQ_BAND1_MAX_HZ    348000000UL
+#define CC1101_FREQ_BAND2_MIN_HZ    387000000UL
+#define CC1101_FREQ_BAND2_MAX_HZ    464000000UL
+#define CC1101_FREQ_BAND3_MIN_HZ    779000000UL
+#define CC1101_FREQ_MAX_HZ          928000000UL
+
 /* ======================================================================== */
 /*  Структура принятого пакета                                              */
 /* ======================================================================== */

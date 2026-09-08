@@ -24,7 +24,7 @@ extern uint8_t  oledBrightness;
 extern int      bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, vibroOnOff;
 
 /* CC1101 */
-extern uint16_t cc1101FreqFixed;
+extern uint32_t cc1101FreqFixed;
 extern uint16_t cc1101BitRateFixed;
 extern uint8_t  cc1101RxBwIndex;
 extern uint8_t  cc1101Modulation;
@@ -68,7 +68,7 @@ static void settings_set_defaults(Settings_t* s) {
     s->btn       = 1;
 
     /* Общие настройки */
-    s->rs485_baud_index    = 4;   /* Дефолтная скорость RS485 */
+    s->rs485_baud_index    = 8;   /* 19200 бод */
     s->oled_brightness     = 5;   /* Половина яркости */
     s->bluetooth_enabled   = 0;
     s->wifi_enabled        = 0;
@@ -99,6 +99,8 @@ static bool settings_validate(const Settings_t* s) {
     if (s->ntp_sync_enabled > 1) return false;
     if (s->buzzer_enabled > 1) return false;
     if (s->cc1101_freq_fixed < CC1101_FREQ_MIN || s->cc1101_freq_fixed > CC1101_FREQ_MAX) return false;
+    if ((s->cc1101_freq_fixed > 34800U && s->cc1101_freq_fixed < 38700U) ||
+        (s->cc1101_freq_fixed > 46400U && s->cc1101_freq_fixed < 77900U)) return false;
     if (s->cc1101_bitrate_fixed < CC1101_BITRATE_MIN || s->cc1101_bitrate_fixed > CC1101_BITRATE_MAX) return false;
     if (s->cc1101_rxbw_index > CC1101_RXBW_MAX) return false;
     if (s->cc1101_modulation > CC1101_MOD_MSK) return false;
@@ -120,7 +122,7 @@ void SettingsManager_Apply(void) {
     buzzerOnOff            = g_settings.buzzer_enabled;
     vibroOnOff             = g_settings.vibro_enabled;
 
-    cc1101FreqFixed        = (uint16_t)g_settings.cc1101_freq_fixed;
+    cc1101FreqFixed        = g_settings.cc1101_freq_fixed;
     cc1101BitRateFixed     = (uint16_t)g_settings.cc1101_bitrate_fixed;
     cc1101RxBwIndex        = g_settings.cc1101_rxbw_index;
     cc1101PowerIndex       = g_settings.cc1101_power_index;

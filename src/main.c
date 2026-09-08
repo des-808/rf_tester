@@ -47,6 +47,7 @@
 #include "bmi160_h7.h"
 #include "ds3231.h"
 #include "menu.h"
+#include "menu_touch.h"
 
 #include "font.h"
 
@@ -390,7 +391,26 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
 
          MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
          if (key_short != KEY_NONE) {
+           /* После отпускания следующая команда всегда начинается с точного шага. */
+           menu_long_press_active = 0;
+           menu_hold_multiplier = 1;
            Menu_ProcessInput(key_short);
+         }
+         MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
+         if (key_hold != KEY_NONE) {
+           menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_hold);
+           menu_long_press_active = 1;
+           Menu_ProcessInput(key_hold);
+           menu_long_press_active = 0;
+           menu_hold_multiplier = 1;
+         }
+         MenuKey key_repeat = Buttons_GetKeyRepeat(&btn_s);
+         if (key_repeat != KEY_NONE) {
+           menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_repeat);
+           menu_long_press_active = 1;
+           Menu_ProcessInput(key_repeat);
+           menu_long_press_active = 0;
+           menu_hold_multiplier = 1;
          }
       }
 
@@ -421,21 +441,23 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
                Menu_ProcessTouch(last_touch_x, last_touch_y);
               /* Сброс таймаута: палец всё ещё на экране */
               last_touch_tick = HAL_GetTick();
-          } else {
-              /* Нет событий тача > 150мс — считаем что палец отпущен */
-              if (last_touch_tick != 0) {
-                  uint32_t elapsed = HAL_GetTick() - last_touch_tick;
-                  if (elapsed > 150) {
-                      last_touch_tick = 0;
-                      /* Сброс drag-состояния во всех ListBox */
-                      extern UIElement_t* current_menu_listbox;
-                      if (current_menu_listbox) {
-                          current_menu_listbox->touch_state.drag_active = false;
-                          current_menu_listbox->touch_state.drag_last_y = -1;
-                      }
-                  }
-              }
-          }
+           } else {
+               /* Нет событий тача > 150мс — считаем что палец отпущен */
+               if (last_touch_tick != 0) {
+                   uint32_t elapsed = HAL_GetTick() - last_touch_tick;
+                   if (elapsed > 150) {
+                       last_touch_tick = 0;
+                       /* Сброс drag-состояния во всех ListBox */
+                       extern UIElement_t* current_menu_listbox;
+                       if (current_menu_listbox) {
+                           current_menu_listbox->touch_state.drag_active = false;
+                           current_menu_listbox->touch_state.drag_last_y = -1;
+                       }
+                       /* Обработка отпускания пальца */
+                       Menu_ProcessTouchRelease();
+                   }
+               }
+           }
       } else {
           /* В режиме блокировки — очищаем тач чтобы не было случайных срабатываний */
           if (ft6336u.has_touch) {

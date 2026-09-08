@@ -37,7 +37,7 @@ bool rs485toBt = true;
 // Переменные для меню (синхронизированы с ESP32 defaults)
 uint8_t rs485BaudIndex = 0;
 uint8_t oledBrightness = 5;
-uint16_t cc1101FreqFixed   = 43396;  /* 433.96 МГц */
+uint32_t cc1101FreqFixed   = 43396;  /* 433.96 МГц */
 uint16_t cc1101BitRateFixed = 960;   /* 9.60 kbps (1.2..600) */
 uint8_t cc1101RxBwIndex    = 11;     /* 406 kHz (0..15) */
 uint8_t cc1101Modulation   = 1;      /* 0=GFSK, 1=OOK */

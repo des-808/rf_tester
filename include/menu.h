@@ -6,6 +6,22 @@
 
 #include "buttons.h"
 
+/* Шаги редактирования CC1101 хранятся в сотых долях единицы:
+ * частота: 1 = 10 kHz, битрейт: 1 = 100 baud. */
+#define CC1101_FREQ_FINE_STEP       1U
+#define CC1101_FREQ_COARSE_STEP    10U
+#define CC1101_FREQ_ACCEL_STEP    100U
+#define CC1101_BITRATE_FINE_STEP   1U
+#define CC1101_BITRATE_COARSE_STEP 10U
+#define CC1101_BITRATE_ACCEL_STEP 100U
+
+#define CC1101_FREQ_BAND1_MIN_FIXED 30000UL
+#define CC1101_FREQ_BAND1_MAX_FIXED 34800UL
+#define CC1101_FREQ_BAND2_MIN_FIXED 38700UL
+#define CC1101_FREQ_BAND2_MAX_FIXED 46400UL
+#define CC1101_FREQ_BAND3_MIN_FIXED 77900UL
+#define CC1101_FREQ_BAND3_MAX_FIXED 92800UL
+
 // === ТИПЫ ПУНКТОВ МЕНЮ ===
 typedef enum {
     ITEM_TYPE_INFO,        // Просто текст (например "Transmitter")
@@ -80,6 +96,10 @@ extern uint8_t main_menu_count;
 
 /* Флаг длинного нажатия (1 = удерживали Enter 5+ циклов) */
 extern uint8_t menu_long_press_active;
+extern uint8_t menu_hold_multiplier;
+
+/* Блокировка тача после перехода между меню */
+extern uint32_t touch_lock_tick;
 
 // Стек навигации
 extern MenuState_t menu_stack[MAX_MENU_DEPTH];
@@ -94,12 +114,26 @@ void Menu_PopMenu(UIElement_t* listbox);                // Выход на ур�
 void Menu_Init(void);
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count);
 void Menu_ProcessInput(uint8_t key);
-void Menu_ProcessTouch(uint16_t tx, uint16_t ty);
 
 void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item);
 
-// === РЕЖИМ РЕДАКТИРОВАНИЯ ЗНАЧЕНИЙ ===
-void Menu_EnterEditMode(MenuItem_t* item);
-void Menu_ExitEditMode(void);
+/* Хелперы для menu_touch.c */
+void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index);
+void Menu_EditMode_Enter(MenuItem_t* item, int selected_index);
+void Menu_EditMode_Exit(void);
+void Menu_Update_EditDisplay(void);
+void Menu_EditMode_PreviewValue(void);
+
+/* Переменные режима редактирования (для menu_touch.c) */
+extern uint8_t  edit_mode_active;
+extern uint32_t edit_temp_value;
+extern uint8_t  edit_value_size;
+extern uint32_t edit_original_value;
+extern uint8_t  edit_step;
+extern MenuItem_t* edit_source_item;
+extern int8_t   edit_selected_index;
+extern char     edit_original_text[];
+
+uint32_t Menu_NormalizeFrequency(uint32_t value, int8_t direction);
 
 #endif

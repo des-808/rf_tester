@@ -24,7 +24,10 @@ extern void rs485ToggleBluetoothMode();
 // Для настроек
 extern uint8_t rs485BaudIndex;
 extern uint8_t oledBrightness;
+extern uint32_t cc1101FreqFixed;
+extern uint16_t cc1101BitRateFixed;
 extern int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, vibroOnOff;
+extern bool rs485toBt;
 
 uint8_t lcd_backlight_level = 5; // Локальная копия для меню (0-10)
 extern void toggleWiFi();
@@ -45,6 +48,24 @@ static const char* rxbw_str[] = {
     "58k", "68k", "81k", "102k", "116k", "135k", "162k", "203k",
     "232k", "270k", "325k", "406k", "464k", "541k", "650k", "812k"
 };
+
+static const uint32_t rs485_baud_rates[] = {
+    110U, 300U, 600U, 1200U, 2400U, 4800U, 9600U, 14400U,
+    19200U, 38400U, 56000U, 57600U, 115200U, 128000U, 256000U
+};
+
+static void RS485_Baud_Update_Callback(void)
+{
+    Settings_t* settings = SettingsManager_GetMutable();
+    if (!settings) return;
+
+    if (rs485BaudIndex >= RS485_BAUD_COUNT) {
+        rs485BaudIndex = RS485_BAUD_COUNT - 1U;
+    }
+    settings->rs485_baud_index = rs485BaudIndex;
+    markSettingDirty();
+    saveAllSettings();
+}
 
 /* Авто-применение при изменении параметра */
 static void Cc1101_AutoApplyFreq(void)
@@ -119,14 +140,15 @@ MenuState_t menu_stack[MAX_MENU_DEPTH];
 int menu_stack_top = -1;  // -1 = стек пуст (находимся в главном меню)
 
 // === РЕЖИМ РЕДАКТИРОВАНИЯ ЗНАЧЕНИЙ (INLINE) ===
-static uint8_t  edit_mode_active = 0;
-static uint16_t edit_temp_value = 0;      // Временное значение для редактирования
-static uint8_t  edit_value_size = 0;      // 1=uint8_t, 2=uint16_t
-static uint16_t edit_original_value = 0;  // Оригинальное значение (для отмены)
-static uint8_t  edit_step = 1;            // Шаг изменения
-static MenuItem_t* edit_source_item = NULL; // Исходный пункт меню
-static int8_t   edit_selected_index = -1;  // Индекс редактируемой строки в ListBox
-static char     edit_original_text[64];   // Оригинальный текст строки
+uint8_t  edit_mode_active = 0;
+uint32_t edit_temp_value = 0;      // Временное значение для редактирования
+uint8_t  edit_value_size = 0;      // 1=uint8_t, 2=uint16_t
+uint32_t edit_original_value = 0;  // Оригинальное значение (для отмены)
+uint8_t  edit_step = 1;            // Шаг изменения
+uint8_t menu_hold_multiplier = 1;
+MenuItem_t* edit_source_item = NULL; // Исходный пункт меню
+int8_t   edit_selected_index = -1;  // Индекс редактируемой строки в ListBox
+char     edit_original_text[64];   // Оригинальный текст строки
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Пример простой иконки 16x16 (синий квадрат для примера)
@@ -221,6 +243,20 @@ static void Bluetooth_Update_Callback() {
     GUI_InvalidateStatusBar();
 }
 
+static void RS485ToBt_Update_Callback() {
+    GUI_InvalidateStatusBar();
+}
+
+static void WiFi_Update_Callback() {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->wifi_enabled = wifiEnabled;
+        markSettingDirty();
+        saveAllSettings();
+    }
+    GUI_InvalidateStatusBar();
+}
+
 static void NTP_Update_Callback() {
     Settings_t* s = SettingsManager_GetMutable();
     if (s) {
@@ -295,8 +331,8 @@ static MenuItem_t getCallMenu[] = {
 
 // --- Подменю CC1101 ---
 static MenuItem_t cc1101SubMenu[] = {
-    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyFreq, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyBitrate, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyFreq, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyBitrate, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyRxBw, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
     { "Mod", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyMod, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyPower, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
@@ -311,8 +347,8 @@ static MenuItem_t cc1101Menu[] = {
 };
 
 static MenuItem_t nrf24l01SubMenu[] = {
-    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
     { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
@@ -320,8 +356,8 @@ static MenuItem_t nrf24l01SubMenu[] = {
 };
 
 static MenuItem_t sx1262SubMenu[] = {
-    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
     { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
@@ -330,8 +366,8 @@ static MenuItem_t sx1262SubMenu[] = {
 
 
 static MenuItem_t irda_SubMenu[] = {
-    { "Freq", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, 10, 2 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, 10, 2 },
+    { "Freq", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
     { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
     { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
     { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
@@ -346,10 +382,10 @@ static MenuItem_t irda_Menu[] = {
 
 // --- Подменю настроек ---
 static MenuItem_t settingsSubMenu[] = {
-    { " RS485", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &rs485BaudIndex }, 0, 7, 1, 0 },
+    { " RS485", 0, ITEM_TYPE_VALUE, 0, RS485_Baud_Update_Callback, { .ptr_value = &rs485BaudIndex }, 0, RS485_BAUD_MAX, 1, 1 },
     { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, Bluetooth_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0 },
-    { " RS485_To_Bt", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = rs485ToggleBluetoothMode } },
-    { " WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = toggleWiFi } },
+    { " RS485_To_Bt", 0, ITEM_TYPE_VALUE, 0, RS485ToBt_Update_Callback, { .ptr_value = &rs485toBt }, 0, 1, 1, 1 },
+    { " WiFi", 0, ITEM_TYPE_VALUE, 0, WiFi_Update_Callback, { .ptr_value = &wifiEnabled }, 0, 1, 1, 0 },
     { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, NTP_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0 },
     { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = manualSyncTimeWithNTP } },
     { " Buzzer", 0, ITEM_TYPE_VALUE, 0, Buzzer_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0 },
@@ -382,6 +418,9 @@ uint8_t main_menu_count = sizeof(mainMenu) / sizeof(mainMenu[0]);
 
 /* Флаг длинного нажатия (устанавливается в Menu_ProcessInput) */
 uint8_t menu_long_press_active = 0;
+
+/* Блокировка тача после перехода между меню (мс) */
+uint32_t touch_lock_tick = 0;
 
 // === РЕАЛИЗАЦИЯ ФУНКЦИЙ ===
 
@@ -501,54 +540,78 @@ static void AdjustValue8(void* ptr, int min, int max, int step, int direction) {
     *(uint8_t*)ptr = val;
 }
 
+uint32_t Menu_NormalizeFrequency(uint32_t value, int8_t direction) {
+    if (value < CC1101_FREQ_BAND1_MIN_FIXED) return CC1101_FREQ_BAND1_MIN_FIXED;
+    if (value <= CC1101_FREQ_BAND1_MAX_FIXED) return value;
+    if (value < CC1101_FREQ_BAND2_MIN_FIXED) {
+        return direction > 0 ? CC1101_FREQ_BAND2_MIN_FIXED : CC1101_FREQ_BAND1_MAX_FIXED;
+    }
+    if (value <= CC1101_FREQ_BAND2_MAX_FIXED) return value;
+    if (value < CC1101_FREQ_BAND3_MIN_FIXED) {
+        return direction > 0 ? CC1101_FREQ_BAND3_MIN_FIXED : CC1101_FREQ_BAND2_MAX_FIXED;
+    }
+    if (value <= CC1101_FREQ_BAND3_MAX_FIXED) return value;
+    return CC1101_FREQ_BAND3_MAX_FIXED;
+}
+
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ РЕЖИМА РЕДАКТИРОВАНИЯ ===
 
 /** Общая логика форматирования значения по метке */
-static const char* Format_ValueText(const char* label, char* buf, size_t buf_size, uint16_t val) {
-    if (strcmp(label, "Freq MHz") == 0) {
-        snprintf(buf, buf_size, "%s: %.2f", label, val / 100.0f);
+static const char* Format_ValueText(const char* label, char* buf, size_t buf_size, uint32_t val) {
+    if (strcmp(label, "Freq MHz") == 0 || strcmp(label, "Freq") == 0) {
+        snprintf(buf, buf_size, "%s: %u.%02u", label,
+                 (unsigned)(val / 100U), (unsigned)(val % 100U));
     } else if (strcmp(label, "BitRate") == 0) {
-        snprintf(buf, buf_size, "%s: %.2f", label, val / 100.0f);
+        snprintf(buf, buf_size, "%s: %u.%02u", label,
+                 (unsigned)(val / 100U), (unsigned)(val % 100U));
+    } else if (strcmp(label, " RS485") == 0) {
+        if (val < RS485_BAUD_COUNT) {
+            snprintf(buf, buf_size, "%s: %lu", label,
+                     (unsigned long)rs485_baud_rates[val]);
+        } else {
+            snprintf(buf, buf_size, "%s: invalid", label);
+        }
     } else if (strcmp(label, "Mod") == 0) {
         if (val < 7) {
             snprintf(buf, buf_size, "%s: %s", label, mod_str[val]);
         } else {
-            snprintf(buf, buf_size, "%s: %d", label, val);
+            snprintf(buf, buf_size, "%s: %lu", label, (unsigned long)val);
         }
     } else if (strcmp(label, "Power") == 0) {
         if (val < 8) {
             snprintf(buf, buf_size, "%s: %d dBm", label, power_dbm[val]);
         } else {
-            snprintf(buf, buf_size, "%s: %d", label, val);
+            snprintf(buf, buf_size, "%s: %lu", label, (unsigned long)val);
         }
     } else if (strcmp(label, "RxBw") == 0) {
         if (val < 16) {
             snprintf(buf, buf_size, "%s: %s", label, rxbw_str[val]);
         } else {
-            snprintf(buf, buf_size, "%s: %d", label, val);
+            snprintf(buf, buf_size, "%s: %lu", label, (unsigned long)val);
         }
-    } else if (strcmp(label, "BT") == 0 || strcmp(label, "WiFi") == 0 ||
-        strcmp(label, "NTP Auto") == 0 || strcmp(label, "Buzzer") == 0) {
+    } else if (strcmp(label, " Bluetooth") == 0 || strcmp(label, " RS485_To_Bt") == 0 ||
+        strcmp(label, " WiFi") == 0 || strcmp(label, " NTP Auto Sync") == 0 ||
+        strcmp(label, " Buzzer") == 0 || strcmp(label, " Vibro") == 0) {
         snprintf(buf, buf_size, "%s: %s", label, (val ? "On" : "Off"));
     } else if (strcmp(label, "LED Backlight") == 0) {
         if (val == 0) {
             snprintf(buf, buf_size, "%s: Off", label);
         } else {
-            snprintf(buf, buf_size, "%s: Lvl %d", label, val);
+            snprintf(buf, buf_size, "%s: Lvl %lu", label, (unsigned long)val);
         }
     } else {
-        snprintf(buf, buf_size, "%s: %d", label, val);
+        snprintf(buf, buf_size, "%s: %lu", label, (unsigned long)val);
     }
     return buf;
 }
 
 /** Форматирует значение в строку с учётом типа параметра (для режима редактирования) */
-static void Format_EditValue(char* buf, size_t buf_size, const char* label, uint16_t val) {
+static void Format_EditValue(char* buf, size_t buf_size, const char* label, uint32_t val) {
     Format_ValueText(label, buf, buf_size, val);
 }
 
 /** Обновляет текст строки редактирования (inline) */
-static void Update_EditDisplay(void) {
+void Menu_Update_EditDisplay(void) {
     if (edit_selected_index < 0 || !current_menu_listbox) return;
     if ((uint8_t)edit_selected_index >= current_menu_listbox->children_count) return;
     
@@ -565,8 +628,15 @@ static void Update_EditDisplay(void) {
     UI_RenderListBoxItem(current_menu_listbox, (uint8_t)edit_selected_index);
 }
 
+void Menu_EditMode_PreviewValue(void) {
+    if (!edit_mode_active || !edit_source_item) return;
+    if (strcmp(edit_source_item->text, " LED Backlight") == 0) {
+        LCD_Backlight_SetLevel((uint8_t)edit_temp_value);
+    }
+}
+
 /** Inline: войти в режим редактирования значения */
-static void EditMode_Enter(MenuItem_t* item, int selected_index) {
+void Menu_EditMode_Enter(MenuItem_t* item, int selected_index) {
     if (!current_menu_listbox || selected_index < 0) return;
     if ((uint8_t)selected_index >= current_menu_listbox->children_count) return;
     
@@ -581,6 +651,8 @@ static void EditMode_Enter(MenuItem_t* item, int selected_index) {
         uint8_t v;
         memcpy(&v, item->data.ptr_value, 1);
         edit_original_value = v;
+    } else if (edit_value_size == 4) {
+        memcpy(&edit_original_value, item->data.ptr_value, 4);
     } else {
         memcpy(&edit_original_value, item->data.ptr_value, 2);
     }
@@ -599,22 +671,21 @@ static void EditMode_Enter(MenuItem_t* item, int selected_index) {
     edit_mode_active = 1;
     
     // Обновляем текст строки на редактируемое значение
-    Update_EditDisplay();
+    Menu_Update_EditDisplay();
     // Нижняя панель уже существует — рисовать не нужно
 }
 
 /** Inline: выйти из режима редактирования */
-static void EditMode_Exit(void) {
+void Menu_EditMode_Exit(void) {
     if (!edit_mode_active) return;
     edit_mode_active = 0;
     
-    // Восстанавливаем оригинальный текст строки
+    // Показываем фактическое значение после сохранения или отмены
     if (edit_selected_index >= 0 && current_menu_listbox) {
         if ((uint8_t)edit_selected_index < current_menu_listbox->children_count) {
             UIElement_t* ui_item = (UIElement_t*)current_menu_listbox->children[edit_selected_index];
             if (ui_item) {
-                strncpy(ui_item->text_content, edit_original_text, sizeof(ui_item->text_content) - 1);
-                ui_item->text_content[sizeof(ui_item->text_content) - 1] = '\0';
+                Update_MenuItem_Text(ui_item, edit_source_item);
                 UI_RenderListBoxItem(current_menu_listbox, (uint8_t)edit_selected_index);
             }
         }
@@ -628,7 +699,7 @@ static void EditMode_Exit(void) {
  * @brief Выполняет действие для выбранного пункта меню.
  * Вызывается как из Menu_ProcessInput (по кнопкам), так и из Menu_ProcessTouch.
  */
-static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index) 
+void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index) 
 {
     if (!listbox || !current_menu_items) return;
     if (selected_index >= current_menu_count) return;
@@ -691,7 +762,7 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
                 }
             } else {
                 /* Не-булево → входим в inline-режим редактирования */
-                EditMode_Enter(item, selected_index);
+                Menu_EditMode_Enter(item, selected_index);
             }
             break;
         }
@@ -703,6 +774,8 @@ static void Menu_ExecuteSelected(UIElement_t* listbox, uint8_t selected_index)
                 
                 // Сохраняем текущее меню на стек и переходим в подменю
                 Menu_PushMenu(item->data.submenu_items, item->data_count);
+                // Блокируем тач на 300мс после перехода
+                touch_lock_tick = HAL_GetTick();
             }
             break;
 
@@ -717,23 +790,41 @@ void Menu_ProcessInput(uint8_t key) {
 
     /* ===== РЕЖИМ РЕДАКТИРОВАНИЯ ЗНАЧЕНИЯ ===== */
     if (edit_mode_active && edit_source_item) {
+        uint16_t adjustment_step = edit_step;
+        if (menu_long_press_active &&
+            (strcmp(edit_source_item->text, "Freq MHz") == 0 ||
+             strcmp(edit_source_item->text, "Freq") == 0 ||
+             strcmp(edit_source_item->text, "BitRate") == 0)) {
+            adjustment_step = (strcmp(edit_source_item->text, "Freq MHz") == 0 ||
+                               strcmp(edit_source_item->text, "Freq") == 0) ?
+                              CC1101_FREQ_COARSE_STEP : CC1101_BITRATE_COARSE_STEP;
+            if (menu_hold_multiplier > 1) {
+                adjustment_step = (strcmp(edit_source_item->text, "Freq MHz") == 0 ||
+                                   strcmp(edit_source_item->text, "Freq") == 0) ?
+                                  CC1101_FREQ_ACCEL_STEP : CC1101_BITRATE_ACCEL_STEP;
+            }
+        }
         switch (key) {
             case KEY_UP: {
                 /* Увеличиваем значение */
                 if (edit_value_size == 1) {
                     uint8_t v = (uint8_t)edit_temp_value;
-                    v += edit_step;
+                    v += (uint8_t)adjustment_step;
                     if (v > (uint8_t)edit_source_item->value_limits.max_val) {
                         v = (uint8_t)edit_source_item->value_limits.min_val;
                     }
                     edit_temp_value = v;
                 } else {
-                    edit_temp_value += edit_step;
-                    if (edit_temp_value > (uint16_t)edit_source_item->value_limits.max_val) {
-                        edit_temp_value = (uint16_t)edit_source_item->value_limits.min_val;
+                    edit_temp_value += adjustment_step;
+                    if (edit_temp_value > (uint32_t)edit_source_item->value_limits.max_val) {
+                        edit_temp_value = (uint32_t)edit_source_item->value_limits.min_val;
                     }
                 }
-                Update_EditDisplay();
+                if (edit_value_size == 4) {
+                    edit_temp_value = Menu_NormalizeFrequency(edit_temp_value, 1);
+                }
+                Menu_EditMode_PreviewValue();
+                Menu_Update_EditDisplay();
                 Buzzer_PlayTone(800, 30);
                 break;
             }
@@ -741,20 +832,23 @@ void Menu_ProcessInput(uint8_t key) {
                 /* Уменьшаем значение (через signed для корректной проверки min) */
                 if (edit_value_size == 1) {
                     int8_t v = (int8_t)edit_temp_value;
-                    v -= edit_step;
+                    v -= (int16_t)adjustment_step;
                     if (v < edit_source_item->value_limits.min_val) {
                         v = (int8_t)edit_source_item->value_limits.max_val;
                     }
                     edit_temp_value = (uint16_t)v;
                 } else {
-                    int16_t v = (int16_t)edit_temp_value;
-                    v -= edit_step;
+                    int32_t v = (int32_t)edit_temp_value - adjustment_step;
                     if (v < edit_source_item->value_limits.min_val) {
-                        v = (int16_t)edit_source_item->value_limits.max_val;
+                        v = edit_source_item->value_limits.max_val;
                     }
-                    edit_temp_value = (uint16_t)v;
+                    edit_temp_value = (uint32_t)v;
                 }
-                Update_EditDisplay();
+                if (edit_value_size == 4) {
+                    edit_temp_value = Menu_NormalizeFrequency(edit_temp_value, -1);
+                }
+                Menu_EditMode_PreviewValue();
+                Menu_Update_EditDisplay();
                 Buzzer_PlayTone(800, 30);
                 break;
             }
@@ -762,6 +856,8 @@ void Menu_ProcessInput(uint8_t key) {
                 /* Сохраняем значение */
                 if (edit_value_size == 1) {
                     *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_temp_value;
+                } else if (edit_value_size == 4) {
+                    *(uint32_t*)edit_source_item->data.ptr_value = edit_temp_value;
                 } else {
                     *(uint16_t*)edit_source_item->data.ptr_value = edit_temp_value;
                 }
@@ -770,18 +866,22 @@ void Menu_ProcessInput(uint8_t key) {
                     edit_source_item->on_value_changed();
                 }
                 Buzzer_PlayTone(1000, 50);
-                EditMode_Exit();
+                Menu_EditMode_Exit();
                 break;
             }
             case KEY_CANCEL: {
                 /* Отменяем — восстанавливаем оригинальное значение */
                 if (edit_value_size == 1) {
                     *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_original_value;
+                } else if (edit_value_size == 4) {
+                    *(uint32_t*)edit_source_item->data.ptr_value = edit_original_value;
                 } else {
                     *(uint16_t*)edit_source_item->data.ptr_value = edit_original_value;
                 }
+                edit_temp_value = edit_original_value;
+                Menu_EditMode_PreviewValue();
                 Buzzer_PlayTone(400, 50);
-                EditMode_Exit();
+                Menu_EditMode_Exit();
                 break;
             }
         }
@@ -865,280 +965,25 @@ void Update_MenuItem_Text(UIElement_t* ui_item, MenuItem_t* menu_item) {
     
     // Безопасное чтение значения
     uint16_t val16;
+    uint32_t val32;
     uint8_t  val8;
     
-    if (menu_item->value_size == 1) { memcpy(&val8, menu_item->data.ptr_value, 1);
-    } else { memcpy(&val16, menu_item->data.ptr_value, 2);
+    if (menu_item->value_size == 1) {
+        memcpy(&val8, menu_item->data.ptr_value, 1);
+        val32 = val8;
+    } else if (menu_item->value_size == 4) {
+        memcpy(&val32, menu_item->data.ptr_value, 4);
+    } else {
+        memcpy(&val16, menu_item->data.ptr_value, 2);
+        val32 = val16;
     }
-    
-    uint16_t val = (menu_item->value_size == 1) ? val8 : val16;
     
     // Используем общую функцию форматирования
     char formatted[64];
-    Format_ValueText(label, formatted, sizeof(formatted), val);
+    Format_ValueText(label, formatted, sizeof(formatted), val32);
     
     strncpy(ui_item->text_content, formatted, sizeof(ui_item->text_content) - 1);
     ui_item->text_content[sizeof(ui_item->text_content) - 1] = '\0';
-}
-
-void Menu_ProcessTouch(uint16_t tx, uint16_t ty) {
-    if (!current_menu_listbox || !current_menu_items) return;
-    UIElement_t* lb = current_menu_listbox;
-
-    if (lb->touch_state.drag_active) return;
-
-    /* ===== НИЖНЯЯ ПАНЕЛЬ КНОПОК (динамический расчёт + debounce с подтверждением) ===== */
-    static int8_t  last_confirmed_btn = -1;
-    static uint8_t  confirm_count    = 0;
-    static uint32_t last_btn_press_tick = 0;
-    #define BOTTOM_BAR_CONFIRMATIONS  3
-    #define BOTTOM_BAR_CONFIRM_TICK   80  // мс между подтверждениями
-
-    int8_t btn_idx = GUI_GetBottomBarTouch(tx, ty);
-    uint32_t now = HAL_GetTick();
-
-    if (btn_idx >= 0) {
-        // Та же кнопка — считаем подтверждение
-        if (btn_idx == last_confirmed_btn) {
-            if (now - last_btn_press_tick >= BOTTOM_BAR_CONFIRM_TICK) {
-                confirm_count++;
-                last_btn_press_tick = now;
-                if (confirm_count >= BOTTOM_BAR_CONFIRMATIONS) {
-                    // Подтверждено — срабатываем
-                    switch (btn_idx) {
-                        case 0: // Cancel — выход из подменю
-                            Menu_PopMenu(lb);
-                            if (buzzerOnOff) Buzzer_PlayTone(400, 50);
-                            if (vibroOnOff) Vibrator_Pulse(30);
-                            break;
-                        case 1: // Up — вверх по меню
-                            if (lb->props.list_box.selected_index > 0) {
-                                uint8_t old_idx = lb->props.list_box.selected_index;
-                                lb->props.list_box.selected_index--;
-                                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
-                                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
-                                uint16_t item_h = lb->font->char_height + pad;
-                                uint8_t visible_items = lb->h / item_h;
-                                if (visible_items == 0) visible_items = 1;
-                                if (lb->props.list_box.selected_index < (int16_t)lb->props.list_box.scroll_offset) {
-                                    lb->props.list_box.scroll_offset = (uint8_t)lb->props.list_box.selected_index;
-                                }
-                                UI_RenderListBoxItem(lb, old_idx);
-                                UI_RenderListBoxItem(lb, (uint8_t)lb->props.list_box.selected_index);
-                            }
-                            if (buzzerOnOff) Buzzer_PlayTone(800, 30);
-                            if (vibroOnOff) Vibrator_Pulse(30);
-                            break;
-                        case 2: // Down — вниз по меню
-                            if (lb->props.list_box.selected_index < (int16_t)current_menu_count - 1) {
-                                uint8_t old_idx = lb->props.list_box.selected_index;
-                                lb->props.list_box.selected_index++;
-                                lb->props.list_box.last_leaf_selected = lb->props.list_box.selected_index;
-                                uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
-                                uint16_t item_h = lb->font->char_height + pad;
-                                uint8_t visible_items = lb->h / item_h;
-                                if (visible_items == 0) visible_items = 1;
-                                if (lb->props.list_box.selected_index >= (int16_t)(lb->props.list_box.scroll_offset + visible_items)) {
-                                    lb->props.list_box.scroll_offset = (uint8_t)(lb->props.list_box.selected_index - visible_items + 1);
-                                }
-                                UI_RenderListBoxItem(lb, old_idx);
-                                UI_RenderListBoxItem(lb, (uint8_t)lb->props.list_box.selected_index);
-                            }
-                            if (buzzerOnOff) Buzzer_PlayTone(800, 30);
-                            if (vibroOnOff) Vibrator_Pulse(30);
-                            break;
-                        case 3: // Enter — выбрать/открыть пункт
-                            {
-                            uint8_t idx = (uint8_t)lb->props.list_box.selected_index;
-                            if (idx < current_menu_count) {
-                                Menu_ExecuteSelected(lb, idx);
-                                if (buzzerOnOff) Buzzer_PlayTone(1000, 50);
-                                if (vibroOnOff) Vibrator_Pulse(30);
-                            }
-                            }
-                            break;
-                    }
-                    // Сброс счётчика
-                    confirm_count = 0;
-                    last_confirmed_btn = -1;
-                    return;
-                }
-            }
-        } else {
-            // Другая кнопка — сбрасываем счётчик, начинаем заново
-            last_confirmed_btn = btn_idx;
-            confirm_count = 1;
-            last_btn_press_tick = now;
-        }
-        return;
-    }
-    /* ===== КОНЕЦ НИЖНЕЙ ПАНЕЛИ ===== */
-
-    /* ===== ПОДТВЕРЖДЕНИЕ КАСАНИЯ ЭЛЕМЕНТОВ МЕНЮ (debounce) ===== */
-    static int8_t  last_menu_touch_item = -1;
-    static uint8_t menu_touch_count = 0;
-    static uint32_t last_menu_touch_tick = 0;
-    #define MENU_ITEM_CONFIRMATIONS  3
-    #define MENU_ITEM_CONFIRM_TICK  100  // мс между подтверждениями
-
-    /* ===== РЕЖИМ РЕДАКТИРОВАНИЯ ЗНАЧЕНИЯ (TOUCH) ===== */
-    if (edit_mode_active && edit_source_item) {
-        // Нижняя панель — динамический расчёт + debounce с подтверждением
-        int8_t edit_btn = GUI_GetBottomBarTouch(tx, ty);
-        if (edit_btn >= 0) {
-            // Та же кнопка — считаем подтверждение
-            if (edit_btn == last_confirmed_btn) {
-                if (now - last_btn_press_tick >= BOTTOM_BAR_CONFIRM_TICK) {
-                    confirm_count++;
-                    last_btn_press_tick = now;
-                    if (confirm_count >= BOTTOM_BAR_CONFIRMATIONS) {
-                        switch (edit_btn) {
-                            case 0: // Cancel — отмена
-                                if (edit_value_size == 1) {
-                                    *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_original_value;
-                                } else {
-                                    *(uint16_t*)edit_source_item->data.ptr_value = edit_original_value;
-                                }
-                                EditMode_Exit();
-                                if (buzzerOnOff) Buzzer_PlayTone(400, 50);
-                                if (vibroOnOff) Vibrator_Pulse(30);
-                                break;
-                            case 1: // Up — увеличить
-                                if (edit_value_size == 1) {
-                                    int8_t v = (int8_t)edit_temp_value;
-                                    v += edit_step;
-                                    if (v > edit_source_item->value_limits.max_val) v = edit_source_item->value_limits.min_val;
-                                    edit_temp_value = (uint16_t)v;
-                                } else {
-                                    int16_t v = (int16_t)edit_temp_value;
-                                    v += edit_step;
-                                    if (v > edit_source_item->value_limits.max_val) v = edit_source_item->value_limits.min_val;
-                                    edit_temp_value = (uint16_t)v;
-                                }
-                                Update_EditDisplay();
-                                if (buzzerOnOff) Buzzer_PlayTone(800, 30);
-                                if (vibroOnOff) Vibrator_Pulse(30);
-                                break;
-                            case 2: // Down — уменьшить
-                                if (edit_value_size == 1) {
-                                    int8_t v = (int8_t)edit_temp_value;
-                                    v -= edit_step;
-                                    if (v < edit_source_item->value_limits.min_val) v = edit_source_item->value_limits.max_val;
-                                    edit_temp_value = (uint16_t)v;
-                                } else {
-                                    int16_t v = (int16_t)edit_temp_value;
-                                    v -= edit_step;
-                                    if (v < edit_source_item->value_limits.min_val) v = edit_source_item->value_limits.max_val;
-                                    edit_temp_value = (uint16_t)v;
-                                }
-                                Update_EditDisplay();
-                                if (buzzerOnOff) Buzzer_PlayTone(800, 30);
-                                if (vibroOnOff) Vibrator_Pulse(30);
-                                break;
-                            case 3: // Enter — сохранить
-                                if (edit_value_size == 1) {
-                                    *(uint8_t*)edit_source_item->data.ptr_value = (uint8_t)edit_temp_value;
-                                } else {
-                                    *(uint16_t*)edit_source_item->data.ptr_value = edit_temp_value;
-                                }
-                                if (edit_source_item->on_value_changed) {
-                                    edit_source_item->on_value_changed();
-                                }
-                                EditMode_Exit();
-                                if (buzzerOnOff) Buzzer_PlayTone(1000, 50);
-                                if (vibroOnOff) Vibrator_Pulse(30);
-                                break;
-                        }
-                        confirm_count = 0;
-                        last_confirmed_btn = -1;
-                        return;
-                    }
-                }
-            } else {
-                // Другая кнопка — сбрасываем счётчик, начинаем заново
-                last_confirmed_btn = edit_btn;
-                confirm_count = 1;
-                last_btn_press_tick = now;
-            }
-            return;
-        }
-    }
-
-    MenuItem_t* item = NULL;
-    UIElement_t* ui_item = NULL;
-    int8_t selected = -1;
-
-    // Для VALUE/ACTION — не меняем selected_index (навигация), только last_leaf_selected (выделение)
-    // UI_ListBox_ProcessTouch меняет selected_index — нам это не нужно для листовых пунктов
-    int16_t local_y = ty - lb->y;
-    uint16_t font_h = (lb->font != NULL) ? lb->font->char_height : font_arial_9_struct.char_height;
-    uint8_t pad = (lb->props.list_box.item_padding > 0) ? lb->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
-    uint16_t item_h = font_h + pad;
-    int8_t target = lb->props.list_box.scroll_offset + (int8_t)(local_y / item_h);
-    
-    if (target >= 0 && (uint8_t)target < lb->children_count && 
-        target >= 0 && (uint8_t)target < current_menu_count) {
-        selected = target;
-        item = &current_menu_items[selected];
-        ui_item = (UIElement_t*)lb->children[selected];
-    }
-    
-    if (selected < 0) return;
-
-    // === ПОДТВЕРЖДЕНИЕ: 3 касания на одну область = одно нажатие ===
-    if (now - last_menu_touch_tick >= MENU_ITEM_CONFIRM_TICK) {
-        if (selected == last_menu_touch_item) {
-            // То же самое нажатие — увеличиваем счётчик
-            menu_touch_count++;
-            last_menu_touch_tick = now;
-            
-            if (menu_touch_count >= MENU_ITEM_CONFIRMATIONS) {
-                // Подтверждено — выполняем действие
-                switch (item->type) {
-                    case ITEM_TYPE_VALUE:
-                        if (ui_item) Update_MenuItem_Text(ui_item, item);
-                        // Выделение листа без смены навигации
-                        if (lb->props.list_box.last_leaf_selected != selected) {
-                            int8_t old = lb->props.list_box.last_leaf_selected;
-                            lb->props.list_box.last_leaf_selected = selected;
-                            if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
-                            UI_RenderListBoxItem(lb, selected);
-                        }
-                        Menu_ExecuteSelected(lb, (uint8_t)selected);
-                        break;
-                        
-                    case ITEM_TYPE_ACTION:
-                        // Выделение листа без смены навигации
-                        if (lb->props.list_box.last_leaf_selected != selected) {
-                            int8_t old = lb->props.list_box.last_leaf_selected;
-                            lb->props.list_box.last_leaf_selected = selected;
-                            if (old >= 0) UI_RenderListBoxItem(lb, (uint8_t)old);
-                            UI_RenderListBoxItem(lb, selected);
-                        }
-                        Menu_ExecuteSelected(lb, (uint8_t)selected);
-                        break;
-                        
-                    case ITEM_TYPE_SUBMENU:
-                        // SUBMENU не выделяем — переходим в подменю
-                        Menu_ExecuteSelected(lb, (uint8_t)selected);
-                        break;
-                        
-                    default:
-                        break;
-                }
-                // Сброс счётчика
-                menu_touch_count = 0;
-                last_menu_touch_item = -1;
-                return;
-            }
-        } else {
-            // Новое нажатие в другой области — сбрасываем, начинаем заново
-            last_menu_touch_item = selected;
-            menu_touch_count = 1;
-            last_menu_touch_tick = now;
-        }
-        return;
-    }
 }
 
 void transmit(uint16_t sys, uint16_t room, uint16_t btn, uint8_t type){}
@@ -1173,6 +1018,7 @@ void cc1101ApplySettingsFromMenu(void)
     settings->cc1101_freq_fixed   = cc1101FreqFixed;
     settings->cc1101_bitrate_fixed = cc1101BitRateFixed;
     settings->cc1101_rxbw_index   = cc1101RxBwIndex;
+    settings->cc1101_modulation   = cc1101Modulation;
     settings->cc1101_power_index  = cc1101PowerIndex;
     
     if (cc1101Modulation < 7) {

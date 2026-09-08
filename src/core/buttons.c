@@ -43,7 +43,10 @@ void Buttons_Init(Buttons_HandleTypeDef *btn, PCF8574_HandleTypeDef *pcf) {
         btn->was_pressed[i] = false;
         btn->is_held[i] = false;
         btn->hold_triggered[i] = false;
+        btn->repeat_triggered[i] = false;
+        btn->long_press_completed[i] = false;
         btn->press_start_time[i] = 0;
+        btn->next_repeat_time[i] = 0;
     }
     // Read initial state
     uint8_t data = PCF8574_Read8(pcf);
@@ -71,16 +74,23 @@ void Buttons_Update(Buttons_HandleTypeDef *btn) {
 
         if (edge_pressed) {
             // Button just pressed
-            btn->was_pressed[i] = true;
+            btn->was_pressed[i] = false;
             btn->press_start_time[i] = now;
             btn->is_held[i] = false;
             btn->hold_triggered[i] = false;
+            btn->repeat_triggered[i] = false;
+            btn->long_press_completed[i] = false;
+            btn->next_repeat_time[i] = 0;
         } 
         else if (edge_released) {
             // Button just released
-            btn->was_pressed[i] = false;
+            /* Короткое нажатие подтверждаем только после отпускания.
+             * Если уже сработал hold, короткое событие не создаём. */
+            btn->was_pressed[i] = !btn->long_press_completed[i];
             btn->is_held[i] = false;
             btn->hold_triggered[i] = false;
+            btn->repeat_triggered[i] = false;
+            btn->next_repeat_time[i] = 0;
         } 
         else if (current_active && previous_active) {
             // Button is currently held down
@@ -90,8 +100,13 @@ void Buttons_Update(Buttons_HandleTypeDef *btn) {
                 if (duration >= BUTTON_HOLD_TIMEOUT_MS) {
                     btn->is_held[i] = true;
                     btn->hold_triggered[i] = true; // Flag for "Hold Just Triggered"
+                    btn->long_press_completed[i] = true;
+                    btn->next_repeat_time[i] = now + BUTTON_REPEAT_INTERVAL_MS;
                 }
-            }
+            } else if ((int32_t)(now - btn->next_repeat_time[i]) >= 0) {
+                btn->repeat_triggered[i] = true;
+                btn->next_repeat_time[i] += BUTTON_REPEAT_INTERVAL_MS;
+                }
         }
 
         // Update state for next frame
@@ -128,4 +143,29 @@ MenuKey Buttons_GetKeyCurrentlyHeld(Buttons_HandleTypeDef *btn) {
         }
     }
     return KEY_NONE;
+}
+
+MenuKey Buttons_GetKeyRepeat(Buttons_HandleTypeDef *btn) {
+    for (int i = 0; i < 8; i++) {
+        if (btn->repeat_triggered[i]) {
+            btn->repeat_triggered[i] = false;
+            return PinToKey(i);
+        }
+    }
+    return KEY_NONE;
+}
+
+uint8_t Buttons_GetHoldMultiplier(Buttons_HandleTypeDef *btn, MenuKey key) {
+    uint32_t now = HAL_GetTick();
+
+    for (int i = 0; i < 8; i++) {
+        if (btn->is_held[i] && PinToKey(i) == key) {
+            uint32_t duration = now - btn->press_start_time[i];
+            if (duration >= BUTTON_ACCELERATION_TIMEOUT_MS) {
+                return BUTTON_ACCELERATION_FACTOR;
+            }
+            return 1;
+        }
+    }
+    return 1;
 }

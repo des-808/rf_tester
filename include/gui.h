@@ -288,7 +288,7 @@ void GUI_BuildModularBottomBar(UIElement_t* parent_grid);
 int8_t GUI_GetBottomBarTouch(uint16_t tx, uint16_t ty);  // Возвращает 0=Cancel, 1=Up, 2=Down, 3=Enter или -1
 
 /* Глобальные переменные настроек радиомодулей (определены в gui.c) */
-extern uint16_t cc1101FreqFixed;
+extern uint32_t cc1101FreqFixed;
 extern uint16_t cc1101BitRateFixed;
 extern uint8_t  cc1101RxBwIndex;
 extern uint8_t  cc1101Modulation;

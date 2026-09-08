@@ -9,6 +9,9 @@
 // Конфигурация таймаутов (можно вынести в настройки)
 #define BUTTON_HOLD_TIMEOUT_MS 500 // Время для срабатывания "зажато"
 #define BUTTON_REPEAT_TIMEOUT_MS 200 // Повторный срабатывание при удержании
+#define BUTTON_REPEAT_INTERVAL_MS 250 // Интервал автоматического повтора после hold
+#define BUTTON_ACCELERATION_TIMEOUT_MS 5000 // Порог ускорения автоповтора
+#define BUTTON_ACCELERATION_FACTOR 10 // Множитель шага после порога ускорения
 
 typedef enum {
     KEY_NONE = 0,
@@ -32,13 +35,16 @@ typedef struct {
 
     // --- Новые поля для автоматизации ---
     // Таймер простого нажатия (используется для определения "только что")
-    uint16_t press_start_time[8]; 
+ 
     bool is_pressed_now[8];    // Двойная буферизация для корректного edge detection
     
     // Для_long_press/hold_
     bool is_held[8];           // Флаг: кнопка удерживается
     bool hold_triggered[8];    // Флаг: событие зажатия произошло в этот вызов
-    uint32_t hold_start_time[8];
+    bool repeat_triggered[8];  // Флаг: событие автоматического повтора
+    bool long_press_completed[8]; // Длинное событие уже произошло в текущем нажатии
+    uint32_t press_start_time[8];
+    uint32_t next_repeat_time[8];
     
     // Общий контекст (опционально, если нужно глобальное время)
     // Предположим, что есть геттер времени или мы передаем ms_tick глобально
@@ -49,6 +55,8 @@ void Buttons_Init(Buttons_HandleTypeDef *btn, PCF8574_HandleTypeDef *pcf);
 void Buttons_Update(Buttons_HandleTypeDef *btn);
 MenuKey Buttons_GetKeyShortPress(Buttons_HandleTypeDef *btn);
 MenuKey Buttons_GetKeyHold(Buttons_HandleTypeDef *btn);
+MenuKey Buttons_GetKeyRepeat(Buttons_HandleTypeDef *btn);
+uint8_t Buttons_GetHoldMultiplier(Buttons_HandleTypeDef *btn, MenuKey key);
 MenuKey Buttons_GetKeyCurrentlyHeld(Buttons_HandleTypeDef *btn);
 
 
