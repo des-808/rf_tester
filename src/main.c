@@ -56,6 +56,7 @@
 #include "buzzer.h"
 #include "vibrator.h"
 #include "settings_manager.h"
+#include "rssi_plotter_screen.h"
 #include <string.h>
 /* USER CODE END PTD */
 
@@ -296,6 +297,10 @@ I2C_Scanner_Run(&i2c_scanner);
 lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
   Menu_Init();
+  
+  /* Инициализация RSSI Plotter Screen */
+  RssiPlotterScreen_InitGlobal();
+  
   //GUI_ShowAdvancedMeasurementScreen(current_display_orientation);
   GUI_ShowMenuAdvancedMeasurementScreen(current_display_orientation);
    
@@ -328,28 +333,28 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
    {
      /* USER CODE END WHILE */
 
-     // ====================================================================
-     // Обработка прерывания от BMI160 (ориентация экрана)
-     // ====================================================================
-      if (bmi160_irq_received) 
-      {
-        bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
-        // Запрашиваем у датчика целевую ориентацию (0, 1, 2 или 3)
-        uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
-        // Если положение устройства физически изменилось
-        if (next_orientation != current_display_orientation) 
-        {
-          // Сохраняем состояние меню ПЕРЕД перестройкой
-          extern UIElement_t* current_menu_listbox;
-          if (current_menu_listbox) {
-            saved_menu_scroll_offset = current_menu_listbox->props.list_box.scroll_offset;
-            saved_menu_selected_index = current_menu_listbox->props.list_box.selected_index;
-          }
-          
-          current_display_orientation = next_orientation;
-          GUI_ShowMenuAdvancedMeasurementScreen(next_orientation);
-        }
-      }
+      // ====================================================================
+      // Обработка прерывания от BMI160 (ориентация экрана)
+      // ====================================================================
+       if (bmi160_irq_received) 
+       {
+         bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
+         // Запрашиваем у датчика целевую ориентацию (0, 1, 2 или 3)
+         uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
+         // Если положение устройства физически изменилось
+         if (next_orientation != current_display_orientation) 
+         {
+           // Сохраняем состояние меню ПЕРЕД перестройкой
+           extern UIElement_t* current_menu_listbox;
+           if (current_menu_listbox) {
+             saved_menu_scroll_offset = current_menu_listbox->props.list_box.scroll_offset;
+             saved_menu_selected_index = current_menu_listbox->props.list_box.selected_index;
+           }
+           
+           current_display_orientation = next_orientation;
+           GUI_ShowMenuAdvancedMeasurementScreen(next_orientation);
+         }
+       }
 
       // ====================================================================
       // 0. ОБРАБОТКА КНОПКИ БЛОКИРОВКИ ЭКРАНА (BTN_ON_OFF)
@@ -374,45 +379,59 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
           }
       }
       
-      // ====================================================================
-      // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
-      // ====================================================================
-      if (!screen_locked) {
-          Buttons_Update(&btn_s);
-          uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
-          static uint8_t btn_last_state = 0xFF;
-          if (btn_raw != btn_last_state && btn_raw != 0xFF) {
-              /* Сработала кнопка (edge detection) */
-              if (buzzerOnOff) Buzzer_Short();
-              if (vibroOnOff) Vibrator_Pulse(30);
-          }
-          btn_last_state = btn_raw;
-          PCF8574_AcknowledgeChanges(&pcf_handle);
+       // ====================================================================
+       // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
+       // ====================================================================
+       if (!screen_locked) {
+           Buttons_Update(&btn_s);
+           uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
+           static uint8_t btn_last_state = 0xFF;
+           if (btn_raw != btn_last_state && btn_raw != 0xFF) {
+               /* Сработала кнопка (edge detection) */
+               if (buzzerOnOff) Buzzer_Short();
+               if (vibroOnOff) Vibrator_Pulse(30);
+           }
+           btn_last_state = btn_raw;
+           PCF8574_AcknowledgeChanges(&pcf_handle);
 
-         MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
-         if (key_short != KEY_NONE) {
-           /* После отпускания следующая команда всегда начинается с точного шага. */
-           menu_long_press_active = 0;
-           menu_hold_multiplier = 1;
-           Menu_ProcessInput(key_short);
-         }
-         MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
-         if (key_hold != KEY_NONE) {
-           menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_hold);
-           menu_long_press_active = 1;
-           Menu_ProcessInput(key_hold);
-           menu_long_press_active = 0;
-           menu_hold_multiplier = 1;
-         }
-         MenuKey key_repeat = Buttons_GetKeyRepeat(&btn_s);
-         if (key_repeat != KEY_NONE) {
-           menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_repeat);
-           menu_long_press_active = 1;
-           Menu_ProcessInput(key_repeat);
-           menu_long_press_active = 0;
-           menu_hold_multiplier = 1;
-         }
-      }
+           /* Обрабатываем кнопки */
+           MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
+           if (key_short != KEY_NONE) {
+               /* Сначала проверяем Cancel для RSSI Plotter */
+               if (key_short == KEY_CANCEL && rssi_plotter_active) {
+                   RssiPlotterScreen_ExitGlobal();
+               } else if (!rssi_plotter_active) {
+                   /* Обрабатываем остальные кнопки только если RSSI Plotter не активен */
+                   menu_long_press_active = 0;
+                   menu_hold_multiplier = 1;
+                   Menu_ProcessInput(key_short);
+               }
+           }
+           
+           MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
+           if (key_hold != KEY_NONE) {
+               /* Если RSSI Plotter активен — игнорируем удержания */
+               if (!rssi_plotter_active) {
+                   menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_hold);
+                   menu_long_press_active = 1;
+                   Menu_ProcessInput(key_hold);
+                   menu_long_press_active = 0;
+                   menu_hold_multiplier = 1;
+               }
+           }
+           
+           MenuKey key_repeat = Buttons_GetKeyRepeat(&btn_s);
+           if (key_repeat != KEY_NONE) {
+               /* Если RSSI Plotter активен — игнорируем повторы */
+               if (!rssi_plotter_active) {
+                   menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_repeat);
+                   menu_long_press_active = 1;
+                   Menu_ProcessInput(key_repeat);
+                   menu_long_press_active = 0;
+                   menu_hold_multiplier = 1;
+               }
+           }
+       }
 
       // ====================================================================
       // 2. ОБРАБОТКА ТАЧСКРИНА (Polling Mode — G_MODE = 0x00)
@@ -482,6 +501,14 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
               GUI_InvalidateStatusBar();
           }
       }
+    }
+
+    // ====================================================================
+    // 3.5. RSSI PLOTTER SCREEN — обновление данных
+    // ====================================================================
+    if (rssi_plotter_active) {
+        /* Обновляем данные из ring buffer */
+        RssiPlotterScreen_UpdateGlobal();
     }
 
     // ====================================================================

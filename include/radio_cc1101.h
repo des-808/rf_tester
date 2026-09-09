@@ -456,6 +456,65 @@ cc1101_status_t CC1101_reset(void);
 cc1101_status_t CC1101_resetFifoPtr(void);
 
 /* ======================================================================== */
+/*  RSSI Ring Buffer — непрерывная выборка RSSI                              */
+/* ======================================================================== */
+
+/**
+ * @brief Размер ring buffer для RSSI (степень двойки, макс 512)
+ */
+#define CC1101_RSSI_BUF_SIZE    256U
+
+/**
+ * @brief Инициализировать RSSI ring buffer
+ * @note Вызывается один раз при инициализации радиомодуля
+ */
+void CC1101_RssiBuf_Init(void);
+
+/**
+ * @brief Сбросить RSSI ring buffer (очистить все данные)
+ */
+void CC1101_RssiBuf_Reset(void);
+
+/**
+ * @brief Добавить выборку RSSI в ring buffer
+ * @param rssi_dBm  Значение RSSI в dBm
+ * @return true если успешно добавлено
+ */
+bool CC1101_RssiBuf_Push(int8_t rssi_dBm);
+
+/**
+ * @brief Получить количество доступных выборок в ring buffer
+ * @return количество выборок
+ */
+uint16_t CC1101_RssiBuf_Count(void);
+
+/**
+ * @brief Скопировать все доступные выборки в буфер пользователя
+ * @param out     Буфер для вывода (int8_t[])
+ * @param max_len Максимальное количество элементов
+ * @return реальное количество скопированных элементов
+ */
+uint16_t CC1101_RssiBuf_Copy(int8_t *out, uint16_t max_len);
+
+/**
+ * @brief Получить лучшее (максимальное) значение RSSI в буфере
+ * @return RSSI в dBm, или INT8_MIN если буфер пуст
+ */
+int8_t CC1101_RssiBuf_GetBest(void);
+
+/**
+ * @brief Получить усреднённое RSSI в буфере
+ * @return усреднённый RSSI в dBm, или INT8_MIN если буфер пуст
+ */
+int8_t CC1101_RssiBuf_GetAverage(void);
+
+/**
+ * @brief Пропустить N старых выборок из начала буфера
+ * @param n количество элементов для пропуска
+ */
+void CC1101_RssiBuf_Skip(uint16_t n);
+
+/* ======================================================================== */
 /*  Внутренние функции (SPI обмен)                                          */
 /* ======================================================================== */
 

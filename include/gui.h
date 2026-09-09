@@ -32,13 +32,6 @@
 #define BOTTOM_BAR_BTN_SPACING  10   // Расстояние между кнопками в пикселях
 #define BOTTOM_BAR_COLS         4    // Количество кнопок (Cancel | Up | Down | Enter)
 
-// ==========================================
-// НИЖНЯЯ ПАНЕЛЬ КНОПОК (Bottom Bar)
-// ==========================================
-#define BOTTOM_BAR_HEIGHT       40   // Высота всей нижней панели в пикселях
-#define BOTTOM_BAR_BTN_SPACING  10   // Расстояние между кнопками в пикселях
-#define BOTTOM_BAR_COLS         4    // Количество кнопок (Cancel | Up | Down | Enter)
-
 typedef enum {
     UI_TYPE_GRID,
     UI_TYPE_STACK_PANEL,
@@ -106,6 +99,7 @@ typedef struct {
     uint8_t visible_row_count;     // используется, если height_mode == 0
     uint16_t pixel_height;         // используется, если height_mode == 1
     uint8_t item_padding;          // Вертикальные отступы между элементами (добавка к высоте шрифта), по умолчанию 6
+    uint8_t collapsed;             // 1 = скрыть children и освободить RAM
 } ListBoxProps_t;
 
 typedef enum {
@@ -224,7 +218,6 @@ void UI_SetGridColProportional(UIElement_t* grid_elem,uint8_t col_1, uint8_t col
 
 
 void UI_MeasureAndArrange(UIElement_t* element, int16_t parent_x, int16_t parent_y, uint16_t available_w, uint16_t available_h);
-static void UI_RenderChildElement(void* child_ptr);
 void UI_DrawTree(UIElement_t* element);
 
 // Колбэк отрисовки ТОЛЬКО ЧАСОВ

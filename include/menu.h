@@ -110,6 +110,11 @@ extern int menu_stack_top;        // -1 = стек пуст, 0 = один уро
 void Menu_PushMenu(MenuItem_t* items, uint8_t count);   // Войти в подменю (сохраняет текущее)
 void Menu_PopMenu(UIElement_t* listbox);                // Выход на уровень выше
 
+// === API СВОРАЧИВАНИЯ/РАЗВОРАЧИВАНИЯ МЕНЮ ===
+// Для экономии RAM при запуске полноэкранных режимов (RSSI Plotter, Spectrum и др.)
+bool Menu_Collapse(void);   // Скрыть ListBox, освободить память детей
+void Menu_Expand(void);     // Восстановить ListBox и перерисовать
+
 // API
 void Menu_Init(void);
 void Menu_Draw(UIElement_t* listbox_container, MenuItem_t* items, uint8_t count);

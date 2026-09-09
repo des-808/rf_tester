@@ -3,8 +3,13 @@
 #include "st7796.h"
 #include "lcd_backlight.h"
 #include "buzzer.h"
+#include "ds3231.h"
+#include "i2c.h"
+#include "esp32_ToWiFiandBluetooth.h"
+#include "rssi_plotter_screen.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 // === ВНЕШНИЕ ПЕРЕМЕННЫЕ (Ваш код) ===
 extern Sprite_t main_screen_sprite;
@@ -13,6 +18,7 @@ extern uint16_t Display_Height;
 // Предполагаем, что эти переменные объявлены где-то в main.c или globals.h
 extern uint16_t sys, room, btn;
 extern void transmit(uint16_t sys, uint16_t room, uint16_t btn, uint8_t type);
+
 extern void initRfTransmitter(int is_pager);
 extern void enterReceiverMode();
 extern void showNC();
@@ -29,6 +35,14 @@ extern uint16_t cc1101BitRateFixed;
 extern int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, vibroOnOff;
 extern bool rs485toBt;
 
+static uint8_t clock_date = 1;
+static uint8_t clock_month = 1;
+static uint8_t clock_day = DS3231_MONDAY;
+static uint8_t clock_hour = 0;
+static uint8_t clock_minute = 0;
+static uint8_t clock_second = 0;
+static uint8_t clock_year = 0;
+
 uint8_t lcd_backlight_level = 5; // Локальная копия для меню (0-10)
 extern void toggleWiFi();
 extern void manualSyncTimeWithNTP();
@@ -40,6 +54,91 @@ extern void GUI_InvalidateStatusBar(void);
 /* Мост к CC1101 hardware */
 #include "radio_config_bridge.h"
 void cc1101ApplySettingsFromMenu(void);
+
+/* Forward declarations */
+static void RssiPlotter_Action(void);
+
+/* External references (из gui.c) */
+extern uint8_t saved_menu_scroll_offset;
+extern int16_t saved_menu_selected_index;
+extern uint8_t panel_rows_count;
+
+/* ========================================================================
+ *  Collapse/Expand Menu — для экономии RAM в полноэкранных режимах
+ * ======================================================================== */
+
+/**
+ * @brief Скрыть ListBox меню, освободить память детей
+ * @return true если меню было скрыто
+ */
+bool Menu_Collapse(void) {
+    if (!current_menu_listbox) return false;
+    
+    UIElement_t* lb = current_menu_listbox;
+    
+    /* Сохраняем состояние */
+    saved_menu_scroll_offset = lb->props.list_box.scroll_offset;
+    saved_menu_selected_index = lb->props.list_box.selected_index;
+    
+    /* Освобождаем память детей ListBox (пункты меню) */
+    if (lb->children_count > 0) {
+        /* Уменьшаем panel_rows_count, "возвращая" память пулу */
+        panel_rows_count -= lb->children_count;
+        lb->children_count = 0;
+        
+        /* Очищаем указатели на детей */
+        memset(lb->children, 0, sizeof(lb->children));
+    }
+    
+    /* Устанавливаем флаг collapsed */
+    lb->props.list_box.collapsed = 1;
+    
+    /* Инвалидируем спрайт для перерисовки */
+    extern Sprite_t main_screen_sprite;
+    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
+        main_screen_sprite.needs_render = true;
+    }
+    
+    return true;
+}
+
+/**
+ * @brief Восстановить ListBox меню и перерисовать
+ */
+void Menu_Expand(void) {
+    if (!current_menu_listbox) return;
+    
+    UIElement_t* lb = current_menu_listbox;
+    
+    /* Сбрасываем флаг collapsed */
+    lb->props.list_box.collapsed = 0;
+    
+    /* Перерисовываем ListBox (создаст children заново) */
+    Menu_Draw(lb, current_menu_items, current_menu_count);
+    
+    /* Восстанавливаем scroll и selected с проверкой границ */
+    uint8_t max_scroll = (current_menu_count > lb->props.list_box.visible_row_count &&
+                          lb->props.list_box.visible_row_count > 0) ?
+                         (current_menu_count - lb->props.list_box.visible_row_count) : 0;
+    if (saved_menu_scroll_offset > max_scroll) {
+        saved_menu_scroll_offset = max_scroll;
+    }
+    lb->props.list_box.scroll_offset = saved_menu_scroll_offset;
+    
+    if (saved_menu_selected_index >= 0 && (uint8_t)saved_menu_selected_index < current_menu_count) {
+        lb->props.list_box.selected_index = saved_menu_selected_index;
+        lb->props.list_box.last_leaf_selected = saved_menu_selected_index;
+    } else {
+        lb->props.list_box.selected_index = 0;
+        lb->props.list_box.last_leaf_selected = 0;
+    }
+    
+    /* Инвалидируем спрайт для перерисовки */
+    extern Sprite_t main_screen_sprite;
+    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
+        main_screen_sprite.needs_render = true;
+    }
+}
 
 /* Таблицы форматирования (локальные, не экспортируются) */
 static const char* mod_str[] = { "ASK", "FSK", "2FSK", "GFSK", "OOK", "4FSK", "MSK" };
@@ -127,13 +226,6 @@ static void Cc1101_AutoApplyPower(void)
 UIElement_t* current_menu_listbox = NULL;
 MenuItem_t* current_menu_items = NULL;
 uint8_t current_menu_count = 0;
-
-// External reference to panel_rows counter from gui.c
-extern uint8_t panel_rows_count;
-
-// Сохранённое состояние меню (из gui.c)
-extern uint8_t saved_menu_scroll_offset;
-extern int16_t saved_menu_selected_index;
 
 // === СТЕК НАВИГАЦИИ ===
 MenuState_t menu_stack[MAX_MENU_DEPTH];
@@ -257,6 +349,44 @@ static void WiFi_Update_Callback() {
     GUI_InvalidateStatusBar();
 }
 
+static void Clock_LoadFromDS3231(void)
+{
+    DS3231_Time_t time;
+    if (DS3231_GetTime(&hi2c1, &time) != DS3231_OK) return;
+    clock_date = time.Date;
+    clock_month = time.Month;
+    clock_day = time.Day;
+    clock_hour = time.Hour;
+    clock_minute = time.Minute;
+    clock_second = time.Second;
+    clock_year = time.Year;
+}
+
+static void Clock_SaveToDS3231(void)
+{
+    DS3231_Time_t time = {
+        .Second = clock_second, .Minute = clock_minute, .Hour = clock_hour,
+        .AM_PM = 0, .Day = clock_day, .Date = clock_date,
+        .Month = clock_month, .Year = clock_year
+    };
+    DS3231_SetTime(&hi2c1, &time);
+}
+
+static void Clock_ValueChanged_Callback(void)
+{
+    Clock_SaveToDS3231();
+}
+
+static void Clock_NTP_Update_Callback(void)
+{
+    if (wifiEnabled && ESP32_WiFi_IsConnected()) ESP32_NTP_Sync();
+}
+
+static void Clock_SyncNow_Callback(void)
+{
+    if (wifiEnabled && ESP32_WiFi_IsConnected()) ESP32_NTP_Sync();
+}
+
 static void NTP_Update_Callback() {
     Settings_t* s = SettingsManager_GetMutable();
     if (s) {
@@ -303,18 +433,49 @@ static void Backlight_Update_Callback() {
     GUI_InvalidateStatusBar();
 }
 
+// --- Колбэки сохранения sys/room/btn в энергонезависимую память ---
+static void Sys_ValueChanged(void) {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->sys = (uint8_t)sys;
+        markSettingDirty();
+        saveAllSettings();
+    }
+    GUI_InvalidateStatusBar();
+}
+
+static void Room_ValueChanged(void) {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->room = (uint8_t)room;
+        markSettingDirty();
+        saveAllSettings();
+    }
+    GUI_InvalidateStatusBar();
+}
+
+static void Btn_ValueChanged(void) {
+    Settings_t* s = SettingsManager_GetMutable();
+    if (s) {
+        s->btn = (uint8_t)btn;
+        markSettingDirty();
+        saveAllSettings();
+    }
+    GUI_InvalidateStatusBar();
+}
+
 // --- Подменю передачи ---
 static MenuItem_t buttonSubMenu[] = {
-    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1, 0 },
-    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1, 0 },
-    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1, 0 },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, Sys_ValueChanged, { .ptr_value = &sys }, SYS_MIN, SYS_MAX, 1, 0 },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, Room_ValueChanged, { .ptr_value = &room }, ROOM_MIN, ROOM_MAX, 1, 0 },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, Btn_ValueChanged, { .ptr_value = &btn }, BTN_MIN, BTN_MAX, 1, 0 },
     { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Key } },
 };
 
 static MenuItem_t pagerSubMenu[] = {
-    { "Sys:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &sys }, 1, 32, 1, 0 },
-    { "Room:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &room }, 1, 32, 1, 0 },
-    { "Btn:", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &btn }, 1, 9, 1, 0 },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, Sys_ValueChanged, { .ptr_value = &sys }, SYS_MIN, SYS_MAX, 1, 0 },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, Room_ValueChanged, { .ptr_value = &room }, ROOM_MIN, ROOM_MAX, 1, 0 },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, Btn_ValueChanged, { .ptr_value = &btn }, BTN_MIN, BTN_MAX, 1, 0 },
     { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Pager } },
 };
 
@@ -342,7 +503,7 @@ static MenuItem_t cc1101SubMenu[] = {
 // --- Меню CC1101 ---
 static MenuItem_t cc1101Menu[] = {
     { "1. GetCall", 0, ITEM_TYPE_SUBMENU, sizeof(getCallMenu)/sizeof(getCallMenu[0]), NULL, { .submenu_items = getCallMenu } },
-    { "2. RSSI Plotter", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
+    { "2. RSSI Plotter", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = RssiPlotter_Action } },
     { "3. Settings CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]), NULL, { .submenu_items = cc1101SubMenu }, },
 };
 
@@ -380,14 +541,25 @@ static MenuItem_t irda_Menu[] = {
     { "3. IR Settings", 0, ITEM_TYPE_SUBMENU, sizeof(irda_SubMenu)/sizeof(irda_SubMenu[0]), NULL, { .submenu_items = irda_SubMenu }, },
 };
 
+static MenuItem_t clockSubMenu[] = {
+    { " Date", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_date }, 1, 31, 1, 1 },
+    { " Month", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_month }, 1, 12, 1, 1 },
+    { " Day", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_day }, 1, 7, 1, 1 },
+    { " Hour", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_hour }, 0, 23, 1, 1 },
+    { " Minute", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_minute }, 0, 59, 1, 1 },
+    { " Second", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_second }, 0, 59, 1, 1 },
+    { " Year", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_year }, 0, 99, 1, 1 },
+    { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, Clock_NTP_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0 },
+    { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Clock_SyncNow_Callback } },
+};
+
 // --- Подменю настроек ---
 static MenuItem_t settingsSubMenu[] = {
+    { " Clock", 0, ITEM_TYPE_SUBMENU, sizeof(clockSubMenu)/sizeof(clockSubMenu[0]), NULL, { .submenu_items = clockSubMenu } },
     { " RS485", 0, ITEM_TYPE_VALUE, 0, RS485_Baud_Update_Callback, { .ptr_value = &rs485BaudIndex }, 0, RS485_BAUD_MAX, 1, 1 },
     { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, Bluetooth_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0 },
     { " RS485_To_Bt", 0, ITEM_TYPE_VALUE, 0, RS485ToBt_Update_Callback, { .ptr_value = &rs485toBt }, 0, 1, 1, 1 },
     { " WiFi", 0, ITEM_TYPE_VALUE, 0, WiFi_Update_Callback, { .ptr_value = &wifiEnabled }, 0, 1, 1, 0 },
-    { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, NTP_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0 },
-    { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = manualSyncTimeWithNTP } },
     { " Buzzer", 0, ITEM_TYPE_VALUE, 0, Buzzer_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0 },
     { " Vibro", 0, ITEM_TYPE_VALUE, 0, Vibro_Update_Callback, { .ptr_value = &vibroOnOff }, 0, 1, 1, 0 },
     { " LED Backlight", 0, ITEM_TYPE_VALUE, 0, Backlight_Update_Callback, { .ptr_value = &lcd_backlight_level }, 1, 10, 1, 1 },
@@ -475,6 +647,7 @@ void Menu_Init(void) {
     current_menu_listbox = NULL;
     menu_stack_top = -1;  // Очищаем стек
     Menu_SetMainMenu(); // Инициализируем указатели на начало
+    Clock_LoadFromDS3231();
     
     // Синхронизируем уровень подсветки с main.c
     lcd_backlight_level = LCD_Backlight_GetLevel();
@@ -999,6 +1172,9 @@ void rs485ToggleBluetoothMode(){;}
 //int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff;
 void toggleWiFi() {
     wifiEnabled = !wifiEnabled;
+    if (wifiEnabled) {
+        ESP32_WiFi_Connect();
+    }
     GUI_InvalidateStatusBar();
 }
 void manualSyncTimeWithNTP(){}
@@ -1034,6 +1210,16 @@ void cc1101ApplySettingsFromMenu(void)
 
     /* Перерисовываем статус-бар */
     GUI_InvalidateStatusBar();
+}
+
+/* ========================================================================
+ *  RSSI Plotter Menu Entry
+ * ======================================================================== */
+
+/* Колбэк для пункта меню "RSSI Plotter" */
+static void RssiPlotter_Action(void) {
+    /* Запускаем экран RSSI Plotter */
+    RssiPlotterScreen_Enter();
 }
 
 /* ========================================================================

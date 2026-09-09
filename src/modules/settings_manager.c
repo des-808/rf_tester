@@ -122,6 +122,12 @@ void SettingsManager_Apply(void) {
     buzzerOnOff            = g_settings.buzzer_enabled;
     vibroOnOff             = g_settings.vibro_enabled;
 
+    /* Применяем sys/room/btn из энергонезависимой памяти */
+    extern uint16_t sys, room, btn;
+    sys                    = g_settings.sys;
+    room                   = g_settings.room;
+    btn                    = g_settings.btn;
+
     cc1101FreqFixed        = g_settings.cc1101_freq_fixed;
     cc1101BitRateFixed     = (uint16_t)g_settings.cc1101_bitrate_fixed;
     cc1101RxBwIndex        = g_settings.cc1101_rxbw_index;

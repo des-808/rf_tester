@@ -7,8 +7,11 @@
 
 #include "stm32h7xx_hal.h"
 #include "radio_cc1101.h"
+#include "ring_buf.h"
 #include "main.h"
 #include <string.h>
+#include <stdint.h>
+#include <limits.h>
 
 /* ======================================================================== */
 /*  Внутреннее состояние                                                     */
@@ -778,6 +781,9 @@ int CC1101_Init(SPI_HandleTypeDef* hspi, const CC1101_Config_t* config)
     cc1101_lqi_cached = 0;
     cc1101_packet_received = 0;
 
+    /* Инициализируем RSSI ring buffer */
+    CC1101_RssiBuf_Init();
+
     /* Сброс модуля */
     CC1101_Reset();
 
@@ -1222,4 +1228,132 @@ int CC1101_Receive(CC1101_Packet_t* packet, uint32_t timeout_ms)
 bool CC1101_IsGdo0High(void)
 {
     return (HAL_GPIO_ReadPin(CC1101_GDO0_GPIO_Port, CC1101_GDO0_Pin) == GPIO_PIN_SET);
+}
+
+/* ======================================================================== */
+/*  RSSI Ring Buffer — непрерывная выборка RSSI                              */
+/* ======================================================================== */
+
+/* Статический ring buffer для RSSI (int8_t -> uint16_t для совместимости с ring_buf) */
+RING_BUF_DEFINE(cc1101_rssi_rb, cc1101_rssi_buf, CC1101_RSSI_BUF_SIZE, uint16_t);
+
+/**
+ * @brief Инициализировать RSSI ring buffer
+ */
+void CC1101_RssiBuf_Init(void)
+{
+    ring_buf_reset(&cc1101_rssi_rb);
+}
+
+/**
+ * @brief Сбросить RSSI ring buffer
+ */
+void CC1101_RssiBuf_Reset(void)
+{
+    ring_buf_reset(&cc1101_rssi_rb);
+}
+
+/**
+ * @brief Добавить выборку RSSI в ring buffer
+ */
+bool CC1101_RssiBuf_Push(int8_t rssi_dBm)
+{
+    /* Конвертируем int8_t -> uint16_t (сдвигаем чтобы избежать отрицательных) */
+    uint16_t val = (uint16_t)((uint8_t)rssi_dBm);
+    return ring_buf_push(&cc1101_rssi_rb, val);
+}
+
+/**
+ * @brief Получить количество доступных выборок
+ */
+uint16_t CC1101_RssiBuf_Count(void)
+{
+    return ring_buf_count(&cc1101_rssi_rb);
+}
+
+/**
+ * @brief Скопировать все доступные выборки в буфер пользователя
+ */
+uint16_t CC1101_RssiBuf_Copy(int8_t *out, uint16_t max_len)
+{
+    RING_BUF_ENTER_CRITICAL();
+
+    uint16_t available = cc1101_rssi_rb.count;
+    uint16_t count = (available < max_len) ? available : max_len;
+
+    for (uint16_t i = 0; i < count; i++) {
+        uint16_t idx = cc1101_rssi_rb.tail & cc1101_rssi_rb.mask;
+        uint16_t *buf = (uint16_t*)cc1101_rssi_rb.data;
+        out[i] = (int8_t)buf[idx];
+    }
+
+    cc1101_rssi_rb.tail   += count;
+    cc1101_rssi_rb.count  -= count;
+
+    RING_BUF_EXIT_CRITICAL();
+    return count;
+}
+
+/**
+ * @brief Получить лучшее (максимальное) значение RSSI в буфере
+ */
+int8_t CC1101_RssiBuf_GetBest(void)
+{
+    RING_BUF_ENTER_CRITICAL();
+
+    if (cc1101_rssi_rb.count == 0) {
+        RING_BUF_EXIT_CRITICAL();
+        return INT8_MIN;
+    }
+
+    int8_t best = INT8_MIN;
+    uint16_t head = cc1101_rssi_rb.head;
+    uint16_t tail = cc1101_rssi_rb.tail;
+    uint16_t mask = cc1101_rssi_rb.mask;
+    uint16_t *buf = (uint16_t*)cc1101_rssi_rb.data;
+
+    for (uint16_t i = tail; i != head; i++) {
+        int8_t rssi = (int8_t)buf[i & mask];
+        if (rssi > best) {
+            best = rssi;
+        }
+    }
+
+    RING_BUF_EXIT_CRITICAL();
+    return best;
+}
+
+/**
+ * @brief Получить усреднённое RSSI в буфере
+ */
+int8_t CC1101_RssiBuf_GetAverage(void)
+{
+    RING_BUF_ENTER_CRITICAL();
+
+    if (cc1101_rssi_rb.count == 0) {
+        RING_BUF_EXIT_CRITICAL();
+        return INT8_MIN;
+    }
+
+    int32_t sum = 0;
+    uint16_t count = cc1101_rssi_rb.count;
+    uint16_t head = cc1101_rssi_rb.head;
+    uint16_t tail = cc1101_rssi_rb.tail;
+    uint16_t mask = cc1101_rssi_rb.mask;
+    uint16_t *buf = (uint16_t*)cc1101_rssi_rb.data;
+
+    for (uint16_t i = tail; i != head; i++) {
+        sum += (int8_t)buf[i & mask];
+    }
+
+    RING_BUF_EXIT_CRITICAL();
+    return (int8_t)(sum / (int32_t)count);
+}
+
+/**
+ * @brief Пропустить N старых выборок
+ */
+void CC1101_RssiBuf_Skip(uint16_t n)
+{
+    ring_buf_skip(&cc1101_rssi_rb, n);
 }

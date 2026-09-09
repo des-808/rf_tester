@@ -1,6 +1,8 @@
 #include "gui.h"
 #include "menu.h"
 #include "sd_card.h"
+#include "rf_spectrum.h"
+#include "rssi_plotter_screen.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -9,6 +11,9 @@
 
 #define MAX_GRID_ROWS 20
 #define MAX_GRID_COLS 20
+#ifndef GUI_DEBUG
+#define GUI_DEBUG 0
+#endif
 // Глобальные переменные сущностей интерфейса
 UIElement_t root_grid;
 
@@ -97,6 +102,9 @@ UIElement_t* ui_touch_row = NULL;
 extern UIElement_t* current_menu_listbox;
 extern MenuItem_t* current_menu_items;
 extern uint8_t current_menu_count;
+
+// External references for fullscreen modes
+extern bool rssi_plotter_active;  /* RSSI Plotter активен */
 
 
 
@@ -209,13 +217,10 @@ void Buzzer_On_Off_(void) {
     main_work_grid.grid_row = 1;
     main_work_grid.grid_col = 0;
     main_work_grid.props.grid.rows_count = 1;
-    main_work_grid.props.grid.cols_count = 2;
+    main_work_grid.props.grid.cols_count = 1;
     
-    // UI_SetGridColPixel(&main_work_grid, 0, 200); 
-    //UI_SetGridColPercent(&main_work_grid, 1, 100);  
-    UI_SetGridColPercent(&main_work_grid, 0, 65); 
-    UI_SetGridColPercent(&main_work_grid, 1, 35); 
-
+    
+    UI_SetGridColPercent(&main_work_grid, 0, 100);
     root_grid.children[root_grid.children_count++] = &main_work_grid;
 
     // --- ГРАФИК ---
@@ -643,10 +648,28 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     // Второй обмер: реальный расчет размеров с учетом динамического контента
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
 
-// Возвращаем спрайты
-     for (uint8_t i = 0; i < digits_node.children_count; i++) {
+    // ====================================================================
+    // ВОССТАНОВЛЕНИЕ СПРАЙТОВ
+    // ====================================================================
+    
+    /* Проверяем, активен ли полноэкранный режим */
+    bool fullscreen_mode_active = rssi_plotter_active;
+    
+    /* Если полноэкранный режим НЕ активен — восстанавливаем меню */
+    if (!fullscreen_mode_active && current_menu_listbox) {
+        /* Перерисовываем меню (создаёт children) */
+        Menu_Draw(current_menu_listbox, current_menu_items, current_menu_count);
+    }
+    
+    // Возвращаем спрайты для main_screen_sprite элементов
+    for (uint8_t i = 0; i < digits_node.children_count; i++) {
         if(digits_node.children[i]) {
-            digits_node.children[i]->sprite = &main_screen_sprite;
+            /* Если полноэкранный режим активен — не восстанавливаем спрайт для menu_lb */
+            if (fullscreen_mode_active && digits_node.children[i] == current_menu_listbox) {
+                digits_node.children[i]->sprite = NULL;
+            } else {
+                digits_node.children[i]->sprite = &main_screen_sprite;
+            }
         }
     }
     
@@ -754,9 +777,11 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
         Sprite_t* s = element->sprite;
         bool owns_own_buffer = (s != &main_screen_sprite);
         if (owns_own_buffer) {
+            uint16_t old_w = s->w;
+            uint16_t old_h = s->h;
             s->x = element->x; s->y = element->y;
             s->w = element->w; s->h = element->h;
-            if (s->data == NULL || s->w != element->w || s->h != element->h || !s->is_allocated) {
+            if (s->data == NULL || old_w != element->w || old_h != element->h || !s->is_allocated) {
                 if (s->data != NULL && s->is_allocated) {
                     heap_caps_free(s->data);
                 }
@@ -786,8 +811,10 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
             // весь стек элементов начинает рисоваться с неверной геометрией в альбомной ориентации.
             bool should_resize_shared_sprite = (s != &main_screen_sprite) || (element->type == UI_TYPE_STACK_PANEL);
             if (should_resize_shared_sprite) {
+                uint16_t old_w = s->w;
+                uint16_t old_h = s->h;
                 s->w = element->w; s->h = element->h;
-                if (s->data == NULL || s->w != element->w || s->h != element->h || !s->is_allocated) {
+                if (s->data == NULL || old_w != element->w || old_h != element->h || !s->is_allocated) {
                     if (s->data != NULL && s->is_allocated) {
                         heap_caps_free(s->data);
                     }
@@ -1453,9 +1480,17 @@ void UI_DrawTree(UIElement_t* element) {
     // ШАГ 1: Отрисовка физического окна (Спрайт или контейнер со спрайтом)
     if (element->sprite != NULL) {
         Sprite_t* s = element->sprite;
+        bool force_render = false;
+        
+        /* Если RSSI Plotter активен и это graph_sprite — всегда рисуем */
+        extern bool rssi_plotter_active;
+        extern Sprite_t graph_sprite;
+        if (rssi_plotter_active && s == &graph_sprite) {
+            force_render = true;
+        }
         
         // ВОЗВРАЩАЕМ ОПТИМИЗАЦИЮ: шлем данные, только если спрайт "загрязнен"
-        if (s->is_allocated && s->data != NULL && s->needs_render) {
+        if (s->is_allocated && s->data != NULL && (s->needs_render || force_render)) {
             
             // Если координаты грязной зоны схлопнулись — раскрываем на весь размер (защита)
             if (s->dirty_x2 == 0 && s->dirty_y2 == 0) {
@@ -1611,6 +1646,16 @@ uint16_t HUE_to_RGB565(uint16_t hue_deg) {
 #define M__PI 3.14159265358979323846
 // Функция для отрисовки сетки графика
 void Draw_Graph_Content(UIElement_t* el) {
+    /* Если активен RSSI Plotter — рисуем его */
+    extern bool rssi_plotter_active;
+    if (rssi_plotter_active) {
+        RssiPlotterScreen_t* screen = RssiPlotterScreen_GetState();
+        if (screen && screen->enabled) {
+            RssiPlotter_DrawGraph(screen);
+        }
+        return;
+    }
+    
     if ( !graph_sprite.data) return;
 
     // Заливаем фон графика черным (используем динамические размеры)
@@ -1633,7 +1678,6 @@ void Draw_Graph_Content(UIElement_t* el) {
     // Перед циклом добавьте:
      const float frequency = 0.8f;               // частота синуса: 0.4
     const float period_length = 30.0f * M__PI / frequency; // ~15.708
-    const uint8_t hue_step_per_period = 20; // градусов на период 
 
     // 3. РИСУЕМ ЖИВУЮ КРИВУЮ ИЗМЕРЕНИЙ (Пример: синусоида или массив точек КСВ)
     // Пробегаем по всей ширине окна графика шаг за шагом
@@ -2177,7 +2221,9 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
     uint8_t pad = (listbox_elem->props.list_box.item_padding > 0) ? listbox_elem->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
     uint16_t item_h = listbox_elem->font->char_height + pad;
     bool has_scrollbar = (listbox_elem->children_count + 1 > listbox_elem->h / item_h);
-    uint16_t available_width = listbox_elem->w - (2 * LISTBOX_PADDING_X) - (has_scrollbar ? scrollbar_w : 0);
+    uint16_t reserved_width = (uint16_t)(2 * LISTBOX_PADDING_X) + (has_scrollbar ? scrollbar_w : 0);
+    uint16_t available_width = (listbox_elem->w > reserved_width) ?
+                               (listbox_elem->w - reserved_width) : 1;
     
     item->w = available_width;
     
@@ -2205,6 +2251,12 @@ UIElement_t* UI_ListBox_AddItem(UIElement_t* listbox_elem, const char* text) {
  */
 void UI_RenderListBox(UIElement_t* el) {
     if (!el || !el->sprite || !el->sprite->data) return;
+    
+    /* Если ListBox collapsed — полностью пропускаем отрисовку */
+    if (el->props.list_box.collapsed) {
+        return;
+    }
+    
     Sprite_t* s = el->sprite;
     
     // 1. Локальные координаты ListBox внутри общего спрайта панели
@@ -2264,7 +2316,9 @@ void UI_RenderListBox(UIElement_t* el) {
     if (content_w < 8) content_w = 8;
 
     // --- ШАГ 3: Отрисовка видимых элементов ---
+#if GUI_DEBUG
     printf("URLB: children_count=%d start=%d visible=%d\n", el->children_count, start, visible_count);
+#endif
     for (uint8_t i = 0; i < el->children_count; i++) {
         if (i >= start && i < (start + visible_count)) {
             UIElement_t* child = (UIElement_t*)el->children[i];
@@ -2303,11 +2357,16 @@ void UI_RenderListBox(UIElement_t* el) {
             int16_t text_y = cly + (item_h - font_h) / 2; // Центрирование по вертикали
 
             if (child->text_content[0] != '\0') {
+#if GUI_DEBUG
                 printf("URLB[%d]: text='%s' sprite=%p data=%p\n", i, child->text_content, (void*)s, (void*)s->data);
+#endif
                 lcd_print_to_buffer(text_x, text_y, RGB565_WHITE, child->text_content, bg_color, s);
-            } else {
+            }
+#if GUI_DEBUG
+            else {
                 printf("URLB[%d]: text_content[0]='\\0'\n", i);
             }
+#endif
         }
     }
 
@@ -2396,8 +2455,9 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
     
     // Локальные координаты ListBox внутри спрайта
     int16_t lx = el->x - s->x;
-    int16_t ly = el->y - s->y;
-    
+    //int16_t ly = el->y - s->y;
+
+
     // Ширина скроллбара (должна совпадать с UI_RenderListBox)
     uint8_t scrollbar_w = 10;
     if (el->children_count <= visible_count) {
@@ -2453,8 +2513,6 @@ void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index) {
     }
 }
 
-static bool g_listbox_drag_active = false;
-static int16_t g_listbox_drag_last_y = -1;
 
 static bool UI_PointInElement(const UIElement_t* el, uint16_t tx, uint16_t ty) {
     if (!el) return false;
@@ -2945,20 +3003,37 @@ void GUI_InvalidateStatusBar(void) {
 // ФУНКЦИЯ СОЗДАНИЯ СТАТУС-БАРA
 // ==========================================
 
+static void GUI_FreeSpriteBuffer(Sprite_t* sprite) {
+    if (!sprite) return;
+    if (sprite->is_allocated && sprite->data) {
+        heap_caps_free(sprite->data);
+    }
+    sprite->data = NULL;
+    sprite->is_allocated = false;
+}
+
+static bool GUI_AddChild(UIElement_t* parent, UIElement_t* child) {
+    if (!parent || !child || parent->children_count >= MAX_ELEMENT_CHILDREN) {
+        return false;
+    }
+    parent->children[parent->children_count++] = child;
+    return true;
+}
+
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     // === ПОЛНЫЙ СБРОС СТАТУС-БАРА ===
     status_bar_node.children_count = 0;
     status_icons_node.children_count = 0;
     
-    status_clock_sprite.data = NULL;          status_clock_sprite.is_allocated = false;
-    status_icon_battery_sprite.data = NULL;   status_icon_battery_sprite.is_allocated = false;
-    status_icon_bt_sprite.data = NULL;        status_icon_bt_sprite.is_allocated = false;
-    status_icon_wifi_sprite.data = NULL;      status_icon_wifi_sprite.is_allocated = false;
-    status_icon_ntp_sprite.data = NULL;       status_icon_ntp_sprite.is_allocated = false;
-    status_icon_buzzer_sprite.data = NULL;    status_icon_buzzer_sprite.is_allocated = false;
-    status_icon_mode_sprite.data = NULL;      status_icon_mode_sprite.is_allocated = false;
-    status_sd_sprite.data = NULL;             status_sd_sprite.is_allocated = false;
-    status_spacer_sprite.data = NULL;         status_spacer_sprite.is_allocated = false;
+    GUI_FreeSpriteBuffer(&status_clock_sprite);
+    GUI_FreeSpriteBuffer(&status_icon_battery_sprite);
+    GUI_FreeSpriteBuffer(&status_icon_bt_sprite);
+    GUI_FreeSpriteBuffer(&status_icon_wifi_sprite);
+    GUI_FreeSpriteBuffer(&status_icon_ntp_sprite);
+    GUI_FreeSpriteBuffer(&status_icon_buzzer_sprite);
+    GUI_FreeSpriteBuffer(&status_icon_mode_sprite);
+    GUI_FreeSpriteBuffer(&status_sd_sprite);
+    GUI_FreeSpriteBuffer(&status_spacer_sprite);
     // 1. Инициализация корневого контейнера статус-бара (Grid)
     status_bar_node.type = UI_TYPE_GRID;
     status_bar_node.children_count = 0;
@@ -2975,7 +3050,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     UI_SetGridColPercent(&status_bar_node, 1, 100);         // Иконки занимают остальное
 
     // Добавляем в родительскую сетку
-    parent_grid->children[parent_grid->children_count++] = &status_bar_node;
+    if (!GUI_AddChild(parent_grid, &status_bar_node)) return;
 
     // ==========================================
     // 2. ЧАСЫ
@@ -2998,10 +3073,10 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     
     if (!status_clock_sprite.is_allocated) {
         status_clock_node.sprite = NULL;
-        while(1); // Ошибка
+        return;
     }
 
-    status_bar_node.children[status_bar_node.children_count++] = &status_clock_node;
+    if (!GUI_AddChild(&status_bar_node, &status_clock_node)) return;
 
     // ==========================================
     // 3. КОНТЕЙНЕР ДЛЯ ИКОНОК (Внутри колонки 1)
@@ -3033,7 +3108,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     //UI_SetGridColPixel(&status_icons_node, 5, 16);   // Bluetooth
     //UI_SetGridColPixel(&status_icons_node, 6, 50);   // Battery
 
-    status_bar_node.children[status_bar_node.children_count++] = &status_icons_node;
+    if (!GUI_AddChild(&status_bar_node, &status_icons_node)) return;
 
 
     // ==========================================
@@ -3058,7 +3133,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_battery_sprite.is_allocated = (status_icon_battery_sprite.data != NULL);
 
     if (status_icon_battery_sprite.is_allocated) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_icon_battery_node;
+        GUI_AddChild(&status_icons_node, &status_icon_battery_node);
     }
 
     // --- SD Card Status ---
@@ -3073,11 +3148,11 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
 
     status_sd_sprite.w = SD_STATUS_WIDTH;
     status_sd_sprite.h = STATUS_BAR_HEIGHT;
-    status_sd_sprite.data = (uint16_t*)malloc(SD_STATUS_WIDTH * STATUS_BAR_HEIGHT * 2);
+    status_sd_sprite.data = (uint16_t*)heap_caps_malloc(SD_STATUS_WIDTH * STATUS_BAR_HEIGHT * 2, 0);
     status_sd_sprite.is_allocated = (status_sd_sprite.data != NULL);
 
     if (status_sd_sprite.is_allocated) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_sd_node;
+        GUI_AddChild(&status_icons_node, &status_sd_node);
     }
 
     // --- Bluetooth ---
@@ -3096,7 +3171,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_bt_sprite.is_allocated = (status_icon_bt_sprite.data != NULL);
 
     if (status_icon_bt_sprite.is_allocated) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_icon_bt_node;
+        GUI_AddChild(&status_icons_node, &status_icon_bt_node);
     }
 
     // --- Wi-Fi ---
@@ -3115,7 +3190,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_wifi_sprite.is_allocated = (status_icon_wifi_sprite.data != NULL);
 
     if (status_icon_wifi_sprite.is_allocated) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_icon_wifi_node;
+        GUI_AddChild(&status_icons_node, &status_icon_wifi_node);
     }
 
 
@@ -3135,7 +3210,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_ntp_sprite.is_allocated = (status_icon_ntp_sprite.data != NULL);
 
     if (status_icon_ntp_sprite.is_allocated) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_icon_ntp_node;
+        GUI_AddChild(&status_icons_node, &status_icon_ntp_node);
     }
 
     // --- BUZZER ---
@@ -3154,7 +3229,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_buzzer_sprite.is_allocated = (status_icon_buzzer_sprite.data != NULL);
 
     if (status_icon_buzzer_sprite.is_allocated) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_icon_buzzer_node;
+        GUI_AddChild(&status_icons_node, &status_icon_buzzer_node);
     }
 
     // --- RS485ToBt ---
@@ -3173,7 +3248,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_mode_sprite.is_allocated = (status_icon_mode_sprite.data != NULL);
 
     if (status_icon_mode_sprite.is_allocated) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_icon_mode_node;
+        GUI_AddChild(&status_icons_node, &status_icon_mode_node);
     }
 
     // --- Другие иконки (NTP, Buzzer, Mode) добавляются аналогично ---
@@ -3190,7 +3265,7 @@ void GUI_BuildModularStatusBar(UIElement_t* parent_grid) {
     status_icon_spacer_node.text_content[0] = '\0'; // Пустой текст
 
     if (status_icons_node.children_count < MAX_ELEMENT_CHILDREN) {
-        status_icons_node.children[status_icons_node.children_count++] = &status_icon_spacer_node;
+        GUI_AddChild(&status_icons_node, &status_icon_spacer_node);
     }
 }
 
@@ -3202,10 +3277,6 @@ void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
 
 // --- НИЖНЯЯ НАВИГАЦИОННАЯ ПАНЕЛЬ (Grid 4 колонки: Cancel | Up | Down | Enter) ---
     static UIElement_t bottom_bar_grid;
-    static UIElement_t bottom_btn_cancel;
-    static UIElement_t bottom_btn_up;
-    static UIElement_t bottom_btn_down;
-    static UIElement_t bottom_btn_enter;
     
     // Отдельные спрайты для каждой кнопки (не делят один буфер!)
     static Sprite_t bottom_btn_cancel_sprite;
@@ -3233,7 +3304,7 @@ void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
         UI_SetGridColPercent(&bottom_bar_grid, i, 100 / BOTTOM_BAR_COLS);
     }
     
-    parent_grid->children[parent_grid->children_count++] = &bottom_bar_grid;
+    if (!GUI_AddChild(parent_grid, &bottom_bar_grid)) return;
     
     // Создаём 4 кнопки навигации в пуле panel_rows
     if (panel_rows_count + BOTTOM_BAR_COLS <= MAX_PANEL_ROWS) {
@@ -3253,7 +3324,7 @@ void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
         btn->props.button.press_color = RGB565_RED;
         btn->props.button.is_pressed = false;
         strncpy(btn->text_content, "Cancel", sizeof(btn->text_content)-1);
-        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        GUI_AddChild(&bottom_bar_grid, btn);
         s_bottom_btn[0] = btn;
         
         // === Up (колонка 1) ===
@@ -3272,7 +3343,7 @@ void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
         btn->props.button.press_color = RGB565_RED;
         btn->props.button.is_pressed = false;
         strncpy(btn->text_content, "Up", sizeof(btn->text_content)-1);
-        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        GUI_AddChild(&bottom_bar_grid, btn);
         s_bottom_btn[1] = btn;
         
         // === Down (колонка 2) ===
@@ -3291,7 +3362,7 @@ void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
         btn->props.button.press_color = RGB565_RED;
         btn->props.button.is_pressed = false;
         strncpy(btn->text_content, "Down", sizeof(btn->text_content)-1);
-        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        GUI_AddChild(&bottom_bar_grid, btn);
         s_bottom_btn[2] = btn;
         
         // === Enter (колонка 3) ===
@@ -3310,7 +3381,7 @@ void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
         btn->props.button.press_color = RGB565_RED;
         btn->props.button.is_pressed = false;
         strncpy(btn->text_content, "Enter", sizeof(btn->text_content)-1);
-        bottom_bar_grid.children[bottom_bar_grid.children_count++] = btn;
+        GUI_AddChild(&bottom_bar_grid, btn);
         s_bottom_btn[3] = btn;
     }
 

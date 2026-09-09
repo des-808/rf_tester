@@ -129,4 +129,92 @@ void RfSpectrum_RssiToString(int8_t rssi, char* buf, size_t buf_size);
  */
 void RfSpectrum_FreqToString(uint32_t freq, char* buf, size_t buf_size);
 
+/* ========================================================================
+ *  RSSI Plotter — непрерывный мониторинг через ring buffer
+ * ======================================================================== */
+
+/**
+ * @brief Структура состояния RSSI Plotter
+ */
+typedef struct {
+    bool            active;           /* Активен ли plotter */
+    int8_t          rssi_history[320];/* История RSSI для отображения (до ширины экрана) */
+    uint16_t        history_len;      /* Фактическая длина истории */
+    int8_t          peak_rssi;        /* Лучший RSSI за текущую сессию */
+    int8_t          min_rssi;         /* Минимальный RSSI за текущую сессию */
+    uint32_t        sample_count;     /* Общее количество выборок */
+} RfRssiPlotter_t;
+
+/**
+ * @brief Инициализировать RSSI Plotter
+ */
+void RfRssiPlotter_Init(RfRssiPlotter_t* plotter);
+
+/**
+ * @brief Обновить историю plotter'а из RSSI ring buffer CC1101
+ * @param plotter  Указатель на структуру состояния
+ * @param buf      Буфер для временного хранения выборок
+ * @param buf_size Размер временного буфера
+ */
+void RfRssiPlotter_Update(RfRssiPlotter_t* plotter, int8_t* buf, uint16_t buf_size);
+
+/**
+ * @brief Отрендерить plotter на дисплее
+ */
+void RfRssiPlotter_Render(RfRssiPlotter_t* plotter, int16_t x, int16_t y, uint16_t w, uint16_t h);
+
+/**
+ * @brief Сбросить статистику plotter'а (peak/min)
+ */
+void RfRssiPlotter_ResetStats(RfRssiPlotter_t* plotter);
+
+/* ========================================================================
+ *  RSSI Plotter Screen — полноэкранный режим с меню
+ * ======================================================================== */
+
+/**
+ * @brief Структура состояния экрана RSSI Plotter
+ */
+typedef struct {
+    bool            enabled;            /* Включён ли экран */
+    RfRssiPlotter_t plotter;            /* Состояние plotter'а */
+    uint32_t        last_sample_tick;   /* Последний таймстамп выборки */
+} RssiPlotterScreen_t;
+
+/**
+ * @brief Инициализировать экран RSSI Plotter
+ */
+void RssiPlotterScreen_Init(RssiPlotterScreen_t* screen);
+
+/**
+ * @brief Выйти из экрана RSSI Plotter (восстанавливает состояние меню)
+ * @param screen Указатель на структуру состояния
+ */
+void RssiPlotterScreen_Exit(RssiPlotterScreen_t* screen);
+
+/**
+ * @brief Обновить данные plotter'а из ring buffer
+ * @param screen Указатель на структуру состояния
+ */
+void RssiPlotterScreen_Update(RssiPlotterScreen_t* screen);
+
+/**
+ * @brief Проверить, активен ли экран
+ */
+bool RssiPlotterScreen_IsActive(RssiPlotterScreen_t* screen);
+
+/**
+ * @brief Обработка нажатия Cancel (выход из экрана)
+ * @param screen Указатель на структуру состояния
+ * @param key  Нажатая клавиша (KEY_CANCEL = 4)
+ * @return true если экран закрыт
+ */
+bool RssiPlotterScreen_ProcessKey(RssiPlotterScreen_t* screen, uint8_t key);
+
+/**
+ * @brief Отрисовка RSSI Plotter на graph_sprite
+ * @param screen Указатель на структуру состояния
+ */
+void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen);
+
 #endif /* __RF_SPECTRUM_H__ */
