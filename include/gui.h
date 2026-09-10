@@ -196,11 +196,14 @@ typedef struct UIElement {
     // Свойства привязки элемента ВНУТРИ родительского Grid
     uint8_t grid_row;
     uint8_t grid_col;
+    
+    // Пользовательские данные (для страниц и кастомных элементов)
+    void* user_data;
 } UIElement_t;
 
 #define HEAP_CAP_DEFAULT 0
 
-void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation);
+//void GUI_ShowAdvancedMeasurementScreen(uint8_t rotation);
 void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation);
 
 //Хелперы для работы с элементами интерфейса Grid
@@ -272,6 +275,22 @@ extern bool ui_debug_draw;
 // Сохранённое состояние меню при повороте экрана
 extern uint8_t saved_menu_scroll_offset;
 extern int16_t saved_menu_selected_index;
+
+// Общий пул UI-элементов (определён в gui.c)
+extern UIElement_t panel_rows[MAX_PANEL_ROWS];
+extern uint8_t panel_rows_count;
+
+/* Глобальные спрайты и узлы (определены в gui.c) */
+extern Sprite_t main_screen_sprite;
+extern Sprite_t graph_sprite;
+extern Sprite_t status_bar_sprite;
+extern Sprite_t bottom_bar_sprite;
+extern UIElement_t digits_node;
+extern UIElement_t main_work_grid;
+extern UIElement_t ui_bands_listbox;
+
+/* Шрифт по умолчанию (определён в gui.c или font.h) */
+extern const Font_t font_arial_9_struct;
 
 void GUI_BuildModularStatusBar(UIElement_t* parent_grid);
 void GUI_InvalidateStatusBar(void);

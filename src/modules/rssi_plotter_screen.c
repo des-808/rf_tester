@@ -45,8 +45,8 @@ void RssiPlotterScreen_Enter(void) {
     s_rssi_screen.enabled = true;
     s_rssi_screen.last_sample_tick = 0;
     
-    /* Сворачиваем меню — освобождаем память ListBox */
-    Menu_Collapse();
+    /* Menu_Collapse() вызывается вызывающим (Page_OpenStatic → RssiPage_Init).
+     * Этот API оставлен для обратной совместимости. */
     
     /* Сбрасываем plotter */
     RfRssiPlotter_ResetStats(&s_rssi_screen.plotter);
@@ -54,12 +54,9 @@ void RssiPlotterScreen_Enter(void) {
     s_rssi_screen.plotter.history_len = 0;
     
     /* Отключаем отладочную отрисовку */
-    extern bool ui_debug_draw;
     ui_debug_draw = false;
     
-    /* Инвалидируем спрайты для перерисовки */
-    extern Sprite_t graph_sprite;
-    extern Sprite_t main_screen_sprite;
+    /* Инвалидируем спрайты для перерисовки (extern из gui.h) */
     
     /* Инвалидируем graph_sprite — отрисовка произойдёт через render_callback */
     if (graph_sprite.is_allocated && graph_sprite.data) {
@@ -86,17 +83,13 @@ void RssiPlotterScreen_ExitGlobal(void) {
     Menu_Expand();
     
     /* Включаем отладочную отрисовку обратно */
-    extern bool ui_debug_draw;
     ui_debug_draw = true;
     
-    /* Инвалидируем спрайт меню для перерисовки */
-    extern Sprite_t main_screen_sprite;
+    /* Инвалидируем спрайты для перерисовки (extern из gui.h) */
     if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
         main_screen_sprite.needs_render = true;
     }
     
-    /* Инвалидируем графический спрайт */
-    extern Sprite_t graph_sprite;
     if (graph_sprite.is_allocated && graph_sprite.data) {
         graph_sprite.needs_render = true;
     }
@@ -126,8 +119,7 @@ void RssiPlotterScreen_UpdateGlobal(void) {
     /* Обновляем plotter */
     RfRssiPlotter_Update(&s_rssi_screen.plotter, samples, count);
     
-    /* Инвалидируем graph_sprite для перерисовки */
-    extern Sprite_t graph_sprite;
+    /* Инвалидируем graph_sprite для перерисовки (extern из gui.h) */
     if (graph_sprite.is_allocated && graph_sprite.data) {
         graph_sprite.needs_render = true;
         graph_sprite.dirty_x1 = 0; graph_sprite.dirty_y1 = 0;

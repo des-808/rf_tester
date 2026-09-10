@@ -18,7 +18,7 @@
 UIElement_t root_grid;
 
 UIElement_t main_work_grid;
-UIElement_t graph_node;
+//UIElement_t graph_node;
 UIElement_t digits_node;   // Наша правая панель (используется в MeasurementScreen)
 UIElement_t digits_panel;  // Спрайт-контейнер панели (используется в GUI_BuildProInterface)
 UIElement_t ui_bands_listbox; // Сам контейнер ListBox
@@ -85,8 +85,8 @@ Sprite_t graph_sprite;
 Sprite_t main_screen_sprite;
 Sprite_t bottom_bar_sprite;
 
-// Пул элементов для строк (выделяем память статически внутри gui.c, чтобы не плодить глобальные имена)
-static UIElement_t panel_rows[MAX_PANEL_ROWS];
+// Пул элементов для строк (выделяем память статически — общий пул для всех модулей)
+UIElement_t panel_rows[MAX_PANEL_ROWS];
 uint8_t panel_rows_count = 0;
 
 // Нам нужны указатели только на динамические данные. 

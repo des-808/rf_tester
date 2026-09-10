@@ -93,9 +93,9 @@ uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 extern DMA_HandleTypeDef hdma_spi4_tx;
 extern DMA2D_HandleTypeDef hdma2d;
 //extern void drawStatusBar(Sprite_t *sprite);
-extern Sprite_t* status_bar_sprite;
+/* extern Sprite_t* status_bar_sprite;
 extern Sprite_t* main_screen_sprite;
-extern Sprite_t* graph_sprite; // если нужен доступ к графику из main.c
+extern Sprite_t* graph_sprite; // если нужен доступ к графику из main.c */
 
 extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
 extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
@@ -504,12 +504,9 @@ I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_sc
     }
 
     // ====================================================================
-    // 3.5. RSSI PLOTTER SCREEN — обновление данных
+    // 3.5. ОБНОВЛЕНИЕ АКТИВНОЙ СТРАНИЦЫ (RSSI, Spectrum и др.)
     // ====================================================================
-    if (rssi_plotter_active) {
-        /* Обновляем данные из ring buffer */
-        RssiPlotterScreen_UpdateGlobal();
-    }
+    Page_UpdateAll();
 
     // ====================================================================
     // 4. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)

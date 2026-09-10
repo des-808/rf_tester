@@ -5,6 +5,7 @@
 #include "gui.h" // Для UIElement_t и типов
 
 #include "buttons.h"
+#include "page.h"
 
 /* Шаги редактирования CC1101 хранятся в сотых долях единицы:
  * частота: 1 = 10 kHz, битрейт: 1 = 100 baud. */
@@ -28,7 +29,8 @@ typedef enum {
     ITEM_TYPE_ACTION,      // Действие (кнопка "Send", "Settings")
     ITEM_TYPE_VALUE,       // Значение, которое можно менять (Sys, Room, Freq)
     ITEM_TYPE_SUBMENU,     // Переход в подменю
-    ITEM_TYPE_EDIT_MODE    // Режим редактирования значения (временный)
+    ITEM_TYPE_EDIT_MODE,   // Режим редактирования значения (временный)
+    ITEM_TYPE_PAGE         // Переход на страницу (UIElement-контейнер)
 } MenuItemType_t;
 
 // Структура для иконок (если вы используете их как пиксели/спрайты)
@@ -51,6 +53,7 @@ typedef struct MenuItem {
         void* ptr_value;       // Для ITEM_TYPE_VALUE: указатель на int/uint
         void (*action_func)(void); // Для ITEM_TYPE_ACTION
         struct MenuItem* submenu_items; // Для ITEM_TYPE_SUBMENU: массив подменю
+        PageDef_t* page_def;   // Для ITEM_TYPE_PAGE: указатель на описание страницы
     } data;
     
     // Лимиты значений (для ITEM_TYPE_VALUE) — вне union, всегда доступны
