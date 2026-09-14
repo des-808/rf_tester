@@ -41,6 +41,10 @@ bool rs485toBt = true;
 
 // Переменные для меню (синхронизированы с ESP32 defaults)
 uint8_t rs485BaudIndex = 0;
+uint8_t rs485DataBits = 3;    // 3 = 8 bits
+uint8_t rs485Parity = 0;      // 0 = NONE
+uint8_t rs485StopBits = 0;    // 0 = 1 stop bit
+uint8_t rs485FlowControl = 0; // 0 = NONE
 uint8_t oledBrightness = 5;
 uint32_t cc1101FreqFixed   = 43396;  /* 433.96 МГц */
 uint16_t cc1101BitRateFixed = 960;   /* 9.60 kbps (1.2..600) */
@@ -1435,7 +1439,7 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
  * @brief Вспомогательная функция для отрисовки одиночного дочернего элемента
  *        Обеспечивает инкапсуляцию и защиту от дублирования кода в UI_DrawTree
  */
-static void UI_RenderChildElement(void* child_ptr) {
+void UI_RenderChildElement(void* child_ptr) {
     UIElement_t* child = (UIElement_t*)child_ptr;
     
     // 1. Строгая защита от нулевого указателя (HardFault protection)
@@ -1466,7 +1470,14 @@ static void UI_RenderChildElement(void* child_ptr) {
             case UI_TYPE_RADIO_BUTTON: 
                 UI_RenderToggle(child);           
                 break;
-                
+
+            case UI_TYPE_STACK_PANEL:
+                // Рекурсивная отрисовка детей StackPanel (для страниц)
+                for (uint8_t i = 0; i < child->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+                    UI_RenderChildElement(child->children[i]);
+                }
+                break;
+
             default: 
                 // Неизвестные типы или чистые контейнеры без контента просто пропускаем
                 break;
@@ -2282,7 +2293,7 @@ void UI_RenderListBox(UIElement_t* el) {
                               y == ly + 1 || y == ly + el->h - 2);
             
             if (is_border) {
-                s->data[y * s->w + x] = 0x7BEF; // Цвет рамки
+                s->data[y * s->w + x] = RGB565_BLACK;//0x7BEF; // Цвет рамки
             } else {
                 s->data[y * s->w + x] = RGB565_BLACK; // Фон списка
             }

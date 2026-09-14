@@ -148,14 +148,14 @@ static TouchPoint_t* TouchPoint_FindByCoords(uint16_t x, uint16_t y) {
 }
 
 /* ===== СБРОС ВСЕХ ТОЧЕК ===== */
-static void TouchPoint_ResetAll(void) {
+/* static void TouchPoint_ResetAll(void) {
     for (uint8_t i = 0; i < MAX_TOUCH_POINTS; i++) {
         touch_points[i].is_active = 0;
         touch_points[i].is_locked = 0;
         touch_points[i].long_triggered = 0;
         touch_points[i].click_count = 0;
     }
-}
+} */
 
 /* ===== КОНСТАНТЫ ФИЛЬТРАЦИИ КООРДИНАТ ===== */
 #define TOUCH_SAMPLE_COUNT  5  /* Количество последних показаний для проверки стабильности */
@@ -270,17 +270,17 @@ static void ProcessBottomBar(UIElement_t* lb, int8_t btn_idx, uint32_t now) {
         case 0: /* Cancel — выход из подменю */
             Menu_PopMenu(lb);
             touch_lock_tick = now;
-            if (buzzerOnOff) Buzzer_PlayTone(400, 50);
+            //if (buzzerOnOff) Buzzer_PlayTone(400, 50);
             if (vibroOnOff) Vibrator_Pulse(30);
             break;
         case 1: /* Up — вверх по меню */
             Touch_NavUp(lb);
-            if (buzzerOnOff) Buzzer_PlayTone(800, 30);
+            //if (buzzerOnOff) Buzzer_PlayTone(800, 30);
             if (vibroOnOff) Vibrator_Pulse(30);
             break;
         case 2: /* Down — вниз по меню */
             Touch_NavDown(lb);
-            if (buzzerOnOff) Buzzer_PlayTone(800, 30);
+            //if (buzzerOnOff) Buzzer_PlayTone(800, 30);
             if (vibroOnOff) Vibrator_Pulse(30);
             break;
         case 3: /* Enter — выбрать/открыть пункт */
@@ -288,7 +288,7 @@ static void ProcessBottomBar(UIElement_t* lb, int8_t btn_idx, uint32_t now) {
             uint8_t idx = (uint8_t)lb->props.list_box.selected_index;
             if (idx < current_menu_count) {
                 Menu_ExecuteSelected(lb, idx);
-                if (buzzerOnOff) Buzzer_PlayTone(1000, 50);
+                //if (buzzerOnOff) Buzzer_PlayTone(1000, 50);
                 if (vibroOnOff) Vibrator_Pulse(30);
             }
             }

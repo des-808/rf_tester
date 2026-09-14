@@ -22,6 +22,57 @@
 
 /* USER CODE BEGIN 0 */
 
+/* Перенаправление printf на UART4 */
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/errno.h>
+
+/* Переопределение syscall _write для redirect stdout на UART4 */
+int _write(int file, char *ptr, int len)
+{
+    if (file != 1) {  // Только stdout (fd=1)
+        return -1;
+    }
+    
+    HAL_UART_Transmit(&huart4, (uint8_t*)ptr, len, HAL_MAX_DELAY);
+    return len;
+}
+
+/* Таблица бодрейтов RS485 (дублирует menu.c) */
+static const uint32_t rs485_baud_rates[] = {
+    110U, 300U, 600U, 1200U, 2400U, 4800U, 9600U, 14400U,
+    19200U, 38400U, 56000U, 57600U, 115200U, 128000U, 256000U
+};
+
+/**
+ * @brief Переинициализировать UART4 с новым бодрейтом
+ * @param baudIndex Индекс бодрейта (0..14)
+ */
+void UART4_ReinitByBaudIndex(uint8_t baudIndex)
+{
+    if (baudIndex >= 15) return;
+    
+    uint32_t baud = rs485_baud_rates[baudIndex];
+    
+    /* Останавливаем UART */
+    HAL_UART_AbortTransmit(&huart4);
+    HAL_UART_AbortReceive(&huart4);
+    HAL_UART_DeInit(&huart4);
+    
+    /* Устанавливаем новый бодрейт */
+    huart4.Init.BaudRate = baud;
+    
+    /* Перезапускаем UART */
+    if (HAL_UART_Init(&huart4) != HAL_OK) {
+        /* Если не удалось — возвращаем 115200 */
+        huart4.Init.BaudRate = 115200;
+        HAL_UART_Init(&huart4);
+    }
+    
+    printf("[UART4] Reinit to baud=%lu (index=%d)\n", (unsigned long)baud, baudIndex);
+}
+
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart4;

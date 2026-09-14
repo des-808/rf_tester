@@ -217,6 +217,12 @@ void Page_DrawCurrent(void);
 void Page_UpdateAll(void);
 
 /**
+ * @brief Установить флаг что Menu_Expand уже вызван (избежать дубля)
+ *        Используется страницами которые сами вызывают Menu_Expand в on_input
+ */
+void Page_SetMenuExpandCalled(void);
+
+/**
  * @brief Передать ввод текущей странице (вызывается из Menu_ProcessInput)
  * @param key KEY_UP, KEY_DOWN, KEY_ENTER, KEY_CANCEL
  * @return true если ввод обработан страницей

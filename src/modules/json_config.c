@@ -31,6 +31,11 @@ static cJSON* create_default_settings_json(void) {
     
     /* Общие настройки */
     cJSON_AddNumberToObject(root, "rs485_baud_index", 8);
+    cJSON_AddNumberToObject(root, "rs485_data_bits", 3);
+    cJSON_AddNumberToObject(root, "rs485_parity", 0);
+    cJSON_AddNumberToObject(root, "rs485_stop_bits", 0);
+    cJSON_AddNumberToObject(root, "rs485_flow_control", 0);
+    cJSON_AddBoolToObject(root, "rs485_to_bt", 1);
     cJSON_AddNumberToObject(root, "oled_brightness", 5);
     cJSON_AddBoolToObject(root, "bluetooth_enabled", 0);
     cJSON_AddBoolToObject(root, "wifi_enabled", 0);
@@ -101,6 +106,11 @@ bool SettingsToJson(const void* settings, char* json_buf, size_t buf_size) {
     cJSON_AddNumberToObject(root, "room", s->room);
     cJSON_AddNumberToObject(root, "btn", s->btn);
     cJSON_AddNumberToObject(root, "rs485_baud_index", s->rs485_baud_index);
+    cJSON_AddNumberToObject(root, "rs485_data_bits", s->rs485_data_bits);
+    cJSON_AddNumberToObject(root, "rs485_parity", s->rs485_parity);
+    cJSON_AddNumberToObject(root, "rs485_stop_bits", s->rs485_stop_bits);
+    cJSON_AddNumberToObject(root, "rs485_flow_control", s->rs485_flow_control);
+    cJSON_AddBoolToObject(root, "rs485_to_bt", s->rs485_to_bt);
     cJSON_AddNumberToObject(root, "oled_brightness", s->oled_brightness);
     cJSON_AddBoolToObject(root, "bluetooth_enabled", s->bluetooth_enabled);
     cJSON_AddBoolToObject(root, "wifi_enabled", s->wifi_enabled);
@@ -144,6 +154,11 @@ bool JsonToSettings(const char* json, void* settings) {
     s->room           = get_json_number(root, "room", 1);
     s->btn            = get_json_number(root, "btn", 1);
     s->rs485_baud_index   = get_json_number(root, "rs485_baud_index", 8);
+    s->rs485_data_bits    = get_json_number(root, "rs485_data_bits", 3);
+    s->rs485_parity       = get_json_number(root, "rs485_parity", 0);
+    s->rs485_stop_bits    = get_json_number(root, "rs485_stop_bits", 0);
+    s->rs485_flow_control = get_json_number(root, "rs485_flow_control", 0);
+    s->rs485_to_bt        = get_json_bool(root, "rs485_to_bt", 1);
     s->oled_brightness    = get_json_number(root, "oled_brightness", 5);
     s->bluetooth_enabled  = get_json_bool(root, "bluetooth_enabled", 0);
     s->wifi_enabled       = get_json_bool(root, "wifi_enabled", 0);

@@ -20,6 +20,11 @@
  *  Глобальные переменные проекта (экстерны из menu.c / main.c)
  * ======================================================================== */
 extern uint8_t  rs485BaudIndex;
+extern uint8_t  rs485DataBits;
+extern uint8_t  rs485Parity;
+extern uint8_t  rs485StopBits;
+extern uint8_t  rs485FlowControl;
+extern bool     rs485toBt;
 extern uint8_t  oledBrightness;
 extern int      bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, vibroOnOff;
 
@@ -69,7 +74,12 @@ static void settings_set_defaults(Settings_t* s) {
 
     /* Общие настройки */
     s->rs485_baud_index    = 8;   /* 19200 бод */
-    s->oled_brightness     = 5;   /* Половина яркости */
+    s->rs485_data_bits     = 3;  /* 8 bits */
+    s->rs485_parity        = 0;  /* NONE */
+    s->rs485_stop_bits     = 0;  /* 1 stop bit */
+    s->rs485_flow_control  = 0;  /* NONE */
+    s->rs485_to_bt         = 1;  /* enabled */
+    s->oled_brightness     = 5;  /* Половина яркости */
     s->bluetooth_enabled   = 0;
     s->wifi_enabled        = 0;
     s->ntp_sync_enabled    = 0;
@@ -93,6 +103,11 @@ static bool settings_validate(const Settings_t* s) {
     if (s->version != SETTINGS_SCHEMA_VERSION) return false;
 
     if (s->rs485_baud_index > RS485_BAUD_MAX) return false;
+    if (s->rs485_data_bits > 3) return false;
+    if (s->rs485_parity > 2) return false;
+    if (s->rs485_stop_bits > 1) return false;
+    if (s->rs485_flow_control > 3) return false;
+    if (s->rs485_to_bt > 1) return false;
     if (s->oled_brightness < BACKLIGHT_MIN || s->oled_brightness > BACKLIGHT_MAX) return false;
     if (s->bluetooth_enabled > 1) return false;
     if (s->wifi_enabled > 1) return false;
@@ -114,6 +129,11 @@ static bool settings_validate(const Settings_t* s) {
  * ======================================================================== */
 void SettingsManager_Apply(void) {
     rs485BaudIndex         = g_settings.rs485_baud_index;
+    rs485DataBits          = g_settings.rs485_data_bits;
+    rs485Parity            = g_settings.rs485_parity;
+    rs485StopBits          = g_settings.rs485_stop_bits;
+    rs485FlowControl       = g_settings.rs485_flow_control;
+    rs485toBt              = (bool)g_settings.rs485_to_bt;
     oledBrightness         = g_settings.oled_brightness;
     lcd_backlight_level    = g_settings.oled_brightness;
     bluetoothEnabled       = g_settings.bluetooth_enabled;

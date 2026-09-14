@@ -71,30 +71,22 @@ static bool RssiPage_Input(UIElement_t* page, uint8_t key)
 {
     (void)page;
     
-    /* KEY_CANCEL = 4 (определено в buttons.h) */
-    if (key == 4) {
-        /* Очищаем состояние RSSI через публичный API */
-        RssiPlotterScreen_ExitGlobal();
-        
-        /* Закрываем страницу (удаляет из children, но Menu_Expand уже вызван) */
-        Page_CloseCurrent();
-        
-        return true;
-    }
-    
+    /* KEY_CANCEL обрабатывается автоматически в Page_ProcessInput — возвращаем false */
     return false;
 }
 
 /**
  * @brief Деинициализация RSSI страницы
  * 
- * Вызывается Page_CloseCurrent() → Page_CloseStatic() → on_deinit.
- * Состояние уже очищено в RssiPage_Input через RssiPlotterScreen_ExitGlobal().
+ * Вызывается Page_CloseStatic() после KEY_CANCEL.
+ * Здесь очищаем состояние RSSI и вызываем Menu_Expand.
  */
 static void RssiPage_Deinit(UIElement_t* page)
 {
     (void)page;
-    /* Состояние RSSI уже очищено в RssiPage_Input */
+    
+    /* Очищаем состояние RSSI */
+    RssiPlotterScreen_ExitGlobal();
 }
 
 /* ========================================================================
@@ -133,5 +125,6 @@ void Page_OpenRssiPlotter(void)
  */
 PageDef_t* Page_GetRssiPageDef(void)
 {
+    printf("[PageRSSI] Page_GetRssiPageDef returning &rssi_page_def=%p\n", (void*)&rssi_page_def);
     return &rssi_page_def;
 }

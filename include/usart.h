@@ -48,6 +48,12 @@ void MX_UART8_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
+/**
+ * @brief Переинициализировать UART4 с новым бодрейтом
+ * @param baudIndex Индекс бодрейта (0..14 из rs485_baud_rates[])
+ */
+void UART4_ReinitByBaudIndex(uint8_t baudIndex);
+
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

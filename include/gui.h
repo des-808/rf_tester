@@ -268,6 +268,7 @@ int8_t UI_ListBox_ProcessTouch(UIElement_t* listbox, uint16_t tx, uint16_t ty);
 UIElement_t* UI_FindElementAt(UIElement_t* root, uint16_t tx, uint16_t ty, int16_t* out_local_x, int16_t* out_local_y);
 void UI_RenderListBox(UIElement_t* el);
 void UI_RenderListBoxItem(UIElement_t* el, uint8_t item_index);
+void UI_RenderChildElement(void* child_ptr);
 
 // Включить/выключить отладочную отрисовку геометрии элементов и скроллбара
 extern bool ui_debug_draw;

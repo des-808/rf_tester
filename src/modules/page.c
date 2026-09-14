@@ -19,6 +19,12 @@ static bool         g_page_is_dynamic = false;
 /* Для динамических страниц — храним указатель */
 static DynamicPage_t* g_dynamic_page = NULL;
 
+/* Счётчик элементов пула при открытии страницы (для возврата при закрытии) */
+static uint8_t g_page_rows_snapshot = 0;
+
+/* Флаг: Menu_Expand уже вызван (избегаем дубля) */
+static bool g_menu_expand_called = false;
+
 /* Стек состояний (сохраняет меню/страницы при вложенности) */
 static PageStackEntry_t g_page_stack[MAX_PAGE_DEPTH];
 static int g_page_stack_top = -1;
@@ -37,6 +43,7 @@ void Page_Init(void)
     g_page_is_dynamic = false;
     g_dynamic_page = NULL;
     g_page_stack_top = -1;
+    g_menu_expand_called = false;
 }
 
 /* ========================================================================
@@ -63,6 +70,14 @@ static void Page_RenderCallback(UIElement_t* el)
 {
     if (g_current_def && g_current_def->on_draw) {
         g_current_def->on_draw(el);
+    } else {
+        /* Если on_draw == NULL — рисуем детей стандартным способом */
+        for (uint8_t i = 0; i < el->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+            UIElement_t* child = (UIElement_t*)el->children[i];
+            if (child) {
+                UI_RenderChildElement(child);
+            }
+        }
     }
 }
 
@@ -74,12 +89,31 @@ bool Page_OpenStatic(PageDef_t* def, UIElement_t* parent_container)
 {
     if (!def || !parent_container) return false;
     
+    printf("[Page] OpenStatic: %s\n", def->name);
+    g_page_rows_snapshot = panel_rows_count;
+    printf("[Page] panel_rows_count snapshot: %d\n", g_page_rows_snapshot);
+    
     g_parent_container = parent_container;
     
-    /* Collapse текущий ListBox меню */
-    if (current_menu_listbox) {
-        Menu_Collapse();
+    /* Полностью убираем ListBox меню из children digits_node */
+    if (current_menu_listbox && parent_container) {
+        for (uint8_t i = 0; i < parent_container->children_count; i++) {
+            if (parent_container->children[i] == current_menu_listbox) {
+                /* Сдвигаем массив детей */
+                for (uint8_t j = i; j < parent_container->children_count - 1; j++) {
+                    parent_container->children[j] = parent_container->children[j + 1];
+                }
+                parent_container->children_count--;
+                /* Сохраняем указатель на menu_lb для восстановления */
+                current_menu_listbox->w = 0;
+                current_menu_listbox->h = 0;
+                current_menu_listbox->props.list_box.collapsed = 1;
+                break;
+            }
+        }
     }
+    
+    printf("[Page] After hide menu, panel_rows_count: %d\n", panel_rows_count);
     
     /* Сохраняем состояние на стек */
     if (g_page_stack_top < MAX_PAGE_DEPTH - 1) {
@@ -92,7 +126,12 @@ bool Page_OpenStatic(PageDef_t* def, UIElement_t* parent_container)
     
     /* Создаём UIElement-контейнер страницы из пула */
     UIElement_t* page_el = page_alloc_element();
-    if (!page_el) return false;
+    if (!page_el) {
+        printf("[Page] FAIL: page_alloc_element returned NULL\n");
+        return false;
+    }
+    
+    printf("[Page] page_el=%p, panel_rows_count after alloc: %d\n", (void*)page_el, panel_rows_count);
     
     /* Настраиваем контейнер */
     page_el->type = def->container_type;
@@ -114,15 +153,46 @@ bool Page_OpenStatic(PageDef_t* def, UIElement_t* parent_container)
     page_el->user_data = def->user_data;
     
     /* Вызываем инициализацию */
+    printf("[Page] Calling on_init for %s\n", def->name);
     if (def->on_init) {
         if (!def->on_init(page_el, parent_container)) {
+            printf("[Page] on_init returned false\n");
             return false;
         }
     }
     
+    /* Устанавливаем спрайт для всех потомков страницы (page_alloc_element ставит NULL) */
+    page_el->sprite = &main_screen_sprite;
+    for (uint8_t i = 0; i < page_el->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+        UIElement_t* child = (UIElement_t*)page_el->children[i];
+        if (child) {
+            child->sprite = &main_screen_sprite;
+            /* Рекурсивно для вложенных панелей */
+            for (uint8_t j = 0; j < child->children_count && j < MAX_ELEMENT_CHILDREN; j++) {
+                UIElement_t* grandchild = (UIElement_t*)child->children[j];
+                if (grandchild) {
+                    grandchild->sprite = &main_screen_sprite;
+                }
+            }
+        }
+    }
+    
+    printf("[Page] Adding page to parent, children_count before: %d\n", parent_container->children_count);
+    
     /* Добавляем страницу в parent */
     if (parent_container->children_count < MAX_ELEMENT_CHILDREN) {
         parent_container->children[parent_container->children_count++] = page_el;
+    }
+    
+    printf("[Page] children_count after: %d, panel_rows_count: %d\n", parent_container->children_count, panel_rows_count);
+    
+    /* Измеряем root_grid — пересчитаем layout всех детей (включая новую страницу) */
+    extern UIElement_t root_grid;
+    extern uint16_t Display_Width;
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, 240);
+    if (page_el->w > 0 && page_el->h > 0 && page_el->sprite && page_el->sprite->data) {
+        memset(&page_el->sprite->data[page_el->y * page_el->sprite->w + page_el->x], 
+               0x00, page_el->w * page_el->h * 2);
     }
     
     /* Обновляем глобальное состояние */
@@ -134,12 +204,24 @@ bool Page_OpenStatic(PageDef_t* def, UIElement_t* parent_container)
     /* Инвалидируем спрайт для перерисовки */
     main_screen_sprite.needs_render = true;
     
+    printf("[Page] OpenStatic SUCCESS\n");
+    
     return true;
 }
 
 bool Page_CloseStatic(void)
 {
     if (!g_current_page) return false;
+    
+    /* Guard: если page_rows_count уже равен snapshot — страница уже закрыта */
+    if (panel_rows_count == g_page_rows_snapshot) {
+        printf("[Page] Already closed, clearing state\n");
+        g_current_page = NULL;
+        g_current_def = NULL;
+        g_page_is_dynamic = false;
+        g_dynamic_page = NULL;
+        return true;
+    }
     
     /* Вызываем деинициализацию */
     if (g_current_def && g_current_def->on_deinit) {
@@ -160,10 +242,23 @@ bool Page_CloseStatic(void)
         }
     }
     
-    /* Восстанавливаем ListBox */
-    if (current_menu_listbox) {
-        Menu_Expand();
+    /* ВОЗВРАЩАЕМ весь пул страницы — используем snapshot */
+    if (g_current_page) {
+        uint8_t delta = panel_rows_count - g_page_rows_snapshot;
+        printf("[Page] Closing: returning %d elements to snapshot %d (current %d)\n", 
+               delta, g_page_rows_snapshot, panel_rows_count);
+        panel_rows_count = g_page_rows_snapshot;
+        printf("[Page] panel_rows_count after close: %d\n", panel_rows_count);
     }
+    
+    /* Восстанавливаем ListBox меню — добавляем обратно в children */
+    if (current_menu_listbox && !g_menu_expand_called && g_parent_container) {
+        if (g_parent_container->children_count < MAX_ELEMENT_CHILDREN) {
+            current_menu_listbox->props.list_box.collapsed = 0;
+            g_parent_container->children[g_parent_container->children_count++] = current_menu_listbox;
+        }
+    }
+    g_menu_expand_called = false;
     
     /* Восстанавливаем состояние со стека */
     if (g_page_stack_top >= 0) {
@@ -188,6 +283,11 @@ bool Page_CloseStatic(void)
     g_page_is_dynamic = false;
     g_dynamic_page = NULL;
     
+    /* Пересчитываем root_grid — menu_lb снова должен занять место */
+    extern UIElement_t root_grid;
+    extern uint16_t Display_Width;
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, 240);
+    
     main_screen_sprite.needs_render = true;
     
     return true;
@@ -203,9 +303,20 @@ DynamicPage_t* Page_OpenDynamic(PageDef_t* def, UIElement_t* parent_container)
     
     g_parent_container = parent_container;
     
-    /* Collapse текущий ListBox меню */
-    if (current_menu_listbox) {
-        Menu_Collapse();
+    /* Полностью убираем ListBox меню из children */
+    if (current_menu_listbox && parent_container) {
+        for (uint8_t i = 0; i < parent_container->children_count; i++) {
+            if (parent_container->children[i] == current_menu_listbox) {
+                for (uint8_t j = i; j < parent_container->children_count - 1; j++) {
+                    parent_container->children[j] = parent_container->children[j + 1];
+                }
+                parent_container->children_count--;
+                current_menu_listbox->w = 0;
+                current_menu_listbox->h = 0;
+                current_menu_listbox->props.list_box.collapsed = 1;
+                break;
+            }
+        }
     }
     
     /* Сохраняем состояние на стек */
@@ -216,6 +327,9 @@ DynamicPage_t* Page_OpenDynamic(PageDef_t* def, UIElement_t* parent_container)
         g_page_stack[g_page_stack_top].list_scroll = 0;
         g_page_stack[g_page_stack_top].list_selected = 0;
     }
+    
+    /* Сохраняем snapshot пула */
+    g_page_rows_snapshot = panel_rows_count;
     
     /* Выделяем DynamicPage_t */
     DynamicPage_t* dpage = (DynamicPage_t*)heap_caps_malloc(sizeof(DynamicPage_t), 0);
@@ -252,9 +366,32 @@ DynamicPage_t* Page_OpenDynamic(PageDef_t* def, UIElement_t* parent_container)
         }
     }
     
+    /* Устанавливаем спрайт для всех потомков */
+    page_el->sprite = &main_screen_sprite;
+    for (uint8_t i = 0; i < page_el->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
+        UIElement_t* child = (UIElement_t*)page_el->children[i];
+        if (child) {
+            child->sprite = &main_screen_sprite;
+            for (uint8_t j = 0; j < child->children_count && j < MAX_ELEMENT_CHILDREN; j++) {
+                UIElement_t* gc = (UIElement_t*)child->children[j];
+                if (gc) gc->sprite = &main_screen_sprite;
+            }
+        }
+    }
+    
     /* Добавляем в parent */
     if (parent_container->children_count < MAX_ELEMENT_CHILDREN) {
         parent_container->children[parent_container->children_count++] = page_el;
+    }
+    
+    /* Пересчитываем layout parent */
+    extern uint16_t Display_Width;
+    UI_MeasureAndArrange(parent_container, parent_container->x, parent_container->y, parent_container->w, parent_container->h);
+    
+    /* Очищаем область страницы */
+    if (page_el->w > 0 && page_el->h > 0 && page_el->sprite && page_el->sprite->data) {
+        memset(&page_el->sprite->data[page_el->y * page_el->sprite->w + page_el->x], 
+               0x00, page_el->w * page_el->h * 2);
     }
     
     /* Обновляем глобальное состояние */
@@ -274,6 +411,17 @@ bool Page_CloseDynamic(DynamicPage_t* page)
     
     UIElement_t* page_el = &page->element;
     
+    /* Guard: если page_rows_count уже равен snapshot — страница уже закрыта */
+    if (panel_rows_count == g_page_rows_snapshot) {
+        printf("[Page] Dynamic already closed, clearing state\n");
+        g_current_page = NULL;
+        g_current_def = NULL;
+        g_page_is_dynamic = false;
+        g_dynamic_page = NULL;
+        heap_caps_free(page);
+        return true;
+    }
+    
     /* Деинициализация */
     if (page->def.on_deinit) {
         page->def.on_deinit(page_el);
@@ -292,10 +440,23 @@ bool Page_CloseDynamic(DynamicPage_t* page)
         }
     }
     
-    /* Восстанавливаем ListBox */
-    if (current_menu_listbox) {
-        Menu_Expand();
+    /* ВОЗВРАЩАЕМ весь пул страницы — используем snapshot */
+    if (page_el) {
+        uint8_t delta = panel_rows_count - g_page_rows_snapshot;
+        printf("[Page] Closing dynamic: returning %d elements to snapshot %d (current %d)\n",
+               delta, g_page_rows_snapshot, panel_rows_count);
+        panel_rows_count = g_page_rows_snapshot;
+        printf("[Page] panel_rows_count after close: %d\n", panel_rows_count);
     }
+    
+    /* Восстанавливаем ListBox меню */
+    if (current_menu_listbox && !g_menu_expand_called && g_parent_container) {
+        if (g_parent_container->children_count < MAX_ELEMENT_CHILDREN) {
+            current_menu_listbox->props.list_box.collapsed = 0;
+            g_parent_container->children[g_parent_container->children_count++] = current_menu_listbox;
+        }
+    }
+    g_menu_expand_called = false;
     
     /* Восстанавливаем состояние */
     if (g_page_stack_top >= 0) {
@@ -309,6 +470,10 @@ bool Page_CloseDynamic(DynamicPage_t* page)
     g_current_def = NULL;
     g_page_is_dynamic = false;
     g_dynamic_page = NULL;
+    
+    extern UIElement_t root_grid;
+    extern uint16_t Display_Width;
+    UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, 240);
     
     /* Освобождаем память */
     heap_caps_free(page);
@@ -362,22 +527,41 @@ void Page_UpdateAll(void)
     }
 }
 
+/**
+ * @brief Установить флаг что Menu_Expand уже вызван (избежать дубля)
+ *        Вызывается из on_input если on_input сам вызывает Menu_Expand
+ */
+void Page_SetMenuExpandCalled(void)
+{
+    g_menu_expand_called = true;
+}
+
 bool Page_ProcessInput(uint8_t key)
 {
-    if (!g_current_page || !g_current_def || !g_current_def->on_input) return false;
+    printf("[Page] ProcessInput key=%d, g_current_page=%p\n", key, (void*)g_current_page);
+    if (!g_current_page || !g_current_def) {
+        printf("[Page] No active page\n");
+        return false;
+    }
     
     /* Если страница обработала ввод — возвращаем true */
-    if (g_current_def->on_input(g_current_page, key)) {
-        return true;
+    if (g_current_def->on_input) {
+        printf("[Page] Calling on_input\n");
+        if (g_current_def->on_input(g_current_page, key)) {
+            printf("[Page] on_input handled key\n");
+            return true;
+        }
     }
     
     /* Если не обработала — передаём на обработку по умолчанию */
-    /* Например, KEY_CANCEL = back */
+    printf("[Page] on_input returned false, checking KEY_CANCEL=%d\n", KEY_CANCEL);
     if (key == KEY_CANCEL) {
+        printf("[Page] KEY_CANCEL detected, closing\n");
         Page_CloseCurrent();
         return true;
     }
     
+    printf("[Page] Key not handled\n");
     return false;
 }
 

@@ -113,13 +113,13 @@ static bool Page_About_Init(UIElement_t* page, UIElement_t* parent)
     if (!panel) return false;
     
     Page_AddText(panel, "RF Tester v1.0");
-    Page_AddText(panel, "ESP32 + ST7796");
-    Page_AddText(panel, "");
+    Page_AddText(panel, "STM32H750 + ST7796");
+    Page_AddText(panel, " ");
     Page_AddText(panel, "Radio: CC1101, NRF24L01");
     Page_AddText(panel, "Radio: SX1262");
-    Page_AddText(panel, "Display: 320x240 TFT");
+    Page_AddText(panel, "Display: 320x480 TFT");
     Page_AddText(panel, "Touch: FT6336U");
-    Page_AddText(panel, "");
+    Page_AddText(panel, " ");
     Page_AddText(panel, "[CANCEL] Back");
     
     return true;
@@ -253,11 +253,19 @@ void Page_ShowConfirm(const char* message, void (*on_confirm)(void), void (*on_c
 /* Возвращает указатель на определение страницы по имени */
 PageDef_t* Page_FindByName(const char* name)
 {
+    printf("[PageFind] name=%s\n", name ? name : "NULL");
     if (!name) return NULL;
     
-    if (strcmp(name, "Settings") == 0) return &page_settings_def;
-    if (strcmp(name, "About") == 0) return &page_about_def;
+    if (strcmp(name, "Settings") == 0) {
+        printf("[PageFind] returning page_settings_def\n");
+        return &page_settings_def;
+    }
+    if (strcmp(name, "About") == 0) {
+        printf("[PageFind] returning page_about_def\n");
+        return &page_about_def;
+    }
     
+    printf("[PageFind] NOT FOUND\n");
     return NULL;
 }
 

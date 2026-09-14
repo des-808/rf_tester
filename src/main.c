@@ -57,6 +57,9 @@
 #include "vibrator.h"
 #include "settings_manager.h"
 #include "rssi_plotter_screen.h"
+#include "page.h"
+
+extern uint8_t rs485BaudIndex;
 #include <string.h>
 /* USER CODE END PTD */
 
@@ -281,6 +284,10 @@ int main(void)
   /* Инициализация настроек (W25Q Flash) */
   SettingsManager_Init();
   
+  /* Инициализация UART4 бодрейтом из настроек RS485 */
+  //extern void UART4_ReinitByBaudIndex(uint8_t baudIndex);
+  //UART4_ReinitByBaudIndex(rs485BaudIndex);
+  
   /* USER CODE BEGIN 2 */
    ST7796_Init();
 
@@ -297,6 +304,9 @@ I2C_Scanner_Run(&i2c_scanner);
 lcd_clear_screen(0x0000);  // чёрный фон
 I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
   Menu_Init();
+  
+  /* Инициализация Page System */
+  Page_Init();
   
   /* Инициализация RSSI Plotter Screen */
   RssiPlotterScreen_InitGlobal();

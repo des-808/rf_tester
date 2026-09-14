@@ -50,7 +50,7 @@ typedef struct {
     // Предположим, что есть геттер времени или мы передаем ms_tick глобально
 } Buttons_HandleTypeDef;
 
-static MenuKey RawToKey(uint8_t raw_value);
+//MenuKey RawToKey(uint8_t raw_value);
 void Buttons_Init(Buttons_HandleTypeDef *btn, PCF8574_HandleTypeDef *pcf);
 void Buttons_Update(Buttons_HandleTypeDef *btn);
 MenuKey Buttons_GetKeyShortPress(Buttons_HandleTypeDef *btn);

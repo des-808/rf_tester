@@ -34,6 +34,12 @@ extern uint16_t cc1101BitRateFixed;
 extern int bluetoothEnabled, wifiEnabled, ntpSyncEnabled, buzzerOnOff, vibroOnOff;
 extern bool rs485toBt;
 
+/* Переменные настроек USART4/RS485 */
+extern uint8_t rs485DataBits;      // 5..8
+extern uint8_t rs485Parity;        // 0=NONE, 1=EVEN, 2=ODD
+extern uint8_t rs485StopBits;      // 0=1, 1=2
+extern uint8_t rs485FlowControl;   // 0=NONE, 1=RTS, 2=CTS, 3=RTS+CTS
+
 static uint8_t clock_date = 1;
 static uint8_t clock_month = 1;
 static uint8_t clock_day = DS3231_MONDAY;
@@ -79,8 +85,9 @@ bool Menu_Collapse(void) {
     
     /* Сохраняем состояние */
     saved_menu_scroll_offset = lb->props.list_box.scroll_offset;
+    saved_menu_selected_index = lb->props.list_box.selected_index;
     
-    /* Устанавливаем флаг collapsed */
+    /* Просто скрываем меню — НЕ возвращаем память пула */
     lb->props.list_box.collapsed = 1;
     
     /* Инвалидируем спрайт для перерисовки */
@@ -93,6 +100,9 @@ bool Menu_Collapse(void) {
 
 /**
  * @brief Восстановить ListBox меню и перерисовать
+ * 
+ * НЕ вызывает Menu_Draw — элементы уже выделены при инициализации.
+ * Просто восстанавливаем collapsed=0 и инвалидируем спрайт.
  */
 void Menu_Expand(void) {
     if (!current_menu_listbox) return;
@@ -102,10 +112,7 @@ void Menu_Expand(void) {
     /* Сбрасываем флаг collapsed */
     lb->props.list_box.collapsed = 0;
     
-    /* Перерисовываем ListBox (создаст children заново) */
-    Menu_Draw(lb, current_menu_items, current_menu_count);
-    
-    /* Восстанавливаем scroll и selected с проверкой границ */
+    /* Восстанавливаем scroll и selected */
     uint8_t max_scroll = (current_menu_count > lb->props.list_box.visible_row_count &&
                           lb->props.list_box.visible_row_count > 0) ?
                          (current_menu_count - lb->props.list_box.visible_row_count) : 0;
@@ -152,7 +159,73 @@ static void RS485_Baud_Update_Callback(void)
     settings->rs485_baud_index = rs485BaudIndex;
     markSettingDirty();
     saveAllSettings();
+    
+    /* Переинициализируем UART4 с новым бодрейтом */
+    extern void UART4_ReinitByBaudIndex(uint8_t baudIndex);
+    UART4_ReinitByBaudIndex(rs485BaudIndex);
 }
+
+/* Callback для изменения параметров USART4/RS485 */
+static void RS485_DataBits_Update_Callback(void)
+{
+    Settings_t* settings = SettingsManager_GetMutable();
+    if (!settings) return;
+    if (rs485DataBits > 8) rs485DataBits = 8;
+    settings->rs485_data_bits = rs485DataBits;
+    markSettingDirty();
+    saveAllSettings();
+    printf("[RS485] DataBits=%d\n", rs485DataBits);
+}
+
+static void RS485_Parity_Update_Callback(void)
+{
+    Settings_t* settings = SettingsManager_GetMutable();
+    if (!settings) return;
+    if (rs485Parity > 2) rs485Parity = 2;
+    settings->rs485_parity = rs485Parity;
+    markSettingDirty();
+    saveAllSettings();
+    printf("[RS485] Parity=%d\n", rs485Parity);
+}
+
+static void RS485_StopBits_Update_Callback(void)
+{
+    Settings_t* settings = SettingsManager_GetMutable();
+    if (!settings) return;
+    if (rs485StopBits > 1) rs485StopBits = 1;
+    settings->rs485_stop_bits = rs485StopBits;
+    markSettingDirty();
+    saveAllSettings();
+    printf("[RS485] StopBits=%d\n", rs485StopBits);
+}
+
+static void RS485_FlowControl_Update_Callback(void)
+{
+    Settings_t* settings = SettingsManager_GetMutable();
+    if (!settings) return;
+    if (rs485FlowControl > 3) rs485FlowControl = 3;
+    settings->rs485_flow_control = rs485FlowControl;
+    markSettingDirty();
+    saveAllSettings();
+    printf("[RS485] FlowControl=%d\n", rs485FlowControl);
+}
+
+static void RS485ToBt_Update_Callback(void)
+{
+    Settings_t* settings = SettingsManager_GetMutable();
+    if (!settings) return;
+    settings->rs485_to_bt = rs485toBt;
+    markSettingDirty();
+    saveAllSettings();
+    GUI_InvalidateStatusBar();
+    printf("[RS485] ToBt=%d\n", rs485toBt);
+}
+
+/* Строки форматирования для отображения в меню */
+static const char* data_bits_str[] = { "5", "6", "7", "8" };
+static const char* parity_str[] = { "NONE", "EVEN", "ODD" };
+static const char* stop_bits_str[] = { "1", "2" };
+static const char* flow_ctrl_str[] = { "NONE", "RTS", "CTS", "RTS+CTS" };
 
 /* Авто-применение при изменении параметра */
 static void Cc1101_AutoApplyFreq(void)
@@ -250,10 +323,6 @@ static void Bluetooth_Update_Callback() {
         markSettingDirty();
         saveAllSettings();
     }
-    GUI_InvalidateStatusBar();
-}
-
-static void RS485ToBt_Update_Callback() {
     GUI_InvalidateStatusBar();
 }
 
@@ -471,12 +540,21 @@ static MenuItem_t clockSubMenu[] = {
     { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Clock_SyncNow_Callback } },
 };
 
+// --- Подменю настроек RS485/USART4 ---
+static MenuItem_t rs485SubMenu[] = {
+    { " BaudRate", 0, ITEM_TYPE_VALUE, 0, RS485_Baud_Update_Callback, { .ptr_value = &rs485BaudIndex }, 0, RS485_BAUD_MAX, 1, 1 },
+    { " DataBits", 0, ITEM_TYPE_VALUE, 0, RS485_DataBits_Update_Callback, { .ptr_value = &rs485DataBits }, 0, 3, 1, 1 },  // 0=5, 1=6, 2=7, 3=8
+    { " Parity", 0, ITEM_TYPE_VALUE, 0, RS485_Parity_Update_Callback, { .ptr_value = &rs485Parity }, 0, 2, 1, 1 },    // 0=NONE, 1=EVEN, 2=ODD
+    { " StopBits", 0, ITEM_TYPE_VALUE, 0, RS485_StopBits_Update_Callback, { .ptr_value = &rs485StopBits }, 0, 1, 1, 1 }, // 0=1, 1=2
+    { " FlowCtrl", 0, ITEM_TYPE_VALUE, 0, RS485_FlowControl_Update_Callback, { .ptr_value = &rs485FlowControl }, 0, 3, 1, 1 }, // 0=NONE, 1=RTS, 2=CTS, 3=RTS+CTS
+    { " RS485_To_Bt", 0, ITEM_TYPE_VALUE, 0, RS485ToBt_Update_Callback, { .ptr_value = &rs485toBt }, 0, 1, 1, 1 },
+};
+
 // --- Подменю настроек ---
 static MenuItem_t settingsSubMenu[] = {
     { " Clock", 0, ITEM_TYPE_SUBMENU, sizeof(clockSubMenu)/sizeof(clockSubMenu[0]), NULL, { .submenu_items = clockSubMenu } },
-    { " RS485", 0, ITEM_TYPE_VALUE, 0, RS485_Baud_Update_Callback, { .ptr_value = &rs485BaudIndex }, 0, RS485_BAUD_MAX, 1, 1 },
+    { " RS485", 0, ITEM_TYPE_SUBMENU, sizeof(rs485SubMenu)/sizeof(rs485SubMenu[0]), NULL, { .submenu_items = rs485SubMenu } },
     { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, Bluetooth_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0 },
-    { " RS485_To_Bt", 0, ITEM_TYPE_VALUE, 0, RS485ToBt_Update_Callback, { .ptr_value = &rs485toBt }, 0, 1, 1, 1 },
     { " WiFi", 0, ITEM_TYPE_VALUE, 0, WiFi_Update_Callback, { .ptr_value = &wifiEnabled }, 0, 1, 1, 0 },
     { " Buzzer", 0, ITEM_TYPE_VALUE, 0, Buzzer_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0 },
     { " Vibro", 0, ITEM_TYPE_VALUE, 0, Vibro_Update_Callback, { .ptr_value = &vibroOnOff }, 0, 1, 1, 0 },
@@ -505,11 +583,14 @@ extern bool Page_OpenFreqAnalyzer(uint32_t freq_mhz, uint32_t bitrate, uint8_t r
 /** Callback для пункта "About" — открывает страницу About */
 static void Menu_About_Action(void)
 {
+    printf("[Menu] About action called\n");
     PageDef_t* def = Page_FindByName("About");
+    printf("[Menu] Page_FindByName result: %p\n", (void*)def);
     if (def) {
         current_menu_listbox->touch_state.drag_last_y = -1;
         current_menu_listbox->touch_state.drag_active = false;
-        Page_OpenStatic(def, &digits_node);
+        bool result = Page_OpenStatic(def, &digits_node);
+        printf("[Menu] Page_OpenStatic result: %d\n", result);
         touch_lock_tick = HAL_GetTick();
     }
 }
@@ -517,17 +598,21 @@ static void Menu_About_Action(void)
 /** Callback для пункта "Freq Analyzer" — открывает динамическую страницу */
 static void Menu_FreqAnalyzer_Action(void)
 {
+    printf("[Menu] FreqAnalyzer action called\n");
     Page_OpenFreqAnalyzer(cc1101FreqFixed, cc1101BitRateFixed, cc1101RxBwIndex);
 }
 
 /** Callback для пункта "RSSI Plotter" — открывает RSSI страницу */
 static void Menu_Rssi_Action(void)
 {
+    printf("[Menu] RSSI action called\n");
     PageDef_t* def = Page_GetRssiPageDef();
+    printf("[Menu] Page_GetRssiPageDef result: %p\n", (void*)def);
     if (def) {
         current_menu_listbox->touch_state.drag_last_y = -1;
         current_menu_listbox->touch_state.drag_active = false;
-        Page_OpenStatic(def, &digits_node);
+        bool result = Page_OpenStatic(def, &digits_node);
+        printf("[Menu] Page_OpenStatic result: %d\n", result);
         touch_lock_tick = HAL_GetTick();
     }
 }
@@ -1034,9 +1119,12 @@ void Menu_ProcessInput(uint8_t key) {
 
     /* ===== ОБРАБОТКА ВВОДА ДЛЯ АКТИВНОЙ СТРАНИЦЫ ===== */
     if (Page_IsActive()) {
+        printf("[Menu] Page active, forwarding key=%d\n", key);
         if (Page_ProcessInput(key)) {
             return; // Страница обработала ввод
         }
+    } else {
+        printf("[Menu] Page NOT active, key=%d\n", key);
     }
     /* ===== КОНЕЦ ОБРАБОТКИ СТРАНИЦЫ ===== */
 

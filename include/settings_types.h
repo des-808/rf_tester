@@ -23,6 +23,11 @@ typedef struct {
 
     /* --- Общие настройки --- */
     uint8_t  rs485_baud_index;
+    uint8_t  rs485_data_bits;      // 0=5, 1=6, 2=7, 3=8
+    uint8_t  rs485_parity;         // 0=NONE, 1=EVEN, 2=ODD
+    uint8_t  rs485_stop_bits;      // 0=1, 1=2
+    uint8_t  rs485_flow_control;   // 0=NONE, 1=RTS, 2=CTS, 3=RTS+CTS
+    uint8_t  rs485_to_bt;          // 0=disabled, 1=enabled
     uint8_t  oled_brightness;
     uint8_t  bluetooth_enabled;
     uint8_t  wifi_enabled;
