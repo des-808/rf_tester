@@ -46,7 +46,7 @@
 #define CC1101_PWR_MAX            7U
 
 /* --- Диапазоны частот CC1101 (fixed-point x100) --- */
-#define CC1101_FREQ_MIN           300U     /* 3.00 МГц */
+//#define CC1101_FREQ_MIN           300U     /* 3.00 МГц */
 #define CC1101_FREQ_MIN           30000U   /* 300.00 МГц */
 #define CC1101_FREQ_MAX           92800U   /* 928.00 МГц */
 

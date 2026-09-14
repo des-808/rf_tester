@@ -1,6 +1,6 @@
 /**
  * @file lv_conf.h
- * @brief Minimal LVGL 9.5 config - only essential widgets
+ * @brief LVGL configuration for STM32H750VBT6 + ST7796 (320x480 / 480x320)
  */
 
 #ifndef LV_CONF_H
@@ -8,111 +8,90 @@
 
 #include <stdint.h>
 
-#define LV_COLOR_DEPTH 16
-#define LV_HOR_RES_MAX 320
-#define LV_VER_RES_MAX 480
-#define LV_DISP_DEF_REFR_PERIOD 16
+/*================
+    Minimal config for STM32H750 (512KB Flash, 512KB RAM)
+ *================*/
 
-/* ========== ENABLE ONLY NEEDED WIDGETS ========== */
-#define LV_USE_ARC 0
-#define LV_USE_BAR 0
-#define LV_USE_BTN 0
-#define LV_USE_BTNMATRIX 0
-#define LV_USE_CALENDAR 0
-#define LV_USE_CANVAS 0
-#define LV_USE_CHART 0
-#define LV_USE_CHECK 0
-#define LV_USE_DROPDOWN 0
-#define LV_USE_IMG 0
+/*================
+    Graphics settings
+ *================*/
+#define LV_USE_LOG 0
+#if LV_USE_LOG
+#  define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
+#  define LV_LOG_PRINTF 1
+#endif
+
+#define LV_USE_BUILTIN_MALLOC 0
+#define LV_USE_DEFAULT_MALLOC_STYLE LV_MALLOC_STYLE_STDLIB
+
+#define LV_USE_FLOAT 0
+#define LV_USE_FREETYPE 0
+#define LV_USE_FONT_SUBPX 0
+
+/* Color depth: 16-bit RGB565 for ST7796 */
+#define LV_COLOR_DEPTH 16
+
+/* Screen dimensions */
+#define LV_DISP_SIZE_LARGE 1
+#define LV_USE_DISPLAY 1
+
+/* Display rotation support */
+#define LV_DISPLAY_ROTATION 1
+
+/*=================
+   Memory settings
+ *=================*/
+#define LV_MEM_SIZE (48 * 1024U)  /* 48 KB for LVGL memory pool */
+
+/*================
+   Widget settings (minimal set)
+ *================*/
+#define LV_USE_BTN 1
 #define LV_USE_LABEL 1
-#define LV_USE_LINE 0
+#define LV_USE_BUTTON 1
+#define LV_USE_SLIDER 1
+#define LV_USE_SWITCH 1
+#define LV_USE_CHECKBOX 1
+#define LV_USE_BAR 1
+#define LV_USE_LINE 1
+#define LV_USE_ARC 1
+#define LV_USE_IMG 0
+#define LV_USE_TEXTAREA 0
 #define LV_USE_LIST 0
-#define LV_USE_MENU 0
-#define LV_USE_METER 0
-#define LV_USE_MSGBOX 0
-#define LV_USE_ROLLER 0
-#define LV_USE_SCALE 0
-#define LV_USE_SLIDER 0
-#define LV_USE_SPAN 0
-#define LV_USE_SPINNER 0
-#define LV_USE_SWITCH 0
 #define LV_USE_TABLE 0
+#define LV_USE_DROPDOWN 1
 #define LV_USE_TABVIEW 0
 #define LV_USE_TILEVIEW 0
 #define LV_USE_WIN 0
+#define LV_USE_SPINNER 0
+#define LV_USE_CALENDAR 0
+#define LV_USE_CHART 0
+#define LV_USE_LED 0
+#define LV_USE_METER 0
+#define LV_USE_SPINBOX 0
 
-/* ========== EXTENSIONS ========== */
-#define LV_USE_ANIMATION 1
-#define LV_USE_EVENT 1
-#define LV_USE_FLEX 1
-#define LV_USE_GRID 0
-#define LV_USE_GROUP 1
+/*================
+   Themes
+ *================*/
+#define LV_USE_THEME_DEFAULT 1
+#if LV_USE_THEME_DEFAULT
+#  define LV_THEME_DEFAULT_STATE_PR 1
+#  define LV_THEME_DEFAULT_ANIM 0
+#  define LV_THEME_DEFAULT_COLOR_SCHEME LV_THEME_COLOR_SCHEME_MIXED
+#  define LV_THEME_DEFAULT_PRIMARY lv_color_hex(0x007000)
+#  define LV_THEME_DEFAULT_SECONDARY lv_color_hex(0x004400)
+#endif
 
-/* ========== LIBRARIES - ALL DISABLED ========== */
-#define LV_USE_BMP 0
-#define LV_USE_FFMPEG 0
-#define LV_USE_FREETYPE 0
-#define LV_USE_GIF 0
-#define LV_USE_GLTf 0
-#define LV_USE_LIBJPEG_TURBO 0
-#define LV_USE_LIBPNG 0
-#define LV_USE_LIBWEBP 0
-#define LV_USE_QRCODE 0
-#define LV_USE_RLOTTIE 0
-#define LV_USE_SVG 0
-#define LV_USE_TINY_TTF 0
-#define LV_USE_TJPGD 0
+/*==================
+   Font settings (minimal set)
+ *==================*/
+#define LV_FONT_DEFAULT &lv_font_montserrat_14
 
-/* ========== LVGL DISABLED - using custom GUI ========== */
-/* Disable LVGL entirely to save FLASH space */
-#define LV_BUILD_EXAMPLES 0
-#define LV_BUILD_TEST 0
-
-/* Force no draw backend */
-#define LV_USE_DRAW_VG_LITE 0
-#define LV_USE_DRAW_NEMA_GFX 0
-#define LV_USE_DRAW_SW 1
-#define LV_USE_DRAW_SW_COMPLEX 0
-
-/* Use minimal style */
-#define LV_USE_STDLIB_MALLOC 0
-#define LV_USE_STDLIB_STRING 0
-#define LV_USE_STDLIB_SPRINTF 0
-
-/* ========== ASSERT ========== */
-#define LV_USE_ASSERT_NULL 0
-#define LV_USE_ASSERT_MALLOC 0
-#define LV_USE_ASSERT_STYLE 0
-#define LV_USE_ASSERT_MEM_INTEGRITY 0
-
-/* ========== DEBUG - ALL OFF ========== */
-#define LV_USE_LOG 0
-#define LV_USE_PERF_MONITOR 0
-#define LV_USE_MEM_MONITOR 0
-#define LV_USE_MONITOR 0
-#define LV_USE_TEST 0
-#define LV_USE_FS 0
-#define LV_USE_FILE_EXPLORER 0
-#define LV_USE_FRAGMENT 0
-#define LV_USE_SNAPSHOT 0
-#define LV_USE_VECTOR_GRAPHIC 0
-#define LV_USE_LOTTIE 0
-#define LV_USE_SYSMON 0
-#define LV_USE_MONKEY 0
-#define LV_USE_BIDI 0
-
-/* ========== THEMES ========== */
-#define LV_USE_THEME_DEFAULT 0
-#define LV_USE_THEME_SIMPLE 0
-#define LV_USE_THEME_MONO 0
-
-/* ========== FONT - ONLY UNSCII ========== */
-#define LV_FONT_MONTSERRAT_10 0
-#define LV_FONT_MONTSERRAT_12 0
-#define LV_FONT_MONTSERRAT_14 0
-#define LV_FONT_MONTSERRAT_16 0
-#define LV_FONT_MONTSERRAT_18 0
-#define LV_FONT_MONTSERRAT_20 0
+#define LV_FONT_MONTSERRAT_12 1
+#define LV_FONT_MONTSERRAT_14 1
+#define LV_FONT_MONTSERRAT_16 1
+#define LV_FONT_MONTSERRAT_18 1
+#define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_MONTSERRAT_22 0
 #define LV_FONT_MONTSERRAT_24 0
 #define LV_FONT_MONTSERRAT_26 0
@@ -127,20 +106,46 @@
 #define LV_FONT_MONTSERRAT_44 0
 #define LV_FONT_MONTSERRAT_46 0
 #define LV_FONT_MONTSERRAT_48 0
+
 #define LV_FONT_DEJAVU_16_PERSIAN_HEBREW 0
-#define LV_FONT_SOURCE_HAN_SANS_SC_14_CJK 0
-#define LV_FONT_SOURCE_HAN_SANS_SC_16_CJK 0
+#define LV_FONT_HELVETICA_14 0
 #define LV_FONT_UNSCII_8 0
 #define LV_FONT_UNSCII_16 0
 
-/* Minimal fallback font */
-#define LV_FONT_DEFAULT &lv_font_default
+/* Font loading */
+#define LV_FONT_FMTTXT_LARGE 0
+#define LV_USE_FONT_COMPRESSED 0
+#define LV_USE_EMBEDDED_FONTS 1
 
-/* ========== OTHER ========== */
-#define LV_USE_OBJ_PROPERTY 0
-#define LV_USE_OBJ_ID 0
-#define LV_USE_LEGACY 0
-#define LV_USE_MSGBOX 0
-#define LV_USE_MSGBOX_AUTO_CLOSE 0
+/*=======================
+   Display driver settings
+ *=======================*/
+#define LV_DISP_DEF_REFR_PERIOD 30
 
-#endif /*LV_CONF_H*/
+/* Double buffer for display */
+#define LV_DISP_DEF_MAX_ROTATIONS 4
+#define LV_DISP_ROTATION 0
+
+/*=================
+   Input device settings
+ *=================*/
+#define LV_INDEV_DEF_READ_PERIOD 30
+
+/* Touchscreen: FT6336U */
+#define LV_INDEV_DEF_SCROLL_LIMIT 20
+#define LV_INDEV_DEF_SCROLL_THROW 200
+#define LV_LONG_PRESS_TIME 400
+#define LV_LONG_PRESS_REP_TIME 100
+
+/* Disable unused draw backends to save RAM */
+#define LV_USE_DRAW_VG_LITE 0
+#define LV_USE_DRAW_NEMA_GFX 0
+#define LV_USE_DRAW_PXP 0
+#define LV_USE_DRAW_G2D 0
+#define LV_USE_DRAW_DAVE2D 0
+#define LV_USE_DRAW_SDL 0
+#define LV_USE_DRAW_OPENGLES 0
+#define LV_USE_DRAW_NANOVG 0
+#define LV_USE_DRAW_EVE 0
+
+#endif /* LV_CONF_H */

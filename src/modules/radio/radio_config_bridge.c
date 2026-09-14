@@ -21,10 +21,10 @@ extern SPI_HandleTypeDef hspi6;
 /* ======================================================================== */
 
 /* Полоса RX в кГц (индекс 0..15) — для отображения в меню */
-static const uint16_t rx_bw_display_khz[] = {
+/* static const uint16_t rx_bw_display_khz[] = {
     58, 68, 81, 102, 116, 135, 162, 203,
     232, 270, 325, 406, 464, 541, 650, 812
-};
+}; */
 
 /* Мощность TX в dBm (индекс 0..7) — как в ESP32 */
 static const int8_t tx_power_dbm[] = {

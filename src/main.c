@@ -2,7 +2,7 @@
 /**
   ******************************************************************************
   * @file           : main.c
-  * @brief          : Main program body
+  * @brief          : Main program body with LVGL
   ******************************************************************************
   * @attention
   *
@@ -16,6 +16,7 @@
   ******************************************************************************
   */
 /* USER CODE END Header */
+
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
@@ -23,7 +24,6 @@
 #include "quadspi.h"
 #include "rtc.h"
 #include "sdmmc.h"
-#include "sd_card.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -32,107 +32,70 @@
 #include "flash.h"
 #include "dma2d.h"
 
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "sd_fs.h"
-#include "sd_log.h"
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
 #include "ft6336u.h"
-#include "gui.h"
 #include "lcd_backlight.h"
 #include "bmi160_h7.h"
 #include "ds3231.h"
-#include "menu.h"
-#include "menu_touch.h"
-
-#include "font.h"
-
 #include "buttons.h"
-#include "i2c_scanner.h"
 #include "buzzer.h"
 #include "vibrator.h"
-#include "settings_manager.h"
-#include "rssi_plotter_screen.h"
-#include "page.h"
+#include "lvgl_module.h"
+#include "lvgl_display.h"
+#include "lvgl_example.h"
 
 extern uint8_t rs485BaudIndex;
 #include <string.h>
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-
-
-/* USER CODE END PM */
+/* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-  HAL_SD_CardCIDTypedef pCID;
-HAL_SD_CardCSDTypedef pCSD;
-HAL_SD_CardInfoTypeDef pCardInfo;
 FT6336U_HandleTypeDef ft6336u;
 
-// Переменные меню
-uint16_t sys = 1, room = 1, btn = 1;
+/* BMI160 orientation */
+volatile uint8_t bmi160_irq_received = 0;
+uint8_t current_display_orientation = 0;
+
+/* DS3231 RTC */
+ uint8_t currentHour, currentMinute;
+volatile uint8_t ds3231_irq_received = 0;
+static uint8_t ds3231_prev_minute = 0xFF;
+DS3231_Time_t ds3231_time;
+
+/* Screen lock */
+bool screen_locked = false;
+
+/* Buzzer and vibrator settings */
+int buzzerOnOff = 1;
+int vibroOnOff = 1;
+
+/* Button handle */
+PCF8574_HandleTypeDef pcf_handle;
+Buttons_HandleTypeDef btn_s;
 /* USER CODE END PV */
+
+
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+
 /* USER CODE BEGIN PFP */
 void ST7796_Init(void);
-static void Scroll_ListBox(int8_t direction);
-uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
-extern DMA_HandleTypeDef hdma_spi4_tx;
 extern DMA2D_HandleTypeDef hdma2d;
-//extern void drawStatusBar(Sprite_t *sprite);
-/* extern Sprite_t* status_bar_sprite;
-extern Sprite_t* main_screen_sprite;
-extern Sprite_t* graph_sprite; // если нужен доступ к графику из main.c */
-
-extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
-extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
-extern UIElement_t* ui_swr_row;   // Указатель на элемент КСВ из gui.c
-extern UIElement_t ui_bands_listbox; // Контейнер ListBox из gui.c
-extern int buzzerOnOff, vibroOnOff;
-
-uint16_t last_touch_x = 0;              // Координата X для логики меню
-uint16_t last_touch_y = 0;              // Координата Y для логики меню
-
-
-char debug_str[64] = "BMI160: Wait interrupt..."; // Строка для вывода на экран
-volatile uint32_t exti_counter = 0;               // Счетчик прерываний для проверки физики
-
-volatile uint8_t bmi160_irq_received = 0;
-uint8_t current_display_orientation = 0; // 0 - Книжная по умолчанию
-
-// Переменные времени из DS3231
-extern uint8_t currentHour, currentMinute;
-volatile uint8_t ds3231_irq_received = 0;  // Флаг прерывания от DS3231 (1 Гц)
-static uint8_t ds3231_prev_minute = 0xFF; // Для отслеживания изменения минуты
-DS3231_Time_t ds3231_time;
-
+void INIT_FT6336U(void);
 /* USER CODE END PFP */
+
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-PCF8574_HandleTypeDef pcf_handle;
 static void MPU_Config(void)
 {
   MPU_Region_InitTypeDef MPU_InitStruct = {0};
 
   /* Disables the MPU */
   HAL_MPU_Disable();
-	
+  
   /* Configure the MPU attributes for the QSPI 256MB without instruction access */
   MPU_InitStruct.Enable           = MPU_REGION_ENABLE;
   MPU_InitStruct.Number           = MPU_REGION_NUMBER0;
@@ -146,7 +109,7 @@ static void MPU_Config(void)
   MPU_InitStruct.TypeExtField     = MPU_TEX_LEVEL1;
   MPU_InitStruct.SubRegionDisable = 0x00;
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
-	
+  
   /* Configure the MPU attributes for the QSPI 8MB (QSPI Flash Size) to Cacheable WT */
   MPU_InitStruct.Enable           = MPU_REGION_ENABLE;
   MPU_InitStruct.Number           = MPU_REGION_NUMBER1;
@@ -160,7 +123,7 @@ static void MPU_Config(void)
   MPU_InitStruct.TypeExtField     = MPU_TEX_LEVEL1;
   MPU_InitStruct.SubRegionDisable = 0x00;
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
-	
+  
   /* Setup AXI SRAM in Cacheable WB */
   MPU_InitStruct.Enable           = MPU_REGION_ENABLE;
   MPU_InitStruct.BaseAddress      = D1_AXISRAM_BASE;
@@ -174,7 +137,7 @@ static void MPU_Config(void)
   MPU_InitStruct.SubRegionDisable = 0x00;
   MPU_InitStruct.DisableExec      = MPU_INSTRUCTION_ACCESS_ENABLE;
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
-	
+  
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 }
@@ -187,68 +150,38 @@ static void CPU_CACHE_Enable(void)
   /* Enable D-Cache */
   SCB_EnableDCache();
 }
-void LED_Blink(uint32_t delay)
-{
-	HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_SET);
-	HAL_Delay(delay - 1);
-	HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin,GPIO_PIN_RESET);
-	HAL_Delay(500-1);
-}
-// Глобальный флаг: true — отрисовать экран, false — ждать изменений
-bool ui_needs_refresh = true; 
-
-/* Флаг блокировки экрана (кнопка BTN_ON_OFF) */
-bool screen_locked = false;
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
- extern void ST7796_FillScreen(uint16_t color);
- extern Buttons_HandleTypeDef btn_s;
- I2C_Scanner_HandleTypeDef i2c_scanner;
- extern UIElement_t root_grid;
- extern UIElement_t digits_node;
- extern UIElement_t graph_node;
- uint8_t lastButtonState[8] = {0};
- void INIT_FT6336U(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
   MPU_Config();
   CPU_CACHE_Enable();
   /* USER CODE END 1 */
+
   /* MCU Configuration--------------------------------------------------------*/
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-  /* USER CODE BEGIN Init */
-  
-  /* USER CODE END Init */
+
   /* Configure the system clock */
   SystemClock_Config();
-  /* USER CODE BEGIN SysInit */
 
-  /* USER CODE END SysInit */
-   /* Initialize all configured peripherals */
-    MX_GPIO_Init();
-    
-    // Инициализация SD карты (SD mode, не MMC)
-    MX_SDMMC1_SD_Init();
-    SD_Card_Init();
-    
-    
-   
-   HAL_GPIO_WritePin(CTP_RESET_GPIO_Port,CTP_RESET_Pin,GPIO_PIN_SET);
-   MX_DMA_Init();
-   MX_UART4_Init();
-   MX_QUADSPI_Init();
-    MX_RTC_Init();
-    MX_SPI4_Init();
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_SDMMC1_SD_Init();
+  MX_DMA_Init();
+  MX_UART4_Init();
+  MX_QUADSPI_Init();
+  MX_RTC_Init();
+  MX_SPI4_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
-     LCD_Backlight_Init();
+  LCD_Backlight_Init();
   MX_DMA2D_Init();
   MX_USB_DEVICE_Init();
   MX_UART5_Init();
@@ -257,343 +190,125 @@ int main(void)
   MX_SPI1_Init();
   MX_UART8_Init();
 
+  /* Initialize peripherals */
   HAL_Delay(50);
   PCF8574_Init(&pcf_handle, &hi2c1, 0x3C);
   Buttons_Init(&btn_s, &pcf_handle);
   DS3231_Init(&hi2c1);
-  // Включаем генерацию 1 Гц на выход INT/SQW DS3231
   DS3231_EnableSquareWave(&hi2c1, 1);
-  //FT6336U_Init(&ft6336u, &hi2c1, 0x38);  // адрес 0x38
   INIT_FT6336U();
-  //HAL_SD_GetCardCID(&hmmc1, &pCID);
-  //HAL_SD_GetCardCSD(&hmmc1, &pCSD);
-	//HAL_SD_GetCardInfo(&hmmc1, &pCardInfo);
+  
   if (!BMI160_Init(&hi2c1, BMI160_I2C_ADDR_VCC)) {
-      while(1); // Ошибка
+      while(1); // Error
   }
   HAL_Delay(150);
-  
-  // Инициализация SD-карты (неблокирующая — система работает и без карты)
-  SD_Status_t sd_st = SD_Card_Init();
-  if (sd_st != SD_OK) {
-      // Карта не вставлена или ошибка — продолжаем работу
-  }
-  
-  SD_Log_Init();
-  
-  /* Инициализация настроек (W25Q Flash) */
-  SettingsManager_Init();
-  
-  /* Инициализация UART4 бодрейтом из настроек RS485 */
-  //extern void UART4_ReinitByBaudIndex(uint8_t baudIndex);
-  //UART4_ReinitByBaudIndex(rs485BaudIndex);
-  
-  /* USER CODE BEGIN 2 */
-   ST7796_Init();
 
-
-  // Используем Segoe Print 12 по умолчанию
-  //lcd_set_font(&font_segoe_struct);
-  // Или Arial 9:
-   lcd_set_font(&font_arial_9_struct);
-
-/* I2C_Scanner_Init(&i2c_scanner, &hi2c1);
-// Запуск сканирования
-I2C_Scanner_Run(&i2c_scanner);
-// Вывод на TFT (вызывайте после очистки экрана)
-lcd_clear_screen(0x0000);  // чёрный фон
-I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
-  Menu_Init();
-  
-  /* Инициализация Page System */
-  Page_Init();
-  
-  /* Инициализация RSSI Plotter Screen */
-  RssiPlotterScreen_InitGlobal();
-  
-  //GUI_ShowAdvancedMeasurementScreen(current_display_orientation);
-  GUI_ShowMenuAdvancedMeasurementScreen(current_display_orientation);
-   
-    /* ds3231_time.Second = 0;   // 0–59
-    ds3231_time.Minute = 44;   // 0–59
-    ds3231_time.Hour = 22;     // 0–23 (24-hour) или 1–12 (12-hour)
-    //ds3231_time.AM_PM = 1;    // 0 = AM, 1 = PM (только для 12-часового режима)
-    ds3231_time.Day = 7;      // 1–7 (см. DS3231_Day_t)
-    ds3231_time.Date = 6;     // 1–31
-    ds3231_time.Month = 9;    // 1–12
-    ds3231_time.Year = 26;     // 0–99 (последние 2 цифры года, напр. 25 = 2025)
-  DS3231_SetTime(&hi2c1,&ds3231_time); */
-  // Инициализация времени из DS3231
+  // Initialize time from DS3231
   if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
     currentHour = ds3231_time.Hour;
     currentMinute = ds3231_time.Minute;
     ds3231_prev_minute = ds3231_time.Minute;
-    ds3231_irq_received = 1; // Запускаем первый цикл обновления
+    ds3231_irq_received = 1;
   }
+
+  /* USER CODE BEGIN 2 */
+  /* Initialize LVGL */
+  lvgl_module_init();
   
-  
-  /* USER CODE END 2 */ 
+  /* Create example UI */
+  //lvgl_create_example_ui();
+  /* USER CODE END 2 */
 
   /* Infinite loop */
-   /* USER CODE BEGIN WHILE */
-   // Объявление переменной времени DS3231 для использования в цикле
-   //DS3231_Time_t ds3231_time;
-   
-   while (1)
-   {
-     /* USER CODE END WHILE */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
 
-      // ====================================================================
-      // Обработка прерывания от BMI160 (ориентация экрана)
-      // ====================================================================
-       if (bmi160_irq_received) 
-       {
-         bmi160_irq_received = 0; // Сбрасываем флаг EXTI прерывания
-         // Запрашиваем у датчика целевую ориентацию (0, 1, 2 или 3)
-         uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
-         // Если положение устройства физически изменилось
-         if (next_orientation != current_display_orientation) 
-         {
-           // Сохраняем состояние меню ПЕРЕД перестройкой
-           extern UIElement_t* current_menu_listbox;
-           if (current_menu_listbox) {
-             saved_menu_scroll_offset = current_menu_listbox->props.list_box.scroll_offset;
-             saved_menu_selected_index = current_menu_listbox->props.list_box.selected_index;
-           }
-           
-           current_display_orientation = next_orientation;
-           GUI_ShowMenuAdvancedMeasurementScreen(next_orientation);
-         }
-       }
-
-      // ====================================================================
-      // 0. ОБРАБОТКА КНОПКИ БЛОКИРОВКИ ЭКРАНА (BTN_ON_OFF)
-      // ====================================================================
-      static uint8_t btn_on_off_last = 1;
-      uint8_t btn_on_off_state = HAL_GPIO_ReadPin(BTN_ON_OFF_GPIO_Port, BTN_ON_OFF_Pin);
-      if (btn_on_off_state != btn_on_off_last) {
-          btn_on_off_last = btn_on_off_state;
-          if (btn_on_off_state == 0) {
-              /* Нажатие — переключение блокировки */
-              screen_locked = !screen_locked;
-              
-              if (screen_locked) {
-                  /* Блокировка: выключаем подсветку */
-                  LCD_Backlight_SetLevel(0);
-              } else {
-                  /* Разблокировка: включаем подсветку на последний уровень */
-                  LCD_Backlight_SetLevel(LCD_Backlight_GetLevel() > 0 ? LCD_Backlight_GetLevel() : 5);
-              }
-              if (buzzerOnOff) Buzzer_Short();
-              if (vibroOnOff) Vibrator_Pulse(30);
-          }
-      }
-      
-       // ====================================================================
-       // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
-       // ====================================================================
-       if (!screen_locked) {
-           Buttons_Update(&btn_s);
-           uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
-           static uint8_t btn_last_state = 0xFF;
-           if (btn_raw != btn_last_state && btn_raw != 0xFF) {
-               /* Сработала кнопка (edge detection) */
-               if (buzzerOnOff) Buzzer_Short();
-               if (vibroOnOff) Vibrator_Pulse(30);
-           }
-           btn_last_state = btn_raw;
-           PCF8574_AcknowledgeChanges(&pcf_handle);
-
-           /* Обрабатываем кнопки */
-           MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
-           if (key_short != KEY_NONE) {
-               /* Сначала проверяем Cancel для RSSI Plotter */
-               if (key_short == KEY_CANCEL && rssi_plotter_active) {
-                   RssiPlotterScreen_ExitGlobal();
-               } else if (!rssi_plotter_active) {
-                   /* Обрабатываем остальные кнопки только если RSSI Plotter не активен */
-                   menu_long_press_active = 0;
-                   menu_hold_multiplier = 1;
-                   Menu_ProcessInput(key_short);
-               }
-           }
-           
-           MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
-           if (key_hold != KEY_NONE) {
-               /* Если RSSI Plotter активен — игнорируем удержания */
-               if (!rssi_plotter_active) {
-                   menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_hold);
-                   menu_long_press_active = 1;
-                   Menu_ProcessInput(key_hold);
-                   menu_long_press_active = 0;
-                   menu_hold_multiplier = 1;
-               }
-           }
-           
-           MenuKey key_repeat = Buttons_GetKeyRepeat(&btn_s);
-           if (key_repeat != KEY_NONE) {
-               /* Если RSSI Plotter активен — игнорируем повторы */
-               if (!rssi_plotter_active) {
-                   menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_repeat);
-                   menu_long_press_active = 1;
-                   Menu_ProcessInput(key_repeat);
-                   menu_long_press_active = 0;
-                   menu_hold_multiplier = 1;
-               }
-           }
-       }
-
-      // ====================================================================
-      // 2. ОБРАБОТКА ТАЧСКРИНА (Polling Mode — G_MODE = 0x00)
-      // EXTI4 (FALLING): INT→LOW = палец на экране → вызывает FT6336U_ReadData()
-      // Фоллбэк: периодический опрос I2C, если EXTI не сработал
-      // ====================================================================
-      if (!screen_locked) {
-          static uint32_t last_touch_tick = 0;
-          static uint32_t last_i2c_poll_tick = 0;
-          
-          // Периодический опрос I2C — фоллбэк если EXTI не сработал
-          // Когда палец на экране — каждые 20 мс (обновление координат)
-          // Когда нет касания — каждые 100 мс (экономия I2C)
-          if (HAL_GetTick() - last_i2c_poll_tick > (ft6336u.has_touch ? 20 : 100)) {
-              last_i2c_poll_tick = HAL_GetTick();
-              FT6336U_ReadData(&ft6336u);
-          }
-          
-           if (ft6336u.has_touch) {
-               uint16_t raw_x, raw_y;
-               FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
-               Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-               ft6336u.has_touch = false;
-               if (buzzerOnOff) Buzzer_Short();
-               if (vibroOnOff) Vibrator_Pulse(30);
-               Menu_ProcessTouch(last_touch_x, last_touch_y);
-              /* Сброс таймаута: палец всё ещё на экране */
-              last_touch_tick = HAL_GetTick();
-           } else {
-               /* Нет событий тача > 150мс — считаем что палец отпущен */
-               if (last_touch_tick != 0) {
-                   uint32_t elapsed = HAL_GetTick() - last_touch_tick;
-                   if (elapsed > 150) {
-                       last_touch_tick = 0;
-                       /* Сброс drag-состояния во всех ListBox */
-                       extern UIElement_t* current_menu_listbox;
-                       if (current_menu_listbox) {
-                           current_menu_listbox->touch_state.drag_active = false;
-                           current_menu_listbox->touch_state.drag_last_y = -1;
-                       }
-                       /* Обработка отпускания пальца */
-                       Menu_ProcessTouchRelease();
-                   }
-               }
-           }
-      } else {
-          /* В режиме блокировки — очищаем тач чтобы не было случайных срабатываний */
-          if (ft6336u.has_touch) {
-              ft6336u.has_touch = false;
-          }
-      }
-
-      // ====================================================================
-      // 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ИЗ DS3231 (по прерыванию 1 Гц)
-      // ====================================================================
-     if (ds3231_irq_received) {
-      ds3231_irq_received = 0;
-    
-      if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
-          // Сохраняем предыдущие значения для сравнения
-          static uint8_t prev_minute = 0xFF;
-          
-          if (ds3231_time.Minute != prev_minute) {
-              currentHour = ds3231_time.Hour;
-              currentMinute = ds3231_time.Minute;
-              prev_minute = ds3231_time.Minute;
-              GUI_InvalidateStatusBar();
-          }
+    /* ==================================================================== */
+    /* 1. ОБРАБОТКА ПРЕРЫВАНИЯ ОТ BMI160 (ОРИЕНТАЦИЯ ЭКРАНА)                */
+    /* ==================================================================== */
+    if (bmi160_irq_received) {
+      bmi160_irq_received = 0;
+      uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
+      if (next_orientation != current_display_orientation) {
+        current_display_orientation = next_orientation;
+        //lvgl_set_rotation((lvgl_rotation_t)next_orientation);
       }
     }
 
-    // ====================================================================
-    // 3.5. ОБНОВЛЕНИЕ АКТИВНОЙ СТРАНИЦЫ (RSSI, Spectrum и др.)
-    // ====================================================================
-    Page_UpdateAll();
+    /* ==================================================================== */
+    /* 2. ОБРАБОТКА КНОПКИ БЛОКИРОВКИ ЭКРАНА (BTN_ON_OFF)                   */
+    /* ==================================================================== */
+    static uint8_t btn_on_off_last = 1;
+    uint8_t btn_on_off_state = HAL_GPIO_ReadPin(BTN_ON_OFF_GPIO_Port, BTN_ON_OFF_Pin);
+    if (btn_on_off_state != btn_on_off_last) {
+        btn_on_off_last = btn_on_off_state;
+        if (btn_on_off_state == 0) {
+            screen_locked = !screen_locked;
+            if (screen_locked) {
+                LCD_Backlight_SetLevel(0);
+            } else {
+                LCD_Backlight_SetLevel(LCD_Backlight_GetLevel() > 0 ? LCD_Backlight_GetLevel() : 5);
+            }
+            if (buzzerOnOff) Buzzer_Short();
+            if (vibroOnOff) Vibrator_Pulse(30);
+        }
+    }
 
-    // ====================================================================
-    // 4. СИСТЕМНЫЙ ВЫВОД НА ЭКРАН (Layout Engine)
-    // ====================================================================
-    UI_DrawTree(&root_grid);
-    
-    // 5. ПЛАВНАЯ АНИМАЦИЯ ПОДСВЕТКИ (неблокирующая)
-    // ====================================================================
-    LCD_Backlight_SmoothUpdate();
-    
-    // ====================================================================
-    // 6. МОНИТОРИНГ SD-КАРТЫ (по CD-пину) + ОБНОВЛЕНИЕ GUI
-    // ====================================================================
-    static uint32_t sd_check_tick = 0;
-    static bool sd_last_state = false;
-    if (HAL_GetTick() - sd_check_tick > 500) {
-        sd_check_tick = HAL_GetTick();
+    /* ==================================================================== */
+    /* 3. ОБРАБОТКА ТАЧСКРИНА                                               */
+    /* ==================================================================== */
+    if (!screen_locked) {
+        static uint32_t last_i2c_poll_tick = 0;
         
-        // Проверка только по CD-пину (мгновенно)
-        bool card_in_slot = SD_Card_IsPhysicallyPresent();
-        
-        // Если состояние изменилось — перерисовываем иконку
-        if (card_in_slot != sd_last_state) {
-            sd_last_state = card_in_slot;
-            GUI_UpdateSDStatus();
+        /* Periodic I2C poll */
+        if (HAL_GetTick() - last_i2c_poll_tick > (ft6336u.has_touch ? 20 : 100)) {
+            last_i2c_poll_tick = HAL_GetTick();
+            FT6336U_ReadData(&ft6336u);
         }
         
-        if (!card_in_slot) {
-            // Карта извлечена — останавливаем логирование
-            if (SD_Log_IsActive()) {
-                SD_Log_Stop();
+        if (ft6336u.has_touch) {
+            uint16_t raw_x, raw_y;
+            FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
+            ft6336u.has_touch = false;
+            if (buzzerOnOff) Buzzer_Short();
+            if (vibroOnOff) Vibrator_Pulse(30);
+        }
+    } else {
+        if (ft6336u.has_touch) {
+            ft6336u.has_touch = false;
+        }
+    }
+
+    /* ==================================================================== */
+    /* 4. ОБНОВЛЕНИЕ ВРЕМЕНИ ИЗ DS3231                                      */
+    /* ==================================================================== */
+    if (ds3231_irq_received) {
+        ds3231_irq_received = 0;
+        if (DS3231_GetTime(&hi2c1, &ds3231_time) == DS3231_OK) {
+            static uint8_t prev_minute = 0xFF;
+            if (ds3231_time.Minute != prev_minute) {
+                currentHour = ds3231_time.Hour;
+                currentMinute = ds3231_time.Minute;
+                prev_minute = ds3231_time.Minute;
             }
         }
     }
-    
-    static uint32_t main_loop_tick = 0;
-    if (HAL_GetTick() - main_loop_tick > 10) {
-        main_loop_tick = HAL_GetTick();
-    }
+
+    /* ==================================================================== */
+    /* 5. ПЛАВНАЯ АНИМАЦИЯ ПОДСВЕТКИ                                        */
+    /* ==================================================================== */
+    LCD_Backlight_SmoothUpdate();
+
+    /* ==================================================================== */
+    /* 6. LVGL TICK AND TASK HANDLER                                        */
+    /* ==================================================================== */
+    lvgl_module_tick();
+    lvgl_module_run();
      
-     /* USER CODE BEGIN 3 */
-   }
-}
-
-
-
-static void Scroll_ListBox(int8_t direction) {
-    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-    uint8_t pad = (ui_bands_listbox.props.list_box.item_padding > 0) ? ui_bands_listbox.props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
-    uint16_t item_h = font_h + pad;
-    uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
-    if (visible == 0) visible = 1;
-    
-    uint8_t max_offset = (ui_bands_listbox.children_count > visible) 
-                         ? (uint8_t)(ui_bands_listbox.children_count - visible) 
-                         : 0;
-    
-    bool changed = false;
-
-    if (direction == -1) {
-        // Скролл вверх (уменьшаем offset)
-        if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
-            ui_bands_listbox.props.list_box.scroll_offset--;
-            changed = true;
-        }
-    } else if (direction == 1) {
-        // Скролл вниз (увеличиваем offset)
-        if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
-            ui_bands_listbox.props.list_box.scroll_offset++;
-            changed = true;
-        }
-    }
-
-    // Инвалидируем спрайт только если позиция реально изменилась
-    if (changed) {
-        GUI_InvalidateSprite(digits_node.sprite);
-    }
+    /* USER CODE BEGIN 3 */
+  }
 }
 
 void INIT_FT6336U(void){
@@ -676,6 +391,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 }
+
 
 /* USER CODE BEGIN 4 */
 

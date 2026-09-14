@@ -314,7 +314,7 @@ void EXTI9_5_IRQHandler(void)
     ///BMI160_IRQHandler(BMI160_INT_Pin );
     // 2. Взводим флаг для главного цикла while(1)
       bmi160_irq_received = 1;
-      exti_counter++;
+      //exti_counter++;
       
   }
   /* USER CODE END EXTI9_5_IRQn 0 */

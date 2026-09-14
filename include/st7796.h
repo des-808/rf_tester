@@ -28,7 +28,7 @@ typedef struct {
     int16_t dirty_y2;       // Нижняя граница изменений
 } Sprite_t;
 
-#include "font.h"
+
 
 // --- Константы дисплея ---
 #define ST7796_WIDTH  320

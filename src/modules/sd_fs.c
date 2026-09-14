@@ -25,7 +25,7 @@ typedef struct {
     bool in_use;
 } SD_FILE_t;
 
-static SD_FILE_t s_file_pool[MAX_OPEN_FILES] = {{0}};
+static SD_FILE_t s_file_pool[MAX_OPEN_FILES] = {0};
 
 /* Directory scan state */
 static DIR s_dir = {0};

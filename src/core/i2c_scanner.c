@@ -36,17 +36,17 @@ const char* I2C_Scanner_GetDeviceName(uint8_t address) {
         default:   return "Unknown device";
     }
 }
-extern 
+ 
 
-void I2C_Scanner_PrintOnTFT(I2C_Scanner_HandleTypeDef *scanner, uint16_t x, uint16_t y, uint16_t color, uint16_t bg_color, Sprite_t *sprite) {
+/* void I2C_Scanner_PrintOnTFT(I2C_Scanner_HandleTypeDef *scanner, uint16_t x, uint16_t y, uint16_t color, uint16_t bg_color, Sprite_t *sprite) {
     char buffer[64];
 
     // Заголовок
-    lcd_print_to_buffer_ex(x, y, color, "I2C Scanner v1.0", bg_color, sprite, false);
+   // lcd_print_to_buffer_ex(x, y, color, "I2C Scanner v1.0", bg_color, sprite, false);
     y += 16;
 
     if (scanner->count == 0) {
-        lcd_print_to_buffer_ex(x, y, color, "No devices found", bg_color, sprite, false);
+        //lcd_print_to_buffer_ex(x, y, color, "No devices found", bg_color, sprite, false);
         return;
     }
 
@@ -55,9 +55,9 @@ void I2C_Scanner_PrintOnTFT(I2C_Scanner_HandleTypeDef *scanner, uint16_t x, uint
         if (scanner->found[addr]) {
             const char *devName = I2C_Scanner_GetDeviceName(addr);
             snprintf(buffer, sizeof(buffer), "0x%02X: %s", addr, devName);
-            lcd_print_to_buffer_ex(x, y, color, buffer, bg_color, sprite, true);
+            //lcd_print_to_buffer_ex(x, y, color, buffer, bg_color, sprite, true);
             y += 16;
             if (y > 220) break;  // защита от выхода за экран
         }
     }
-}
+} */
