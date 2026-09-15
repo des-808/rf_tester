@@ -297,12 +297,12 @@ int main(void)
   // Или Arial 9:
    lcd_set_font(&font_arial_9_struct);
 
-/* I2C_Scanner_Init(&i2c_scanner, &hi2c1);
+ //I2C_Scanner_Init(&i2c_scanner, &hi2c1);
 // Запуск сканирования
-I2C_Scanner_Run(&i2c_scanner);
+//I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
-lcd_clear_screen(0x0000);  // чёрный фон
-I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); */
+//lcd_clear_screen(0x0000);  // чёрный фон
+//I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); 
   Menu_Init();
   
   /* Инициализация Page System */
