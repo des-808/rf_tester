@@ -1,8 +1,7 @@
 /**
  * @file lv_conf.h
- * @brief LVGL configuration for STM32H750VBT6 + ST7796 (320x480 / 480x320)
+ * Configuration file for LVGL 9.5 on STM32H7 (Cortex-M7, no MVE Helium)
  */
-
 #ifndef LV_CONF_H
 #define LV_CONF_H
 
@@ -146,10 +145,22 @@
 #define LV_USE_DRAW_SDL 0
 #define LV_USE_DRAW_OPENGLES 0
 #define LV_USE_DRAW_NANOVG 0
-#define LV_USE_DRAW_EVE 0
-
-/* Disable Helium/NEON assembly for Cortex-M7 (no MVE support) */
+#define LV_USE_DRAW_EVE 0/* Disable Helium/NEON optimizations (Cortex-M7 has no MVE) */
 #define LV_DRAW_SW_ASM 0
+#define LV_USE_DRAW_STM32_DMA2D 0
 #define LV_USE_NATIVE_HELIUM_ASM 0
 
-#endif /* LV_CONF_H */
+/*====================
+ * FONT SETTINGS
+ *====================*/
+#define LV_USE_FONT_PLACEHOLDER 1
+#define LV_USE_FONT_SUBPX 0
+
+/*====================
+ * OTHER SETTINGS
+ *====================*/
+#define LV_USE_LOG 0
+#define LV_USE_BIDI 0
+#define LV_USE_LODEPNG 1
+
+#endif /*LV_CONF_H*/
