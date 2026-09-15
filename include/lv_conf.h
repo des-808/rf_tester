@@ -148,4 +148,8 @@
 #define LV_USE_DRAW_NANOVG 0
 #define LV_USE_DRAW_EVE 0
 
+/* Disable Helium/NEON assembly for Cortex-M7 (no MVE support) */
+#define LV_DRAW_SW_ASM 0
+#define LV_USE_NATIVE_HELIUM_ASM 0
+
 #endif /* LV_CONF_H */
