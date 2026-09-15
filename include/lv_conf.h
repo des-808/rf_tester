@@ -147,7 +147,7 @@
 #define LV_USE_DRAW_NANOVG 0
 #define LV_USE_DRAW_EVE 0/* Disable Helium/NEON optimizations (Cortex-M7 has no MVE) */
 #define LV_DRAW_SW_ASM 0
-#define LV_USE_DRAW_STM32_DMA2D 0
+#define LV_USE_DRAW_STM32_DMA2D 1
 #define LV_USE_NATIVE_HELIUM_ASM 0
 
 /*====================
