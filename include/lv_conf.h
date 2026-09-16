@@ -3,7 +3,7 @@
 
 #define LV_HOR_RES_MAX 320
 #define LV_VER_RES_MAX 480
-#define LV_COLOR_DEPTH 16
+#define LV_COLOR_FORMAT_DEFAULT LV_COLOR_FORMAT_RGB565
 #define LV_USE_LOG 0
 #define LV_USE_ASSERT_NULL 0
 #define LV_USE_ASSERT_STYLE 0
@@ -15,6 +15,7 @@
 #define LV_USE_MENU       0
 
 #define LV_USE_ST7796 1
+#define LV_USE_GENERIC_MIPI 1
 
 
 // ===== Основные настройки =====
