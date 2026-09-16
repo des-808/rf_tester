@@ -3,11 +3,10 @@
 
 #include <stdint.h>
 
-void LVGL_InitScreen(void);
-void LVGL_SetSWR(float swr);
-void LVGL_SetStatus(const char* text);
-void LVGL_SetTouch(uint16_t x, uint16_t y);
-void LVGL_SetButton(const char* text);
+/* Инициализация дисплея, тача и LVGL (вызывать ДО ui_init) */
+void lvgl_driver_init(void);
+
+/* Вызывать в основном цикле (lv_tick_inc + lv_timer_handler) */
 void LVGL_Tick(void);
 
 #endif

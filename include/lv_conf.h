@@ -10,7 +10,8 @@
 #define LV_USE_PERF_MONITOR 0
 #define LV_USE_FS 0
 #define LV_USE_OBJ 1
-#define LV_USE_THEME_DEFAULT 0
+#define LV_USE_THEME_DEFAULT    1
+#define LV_USE_THEME_SIMPLE     0
 
 #define LV_USE_MENU       0
 
@@ -44,7 +45,7 @@
 
 // ===== Отключите ненужные виджеты =====
 // ===== Отключите ненужные виджеты =====
-#define LV_USE_ARC                0
+#define LV_USE_ARC                1
 #define LV_USE_BAR                1
 #define LV_USE_BTN                1
 #define LV_USE_BTNMATRIX          1
@@ -58,16 +59,18 @@
 #define LV_USE_LINE               1        // ← ВАЖНО: добавить!
 #define LV_USE_LIST               1        // ← ВАЖНО: отключить
 #define LV_USE_SCALE              0        // ← ВАЖНО: отключить
-#define LV_USE_ROLLER             0
-#define LV_USE_SLIDER             0
-#define LV_USE_SPINBOX            0
-#define LV_USE_SPINNER            0
-#define LV_USE_SWITCH             0
+#define LV_USE_ROLLER             1
+#define LV_USE_SLIDER             1
+#define LV_USE_SPINBOX            1
+#define LV_USE_SPINNER            1
+#define LV_USE_SWITCH             1
 #define LV_USE_TABLE              0
 #define LV_USE_TABVIEW            0
+#define LV_USE_IMAGEBUTTON        1
+#define LV_USE_IMAGE              1
 
 // ===== Библиотеки (выключаем всё) =====
-#define LV_USE_BMP                0
+#define LV_USE_BMP                1
 #define LV_USE_GIF                0
 #define LV_USE_QRCODE             0
 #define LV_USE_LIBPNG             0

@@ -31,6 +31,7 @@
 #include "st7796.h"
 #include "bmi160_h7.h"
 #include "lvgl_ui.h"
+#include "ui.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -294,53 +295,43 @@ int main(void)
   /* Small delay after cache enable for stability */
   HAL_Delay(1);
 
-  /* USER CODE BEGIN 2 */
-  ST7796_Init();
+    /* USER CODE BEGIN 2 */
+    ST7796_Init();
 
-  //lcd_set_font(&font_arial_9_struct);
+    lvgl_driver_init();
+    ui_init();
 
-  LVGL_InitScreen();
-  LVGL_SetStatus("Ready");
+    /* USER CODE END 2 */
 
-  /* USER CODE END 2 */ 
+   /* Infinite loop */
+    /* USER CODE BEGIN WHILE */
+   while (1)
+   {
+     /* USER CODE END WHILE */
 
-  /* Infinite loop */
-   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
+     if (bmi160_irq_received) {
+       bmi160_irq_received = 0;
+       uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
+       if (next_orientation != current_display_orientation) {
+         current_display_orientation = next_orientation;
+       }
+     }
 
-    if (bmi160_irq_received) {
-      bmi160_irq_received = 0;
-      uint8_t next_orientation = BMI160_CheckOrientationTask(&hi2c1, BMI160_I2C_ADDR_VCC, current_display_orientation);
-      if (next_orientation != current_display_orientation) {
-        current_display_orientation = next_orientation;
-        char status[24];
-        snprintf(status, sizeof(status), "Orient:%u", current_display_orientation);
-        LVGL_SetStatus(status);
-      }
-    }
+     if (PCF8574_HasChanges(&pcf_handle)) {
+       Buttons_Update(&btn_s);
+       uint8_t btn = PCF8574_Read8(&pcf_handle);
 
-    if (PCF8574_HasChanges(&pcf_handle)) {
-      Buttons_Update(&btn_s);
-      uint8_t btn = PCF8574_Read8(&pcf_handle);
+       if (btn != 0xFF) {
+         Buzzer_Short();
+       }
 
-      if (btn != 0xFF) {
-        char btn_text[24];
-        snprintf(btn_text, sizeof(btn_text), "Btn 0x%02X", btn);
-        LVGL_SetButton(btn_text);
-        Buzzer_Short();
-      } else {
-        LVGL_SetButton("Btn: none");
-      }
+       PCF8574_AcknowledgeChanges(&pcf_handle);
+     }
 
-      PCF8574_AcknowledgeChanges(&pcf_handle);
-    }
+      /* Опрос тачскрина каждый цикл */
+      FT6336U_ReadData(&ft6336u);
 
-    LVGL_SetSWR(15.0);
-    LVGL_Tick();
-
-    
+      LVGL_Tick();
     
     /* USER CODE BEGIN 3 */
   }

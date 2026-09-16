@@ -241,11 +241,9 @@ void EXTI4_IRQHandler(void)
 
   /* USER CODE END EXTI4_IRQn 0 */
   //HAL_GPIO_EXTI_IRQHandler(CTP_INT_Pin);
-  if (__HAL_GPIO_EXTI_GET_IT(CTP_INT_Pin) != RESET) {
-      __HAL_GPIO_EXTI_CLEAR_IT(CTP_INT_Pin);
-      FT6336U_ReadData(&ft6336u);
-      //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); // ← мигнём LED при касании
-  }
+  /* USER CODE BEGIN EXTI4_IRQn 0 */
+
+  /* USER CODE END EXTI4_IRQn 0 */
   /* USER CODE BEGIN EXTI4_IRQn 1 */
 
   /* USER CODE END EXTI4_IRQn 1 */
