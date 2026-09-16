@@ -20,6 +20,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "gpio.h"
+#
 
 /* USER CODE BEGIN 0 */
 
@@ -114,6 +115,14 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(CTP_RESET_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin for vibrator (PE10) — ACTIVE HIGH: SET=ON, RESET=OFF */
+  GPIO_InitStruct.Pin = VIBRATOR_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(VIBRATOR_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(VIBRATOR_GPIO_Port, VIBRATOR_Pin, GPIO_PIN_RESET); // выключен
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = INT_DS3231_Pin;

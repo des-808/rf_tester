@@ -135,6 +135,8 @@ void Error_Handler(void);
 #define ESP32_RX_GPIO_Port GPIOE
 #define ESP32_TX_Pin GPIO_PIN_1
 #define ESP32_TX_GPIO_Port GPIOE
+#define VIBRATOR_GPIO_Pin GPIO_PIN_10
+#define VIBRATOR_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
 
