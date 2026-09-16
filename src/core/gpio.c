@@ -20,6 +20,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "gpio.h"
+#include "vibrator.h"
+
 
 /* USER CODE BEGIN 0 */
 
@@ -155,7 +157,14 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  // LCD_LED теперь на PB0 (PWM TIM1_CH2N), PE10 удалён
+  /*Configure GPIO pin for vibrator (PE10) — ACTIVE HIGH: SET=ON, RESET=OFF */
+  GPIO_InitStruct.Pin = VIBRATOR_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(VIBRATOR_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(VIBRATOR_GPIO_Port, VIBRATOR_Pin, GPIO_PIN_RESET); // выключен
+
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = NRF24L01_CS_Pin;
