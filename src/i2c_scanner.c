@@ -36,9 +36,9 @@ const char* I2C_Scanner_GetDeviceName(uint8_t address) {
         default:   return "Unknown device";
     }
 }
-extern 
 
-void I2C_Scanner_PrintOnTFT(I2C_Scanner_HandleTypeDef *scanner, uint16_t x, uint16_t y, uint16_t color, uint16_t bg_color, Sprite_t *sprite) {
+
+/* void I2C_Scanner_PrintOnTFT(I2C_Scanner_HandleTypeDef *scanner, uint16_t x, uint16_t y, uint16_t color, uint16_t bg_color, Sprite_t *sprite) {
     char buffer[64];
 
     // Заголовок
@@ -60,4 +60,4 @@ void I2C_Scanner_PrintOnTFT(I2C_Scanner_HandleTypeDef *scanner, uint16_t x, uint
             if (y > 220) break;  // защита от выхода за экран
         }
     }
-}
+} */

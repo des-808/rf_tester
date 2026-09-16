@@ -46,16 +46,16 @@
 #define LV_USE_ARC                0
 #define LV_USE_BAR                1
 #define LV_USE_BTN                1
-#define LV_USE_BTNMATRIX          0
-#define LV_USE_CANVAS             0
+#define LV_USE_BTNMATRIX          1
+#define LV_USE_CANVAS             1
 #define LV_USE_CHECKBOX           1
-#define LV_USE_DROPDOWN           0
+#define LV_USE_DROPDOWN           1
 #define LV_USE_CALENDAR           0
 #define LV_USE_CALENDAR_HEADER_DROPDOWN 0
 #define LV_USE_IMG                1
 #define LV_USE_LABEL              1
 #define LV_USE_LINE               1        // ← ВАЖНО: добавить!
-#define LV_USE_LIST               0        // ← ВАЖНО: отключить
+#define LV_USE_LIST               1        // ← ВАЖНО: отключить
 #define LV_USE_SCALE              0        // ← ВАЖНО: отключить
 #define LV_USE_ROLLER             0
 #define LV_USE_SLIDER             0
@@ -80,7 +80,7 @@
 #define LV_USE_FS_STDIO           0
 
 // ===== GPU (включите только если точно знаете, что нужно) =====
-#define LV_USE_GPU_STM32_DMA2D    1   // Ускорение для STM32H7
+#define LV_USE_GPU_STM32_DMA2D    0   // ← ОТКЛЮЧЕНО: используем ручную SPI-передачу
 #define LV_USE_DRAW_SW            1   // обязательное для ARM Cortex-M7
 
 // ===== Буферы =====

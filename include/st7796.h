@@ -4,31 +4,6 @@
 #include "main.h"
 #include <stdbool.h> // 👈 добавить
 
-// Типы привязки спрайта к экрану
-typedef enum {
-    ANCHOR_TOP_LEFT,      // Прижат к верхнему левому углу (Статус-бар, меню)
-    ANCHOR_BOTTOM_LEFT,   // Прижат к нижнему левому углу (Нижняя панель, кнопки)
-    ANCHOR_CENTER,        // Строго по центру экрана (Всплывающие окна, прицелы)
-    ANCHOR_FILL_REMAINING, // Особый тип: растягивается на всё оставшееся место (Основной экран)
-    ANCHOR_GRAPH,          // Спрайт графика (займет левую половину)
-    ANCHOR_SIDE_PANEL      // Спрайт параметров (займет правую половину)
-} SpriteAnchor_t;
-
-typedef struct {
-    uint16_t *data;   // Указатель на буфер спрайта (w * h uint16_t)
-    uint16_t x, y;    // Координаты на экране (верхний левый угол)
-    uint16_t w, h;    // Размеры спрайта
-    bool is_allocated;
-    SpriteAnchor_t anchor; // Добавляем поле привязки
-    // Новая логика: координаты локальной «грязной» зоны внутри спрайта
-    bool needs_render;      // true — если в спрайте есть хоть какие-то изменения
-    int16_t dirty_x1;       // Левая граница изменений
-    int16_t dirty_y1;       // Верхняя граница изменений
-    int16_t dirty_x2;       // Правая граница изменений
-    int16_t dirty_y2;       // Нижняя граница изменений
-} Sprite_t;
-
-//#include "font.h"
 
 // --- Константы дисплея ---
 #define ST7796_WIDTH  320
@@ -81,59 +56,15 @@ HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len);
 //static HAL_StatusTypeDef ST7796_TransmitDMA(uint8_t *data, size_t len);
 // x/y = start coordinate, x2/y2 = end coordinate inclusive
 void ST7796_SetAddressWindow(uint16_t x, uint16_t y, uint16_t x2, uint16_t y2);
-// ✅ Создание спрайта — выделяем буфер
-bool Sprite_create_XY(Sprite_t* s, uint16_t w, uint16_t h,uint16_t x, uint16_t y, SpriteAnchor_t anchor);
-// ✅ Уничтожение спрайта
-void Sprite_destroy(Sprite_t* s);
-// ✅ Очистка спрайта
-void Sprite_fill(Sprite_t* s, uint16_t color);
-// ✅ Отправка спрайта на экран — здесь учитываем поворот!
-//void Sprite_push(const Sprite_t* s, int16_t x, int16_t y);
-void ST7796_PushSprite(Sprite_t* sprite);
+
 void ST7796_DrawPixel(int16_t x, int16_t y, uint16_t color);
 void ST7796_FillScreen(uint16_t color);
 void ST7796_Init(void);
 uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 uint16_t BGR565(uint8_t r, uint8_t g, uint8_t b);
 void ST7796_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t* data);
-// Функция горизонтального отзеркаливания (слева-направо)
-const uint8_t* iconMirrorHorizontal(const unsigned char* bitmap, int w, int h);
-// Функция вертикального отзеркаливания (верх-низ)
-const uint8_t* iconMirrorVertical(const unsigned char* bitmap, int w, int h);
-void drawStatusBar(Sprite_t *sprite);
-// ✅ Реализация ST7796_DrawBitmap — отрисовка битовой маски (XBM)
-void ST7796_DrawBitmap(int16_t x, int16_t y, const uint8_t *bitmap, uint16_t w, uint16_t h, uint16_t fgColor, uint16_t bgColor, uint16_t *buffer);
+
 void ST7796_SetRotation(uint8_t r);
-
-void Draw_Line_To_Sprite_OLD(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
-void Draw_Line_To_Sprite(Sprite_t* s, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
-
-void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, int16_t ry2);
-
-//void Sprite_ChangeOrientation(Sprite_t* sprite, uint8_t target_rotation);
-//void Sprite_UpdatePosition(Sprite_t* sprite);
-/*
-#define RGB565_BLACK        0x0000
-#define RGB565_WHITE        0xFFFF
-#define RGB565_RED          0xF800
-#define RGB565_GREEN        0x07E0
-#define RGB565_BLUE         0x001F
-#define RGB565_YELLOW       0xFFE0  // Red + Green
-#define RGB565_CYAN         0x07FF  // Green + Blue
-#define RGB565_MAGENTA      0xF81F  // Red + Blue
-#define RGB565_GRAY         0x8410  // ~50% gray
-#define RGB565_ORANGE       0xFDA8  // Red + a bit of green
-#define RGB565_PURPLE       0x780F  // Red + blue, less green
-#define RGB565_PINK         0xF9F6  // Red + mostly green, less blue
-#define RGB565_BROWN        0x9A68  // Dark orange/brown
-#define RGB565_LIGHT_GRAY   0xC618
-#define RGB565_DARK_GRAY    0x3800
-#define RGB565_DARK_GREEN   0x0400
-#define RGB565_LIGHT_GREEN  0x87F0
-#define RGB565_LIGHT_BLUE   0x051F
-#define RGB565_NAVY         0x000F
-#define RGB565_DARK_RED     0x8000
- */
 
  #define RGB565_BLACK        0x0000
 #define RGB565_WHITE        0xFFFF
@@ -155,49 +86,6 @@ void ST7796_PushSpriteRect(Sprite_t* s, int16_t rx1, int16_t ry1, int16_t rx2, i
 #define RGB565_LIGHT_BLUE   0x1F05  // swapped from 0x051F
 #define RGB565_NAVY         0x0F00  // swapped from 0x000F
 #define RGB565_DARK_RED     0x0080  // swapped from 0x8000
-
-// === КАСТОМНЫЕ ИКОНКИ (XBM) ===
-
-// 🔋 Батарея 8x8
-//static const unsigned char icon_battery_bits[] = { 0x38, 0x7C, 0x44, 0x44, 0x44, 0x44, 0x44, 0x7C };
-//#define ICON_BAT_WIDTH  8
-//#define ICON_BAT_HEIGHT 8
-
-static const unsigned char icon_battery_16_16_bits[] = {0x03, 0xF8, 0x03, 0xF8, 0x1F, 0xFF, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x1F, 0xFF};
-#define ICON_BAT_WIDTH  16
-#define ICON_BAT_HEIGHT 16
-// 📶 Wi-Fi 8x8
-static const unsigned char icon_wifi_bits[]  = { 0x00, 0x18, 0x24, 0x42, 0x99, 0x24, 0x00, 0x18 };
-                                                        //0x1C, 0x00, 0x3E, 0x00, 0x63, 0x00, 0xC9, 0x01, 0x9C, 0x01, 0x36, 0x00, 0x63, 0x00, 0x08, 0x00 
-#define ICON_WIFI_WIDTH  8
-#define ICON_WIFI_HEIGHT 8
-
-static const unsigned char icon_not_wifi_bits[] = {0x80, 0x58, 0x24, 0x5A, 0x99, 0x24, 0x02, 0x19 };
-#define ICON_NOT_WIFI_WIDTH  8
-#define ICON_NOT_WIFI_HEIGHT 8
-
-// 🔵 Bluetooth 9x8
-static const unsigned char icon_bluetooth_bits[] = { 0x0C, 0x15, 0x16, 0x0C, 0x16, 0x25, 0x14, 0x0C };
-#define ICON_BT_WIDTH  8
-#define ICON_BT_HEIGHT 8
-
-// ⏰ NTP 8x8
-static const unsigned char icon_ntp_bits[] = { 0x5A, 0x24, 0x46, 0x89, 0x91, 0xD2, 0x66, 0x3C };
-#define ICON_NTP_WIDTH  8
-#define ICON_NTP_HEIGHT 8
-
-//buzzer
-static const unsigned char icon_buzzer_on_bits[] = { 0x30, 0x28, 0x27, 0x23, 0x23, 0x27, 0x28, 0x30  };
-
-#define ICON_BUZZER_WIDTH  8
-#define ICON_BUZZER_HEIGHT 8
-
-static const unsigned char icon_buzzer_off_bits[] = { 0xB0, 0x68, 0x27, 0x33, 0x2B, 0x27, 0x2A, 0x31  };
-
-static const unsigned char icon_rs485ToBt_bits[] = { 0x20, 0x24, 0x2E, 0x35, 0xAC, 0x74, 0x24, 0x04 };
-#define ICON_RS485TOBT_WIDTH  8
-#define ICON_RS485TOBT_HEIGHT 8
-static const unsigned char icon_not_rs485ToBt_bits[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 #endif
 

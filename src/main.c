@@ -71,9 +71,6 @@ void SystemClock_Config(void);
 void ST7796_Init(void);
 uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 DMA_HandleTypeDef hdma_spi4_tx;
-uint16_t last_touch_x = 0;
-uint16_t last_touch_y = 0;
-
 
 char debug_str[64] = "BMI160: Wait interrupt..."; // Строка для вывода на экран
 volatile uint32_t exti_counter = 0;               // Счетчик прерываний для проверки физики
@@ -236,21 +233,6 @@ extern uint16_t Display_Width;
 extern uint16_t Display_Height;
 extern Buttons_HandleTypeDef btn_s;
 void INIT_FT6336U(void);
-static void Convert_Touch_Coordinates(uint16_t raw_x, uint16_t raw_y, uint16_t* out_x, uint16_t* out_y) {
-    if (!out_x || !out_y) return;
-    uint16_t w = Display_Width;
-    uint16_t h = Display_Height;
-    uint16_t x = raw_x;
-    uint16_t y = raw_y;
-
-    if (w > 0 && h > 0) {
-        x = (uint16_t)((uint32_t)raw_x * w / 4096U);
-        y = (uint16_t)((uint32_t)raw_y * h / 4096U);
-    }
-
-    *out_x = x;
-    *out_y = y;
-}
 
 int main(void)
 {
@@ -283,7 +265,6 @@ int main(void)
   #endif
   MX_RTC_Init();
   MX_SPI4_Init();
-  MX_SPI4_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_USB_DEVICE_Init();
@@ -301,6 +282,18 @@ int main(void)
       while(1); // Ошибка
   }
 	HAL_Delay(15);
+
+  /* ============================================
+     MPU + D-Cache init — КРИТИЧНО для DMA/SPI4
+     MPU должен быть включён перед использованием
+     кэша и DMA-буферов
+     ============================================ */
+  MPU_Config();
+  CPU_CACHE_Enable();
+  
+  /* Small delay after cache enable for stability */
+  HAL_Delay(1);
+
   /* USER CODE BEGIN 2 */
   ST7796_Init();
 
@@ -344,21 +337,10 @@ int main(void)
       PCF8574_AcknowledgeChanges(&pcf_handle);
     }
 
-    if (ft6336u.has_touch) {
-      uint16_t raw_x, raw_y;
-      FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
-      Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-
-      LVGL_SetTouch(last_touch_x, last_touch_y);
-      LVGL_SetStatus("Touch");
-      Buzzer_Short();
-      ft6336u.has_touch = false;
-    }
-
     LVGL_SetSWR(15.0);
     LVGL_Tick();
 
-    HAL_Delay(10);
+    
     
     /* USER CODE BEGIN 3 */
   }
