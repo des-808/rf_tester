@@ -301,6 +301,10 @@ int main(void)
     lvgl_driver_init();
     ui_init();
 
+    /* Загрузка главного экрана */
+    lv_scr_load(ui_MenuMain);
+    for (int i = 0; i < 5; i++) lv_timer_handler();
+
     /* USER CODE END 2 */
 
    /* Infinite loop */
@@ -329,7 +333,7 @@ int main(void)
      }
 
       /* Опрос тачскрина каждый цикл */
-      FT6336U_ReadData(&ft6336u);
+      //FT6336U_ReadData(&ft6336u);
 
       LVGL_Tick();
     

@@ -17,7 +17,9 @@ static lv_indev_t* lvgl_touch_indev = NULL;
 /* Последние известные координаты тачскрина */
 static uint16_t last_touch_x = 0;
 static uint16_t last_touch_y = 0;
-static bool last_touch_state = false;
+
+/* Состояние тачскрина: true = палец на экране */
+static bool touch_on_screen = false;
 
 /* Флаг для защиты от повторного срабатывания buzzer */
 static bool touch_buzzer_triggered = false;
@@ -68,13 +70,14 @@ static void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px
 static void lvgl_touch_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
     (void)indev;
 
-    /* Обновляем данные тачскрина */
-    if (ft6336u.has_touch) {
+    /* Проверяем реальное состояние тачскрина */
+    if (ft6336u.touch_num > 0) {
+        /* Есть касание — обновляем координаты */
         uint16_t raw_x, raw_y;
         if (FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y)) {
             last_touch_x = (raw_x * LV_HOR_RES_MAX) / 4095;
             last_touch_y = (raw_y * LV_VER_RES_MAX) / 4095;
-            last_touch_state = true;
+            touch_on_screen = true;
 
             /* Buzzer при первом касании */
             if (!touch_buzzer_triggered) {
@@ -83,15 +86,15 @@ static void lvgl_touch_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
             }
         }
     } else {
-        /* Нет касания — сбрасываем */
-        if (last_touch_state) {
+        /* Нет касания — палец убран */
+        if (touch_on_screen) {
+            touch_on_screen = false;
             touch_buzzer_triggered = false;
-            last_touch_state = false;
         }
     }
 
-    /* Всегда возвращаем последнее состояние */
-    data->state = last_touch_state ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    /* Возвращаем текущее состояние */
+    data->state = touch_on_screen ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
     data->point.x = last_touch_x;
     data->point.y = last_touch_y;
     data->continue_reading = false;

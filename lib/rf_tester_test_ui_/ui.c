@@ -40,7 +40,6 @@ void ui_init(void)
     ui_Screen10_screen_init();
     ui_MenuMain_screen_init();
     ui____initial_actions0 = lv_obj_create(NULL);
-    lv_scr_load(ui_MenuMain);
 }
 
 void ui_destroy(void)
