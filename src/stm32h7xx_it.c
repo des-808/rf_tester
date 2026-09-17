@@ -225,7 +225,15 @@ void EXTI3_IRQHandler(void)
   /* USER CODE BEGIN EXTI3_IRQn 0 */
 
   /* USER CODE END EXTI3_IRQn 0 */
-  HAL_GPIO_EXTI_IRQHandler(NRF24L01_IRQ_Pin);
+
+  if (__HAL_GPIO_EXTI_GET_IT(NRF24L01_IRQ_Pin) != RESET) {
+      __HAL_GPIO_EXTI_CLEAR_IT(NRF24L01_IRQ_Pin);
+      // NRF24L01 IRQ handler — to be implemented
+  }
+  if (__HAL_GPIO_EXTI_GET_IT(CC1101_GDO2_Pin) != RESET) {
+      __HAL_GPIO_EXTI_CLEAR_IT(CC1101_GDO2_Pin);
+      // CC1101 GDO2 handler — to be implemented
+  }
   /* USER CODE BEGIN EXTI3_IRQn 1 */
 
   /* USER CODE END EXTI3_IRQn 1 */

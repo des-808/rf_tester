@@ -5,8 +5,6 @@
 
 #include "../ui.h"
 
-lv_obj_t * ui_label_touch;
-
 lv_obj_t * uic_Clock;
 lv_obj_t * uic_statusBar;
 lv_obj_t * ui_MenuMain = NULL;
@@ -32,7 +30,7 @@ void ui_event_ImgBtnMenuMain(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_Settings, LV_SCREEN_LOAD_ANIM_FADE_ON, 500, 0, &ui_Settings_screen_init);
+        _ui_screen_change(&ui_Settings, LV_SCREEN_LOAD_ANIM_FADE_ON, 150, 0, &ui_Settings_screen_init);
     }
 }
 
@@ -41,7 +39,7 @@ void ui_event_ImgButton2(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_CC1101, LV_SCREEN_LOAD_ANIM_FADE_ON, 500, 0, &ui_CC1101_screen_init);
+        _ui_screen_change(&ui_CC1101, LV_SCREEN_LOAD_ANIM_FADE_ON, 150, 0, &ui_CC1101_screen_init);
     }
 }
 
@@ -50,7 +48,7 @@ void ui_event_ImgButton3(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_NRF24L01, LV_SCREEN_LOAD_ANIM_FADE_ON, 500, 0, &ui_NRF24L01_screen_init);
+        _ui_screen_change(&ui_NRF24L01, LV_SCREEN_LOAD_ANIM_FADE_ON, 150, 0, &ui_NRF24L01_screen_init);
     }
 }
 
@@ -59,7 +57,7 @@ void ui_event_ImgButton4(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_LORA, LV_SCREEN_LOAD_ANIM_FADE_ON, 500, 0, &ui_LORA_screen_init);
+        _ui_screen_change(&ui_LORA, LV_SCREEN_LOAD_ANIM_FADE_ON, 150, 0, &ui_LORA_screen_init);
     }
 }
 
@@ -68,7 +66,7 @@ void ui_event_ImgButton5(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_RSSIPLOTTER, LV_SCREEN_LOAD_ANIM_FADE_ON, 500, 0, &ui_RSSIPLOTTER_screen_init);
+        _ui_screen_change(&ui_RSSIPLOTTER, LV_SCREEN_LOAD_ANIM_FADE_ON, 150, 0, &ui_RSSIPLOTTER_screen_init);
     }
 }
 
@@ -77,7 +75,7 @@ void ui_event_ImgButton6(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_ABOUT, LV_SCREEN_LOAD_ANIM_FADE_ON, 500, 0, &ui_ABOUT_screen_init);
+        _ui_screen_change(&ui_ABOUT, LV_SCREEN_LOAD_ANIM_FADE_ON, 150, 0, &ui_ABOUT_screen_init);
     }
 }
 
@@ -289,14 +287,6 @@ void ui_MenuMain_screen_init(void)
     lv_obj_add_event_cb(ui_ImgButton6, ui_event_ImgButton6, LV_EVENT_ALL, NULL);
     uic_statusBar = ui_statusBar;
     uic_Clock = ui_Clock;
-
-    /* === DEBUG: отображение координат тача === */
-    ui_label_touch = lv_label_create(ui_MenuMain);
-    lv_label_set_text(ui_label_touch, "T:--,--");
-    lv_obj_set_style_bg_color(ui_label_touch, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_label_touch, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(ui_label_touch, lv_color_hex(0x00FF00), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(ui_label_touch, LV_ALIGN_BOTTOM_LEFT, 5, -5);
 
 }
 

@@ -119,10 +119,18 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin for vibrator (PE10) — ACTIVE HIGH: SET=ON, RESET=OFF */
   GPIO_InitStruct.Pin = VIBRATOR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN; // pull-down чтобы при ресете пин был в низком уровне
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(VIBRATOR_GPIO_Port, &GPIO_InitStruct);
   HAL_GPIO_WritePin(VIBRATOR_GPIO_Port, VIBRATOR_Pin, GPIO_PIN_RESET); // выключен
+
+  /*Configure GPIO pin for BUZZER (PB10) — OUTPUT LOW before TIM2 init to prevent glitch on reset */
+  GPIO_InitStruct.Pin = BUZZER_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(BUZZER_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET); // гарантированно LOW до инициализации TIM2
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = INT_DS3231_Pin;

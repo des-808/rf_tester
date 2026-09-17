@@ -14,7 +14,7 @@ void ui_event_ImgButton8(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_Screen10, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 500, 0, &ui_Screen10_screen_init);
+        _ui_screen_change(&ui_Screen10, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 150, 0, &ui_Screen10_screen_init);
     }
 }
 
@@ -23,7 +23,7 @@ void ui_event_ImgButton10(lv_event_t * e)
     lv_event_code_t event_code = lv_event_get_code(e);
 
     if(event_code == LV_EVENT_CLICKED) {
-        _ui_screen_change(&ui_Screen8, LV_SCREEN_LOAD_ANIM_MOVE_RIGHT, 500, 0, &ui_Screen8_screen_init);
+        _ui_screen_change(&ui_Screen8, LV_SCREEN_LOAD_ANIM_MOVE_RIGHT, 150, 0, &ui_Screen8_screen_init);
     }
 }
 

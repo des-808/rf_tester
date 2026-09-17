@@ -1,5 +1,4 @@
 // LVGL Display & Touch Driver
-// Вызывается LVGL при необходимости отрисовки экрана
 
 #include "lv_conf.h"
 #include "lvgl.h"
@@ -12,23 +11,18 @@ extern SPI_HandleTypeDef hspi4;
 extern FT6336U_HandleTypeDef ft6336u;
 
 /* LVGL touch input device */
-static lv_indev_t* lvgl_touch_indev = NULL;
+lv_indev_t* lvgl_touch_indev = NULL;
 
-/* Последние известные координаты тачскрина */
-static uint16_t last_touch_x = 0;
-static uint16_t last_touch_y = 0;
-
-/* Состояние тачскрина: true = палец на экране */
-static bool touch_on_screen = false;
+/* Текущие координаты тачскрина */
+static uint16_t touch_x = 0;
+static uint16_t touch_y = 0;
+static bool touch_pressed = false;
 
 /* Флаг для защиты от повторного срабатывания buzzer */
 static bool touch_buzzer_triggered = false;
 
 /* Вспомогательный буфер для byte-swap строки */
 static uint16_t row_swap_buf[320] __attribute__((aligned(32)));
-
-/* Ссылка на label для отладки */
-extern lv_obj_t * ui_label_touch;
 
 /* ============================================
    LVGL Display Flush Callback
@@ -67,43 +61,53 @@ static void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px
 /* ============================================
    LVGL Touch Input Driver
    ============================================ */
+static lv_obj_t* touch_label = NULL;
+
 static void lvgl_touch_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
     (void)indev;
 
-    /* Проверяем реальное состояние тачскрина */
+    /* Возвращаем текущие координаты тача — LVGL сам различит клик и свайп */
+    data->state = touch_pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    data->point.x = touch_x;
+    data->point.y = touch_y;
+    data->continue_reading = false;
+    
+    /* Обновляем метку с координатами */
+    if (touch_label && touch_pressed) {
+        char buf[32];
+        lv_snprintf(buf, sizeof(buf), "X:%d Y:%d", touch_x, touch_y);
+        lv_label_set_text(touch_label, buf);
+    }
+}
+
+/* ============================================
+   Обновление данных тачскрина — вызывать из main()
+   ============================================ */
+void lvgl_touch_update(void)
+{
+    /* Читаем данные тачскрина (I2C — может быть долгим) */
+    FT6336U_ReadData(&ft6336u);
+
+    /* Проверяем, есть ли касание */
     if (ft6336u.touch_num > 0) {
-        /* Есть касание — обновляем координаты */
         uint16_t raw_x, raw_y;
         if (FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y)) {
-            last_touch_x = (raw_x * LV_HOR_RES_MAX) / 4095;
-            last_touch_y = (raw_y * LV_VER_RES_MAX) / 4095;
-            touch_on_screen = true;
+            touch_x = raw_x;
+            touch_y = raw_y;
+            touch_pressed = true;
 
             /* Buzzer при первом касании */
             if (!touch_buzzer_triggered) {
-                Buzzer_Short();
+                //Buzzer_Short();
                 touch_buzzer_triggered = true;
             }
         }
     } else {
         /* Нет касания — палец убран */
-        if (touch_on_screen) {
-            touch_on_screen = false;
+        if (touch_pressed) {
+            touch_pressed = false;
             touch_buzzer_triggered = false;
         }
-    }
-
-    /* Возвращаем текущее состояние */
-    data->state = touch_on_screen ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
-    data->point.x = last_touch_x;
-    data->point.y = last_touch_y;
-    data->continue_reading = false;
-
-    /* DEBUG: выводим координаты на экран */
-    if (ui_label_touch != NULL) {
-        char tmp[32];
-        snprintf(tmp, sizeof(tmp), "T:%u,%u", last_touch_x, last_touch_y);
-        lv_label_set_text(ui_label_touch, tmp);
     }
 }
 
@@ -126,6 +130,11 @@ void lvgl_driver_init(void)
     lvgl_touch_indev = lv_indev_create();
     lv_indev_set_type(lvgl_touch_indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(lvgl_touch_indev, lvgl_touch_read_cb);
+    
+    /* Создаём метку для отладки координат тача */
+    touch_label = lv_label_create(lv_scr_act());
+    lv_label_set_text(touch_label, "Touch: ---");
+    lv_obj_align(touch_label, LV_ALIGN_TOP_RIGHT, -10, 10);
 }
 
 /* ============================================

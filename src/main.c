@@ -28,14 +28,13 @@
 #include "usb_device.h"
 #include "gpio.h"
 #include "ft6336u.h"
-#include "st7796.h"
 #include "bmi160_h7.h"
+#include "buzzer.h"
+#include "bmi160_h7.h"
+#include "lvgl.h"
 #include "lvgl_ui.h"
 #include "ui.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-#define W25Qxx
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -268,6 +267,8 @@ int main(void)
   MX_SPI4_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3); // гарантированно останавливаем PWM
+  HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET); // гарантированно LOW
   MX_USB_DEVICE_Init();
   MX_UART5_Init();
   MX_I2C1_Init();
@@ -332,10 +333,10 @@ int main(void)
        PCF8574_AcknowledgeChanges(&pcf_handle);
      }
 
-      /* Опрос тачскрина каждый цикл */
-      //FT6336U_ReadData(&ft6336u);
+       /* Опрос тачскрина каждый цикл */
+       lvgl_touch_update();
 
-      LVGL_Tick();
+       LVGL_Tick();
     
     /* USER CODE BEGIN 3 */
   }
