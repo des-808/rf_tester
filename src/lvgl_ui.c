@@ -6,9 +6,11 @@
 #include "ft6336u.h"
 #include "buzzer.h"
 #include <stdbool.h>
+#include <stdio.h>
 
 extern SPI_HandleTypeDef hspi4;
 extern FT6336U_HandleTypeDef ft6336u;
+extern UART_HandleTypeDef huart4;
 
 /* LVGL touch input device */
 lv_indev_t* lvgl_touch_indev = NULL;
@@ -17,6 +19,16 @@ lv_indev_t* lvgl_touch_indev = NULL;
 static uint16_t touch_x = 0;
 static uint16_t touch_y = 0;
 static bool touch_pressed = false;
+
+/* Debounce: координаты должны быть стабильны N раз подряд */
+#define TOUCH_DEBOUNCE_COUNT 3
+#define TOUCH_STABLE_THRESHOLD 8  /* пикселей — порог для считания "стоит на месте" */
+#define TOUCH_MOVE_THRESHOLD 30   /* пикселей — порог для считания "движется" */
+
+static uint16_t debounce_x = 0;
+static uint16_t debounce_y = 0;
+static uint8_t debounce_counter = 0;
+static bool touch_was_moving = false;  /* флаг: палец двигался */
 
 /* Флаг для защиты от повторного срабатывания buzzer */
 static bool touch_buzzer_triggered = false;
@@ -83,34 +95,94 @@ static void lvgl_touch_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
 /* ============================================
    Обновление данных тачскрина — вызывать из main()
    ============================================ */
+#ifdef DEBUG_TOUCH
+static uint32_t touch_debug_tick = 0;
+#define TOUCH_DEBUG_INTERVAL 500  /* отправка каждые 500мс */
+#endif
+
 void lvgl_touch_update(void)
 {
     /* Читаем данные тачскрина (I2C — может быть долгим) */
     FT6336U_ReadData(&ft6336u);
 
+#ifdef DEBUG_TOUCH
+    /* Отладочный вывод в UART4 каждые 500мс */
+    uint32_t now = HAL_GetTick();
+    if (now - touch_debug_tick >= TOUCH_DEBUG_INTERVAL) {
+        touch_debug_tick = now;
+        char dbg_buf[128];
+        int len = snprintf(dbg_buf, sizeof(dbg_buf), 
+            "[TOUCH] num=%d pressed=%d x=%d y=%d\r\n",
+            ft6336u.touch_num, touch_pressed, touch_x, touch_y);
+        HAL_UART_Transmit(&huart4, (uint8_t*)dbg_buf, len, 10);
+    }
+#endif
+
     /* Проверяем, есть ли касание */
     if (ft6336u.touch_num > 0) {
         uint16_t raw_x, raw_y;
         if (FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y)) {
-            touch_x = raw_x;
-            touch_y = raw_y;
-            touch_pressed = true;
+            /* Вычисляем изменение координат */
+            int16_t dx = (int16_t)raw_x - touch_x;
+            int16_t dy = (int16_t)raw_y - touch_y;
+            int32_t dist = dx * dx + dy * dy;
+            
+            /* АДАПТИВНЫЙ DEBOUNCE:
+             * 1. Если палец двигается быстро (>30px) — пропускаем сразу, без debounce
+             * 2. Если палец стоит на месте (<8px) — применяем debounce для фильтрации шума
+             */
+            if (dist > (TOUCH_MOVE_THRESHOLD * TOUCH_MOVE_THRESHOLD)) {
+                /* Палец двигается — это жест/свайп, пропускаем без debounce */
+                touch_x = raw_x;
+                touch_y = raw_y;
+                touch_pressed = true;
+                touch_was_moving = true;
+                debounce_counter = 0;
+                
+            } else if (dist < (TOUCH_STABLE_THRESHOLD * TOUCH_STABLE_THRESHOLD)) {
+                /* Палец стоит на месте — фильтруем шум через debounce */
+                debounce_x = raw_x;
+                debounce_y = raw_y;
+                debounce_counter++;
+                
+                if (debounce_counter >= TOUCH_DEBOUNCE_COUNT) {
+                    /* Координаты подтверждены — шумы отфильтрованы */
+                    touch_x = raw_x;
+                    touch_y = raw_y;
+                    touch_pressed = true;
+                    touch_was_moving = false;
+                    
+#ifdef DEBUG_TOUCH
+                    /* Buzzer при первом касании */
+                    if (!touch_buzzer_triggered) {
+                        //Buzzer_Short();
+                        char dbg_buf[128];
+                        int len = snprintf(dbg_buf, sizeof(dbg_buf), 
+                        "[TOUCH] STABLE x=%d y=%d\r\n", touch_x, touch_y);
+                        HAL_UART_Transmit(&huart4, (uint8_t*)dbg_buf, len, 10);
+                        touch_buzzer_triggered = true;
+                    }
+#endif
 
-            /* Buzzer при первом касании */
-            if (!touch_buzzer_triggered) {
-                //Buzzer_Short();
-                touch_buzzer_triggered = true;
+                }
             }
+            /* Если изменение между thresholds — игнорируем (шум) */
         }
     } else {
-        /* Нет касания — палец убран */
+        /* Нет касания — сбрасываем все координаты и состояние */
+        touch_x = 0;
+        touch_y = 0;
         if (touch_pressed) {
             touch_pressed = false;
             touch_buzzer_triggered = false;
         }
+        debounce_counter = 0;
+        debounce_x = 0;
+        debounce_y = 0;
+        touch_was_moving = false;
     }
-}
 
+}
 /* ============================================
    LVGL Init — вызывается из ui_init()
    ============================================ */

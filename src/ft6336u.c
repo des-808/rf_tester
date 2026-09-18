@@ -49,7 +49,20 @@ bool FT6336U_ReadRegs(FT6336U_HandleTypeDef *ts, uint8_t reg, uint8_t *data, uin
 
 bool FT6336U_ReadData(FT6336U_HandleTypeDef *ts) {
     // Читаем TD_STATUS (количество касаний)
-    uint8_t touch_num = FT6336U_ReadReg(ts, FT6336U_TD_STATUS) & 0x0F;
+    uint8_t touch_num_reg = FT6336U_ReadReg(ts, FT6336U_TD_STATUS);
+    uint8_t touch_num = touch_num_reg & 0x0F;
+
+    // ВАЛИДАЦИЯ: FT6336U поддерживает только 1 касание
+    // Если touch_num > 1 — это мусор от I2C, игнорируем
+    if (touch_num > 1) {
+        ts->has_touch = false;
+        ts->touch_num = 0;
+        for (int i = 0; i < 5; i++) {
+            ts->x[i] = 0;
+            ts->y[i] = 0;
+        }
+        return false;
+    }
 
     if (touch_num == 0) {
         ts->has_touch = false;
@@ -61,29 +74,41 @@ bool FT6336U_ReadData(FT6336U_HandleTypeDef *ts) {
         return true;
     }
 
-    ts->has_touch = true;
-    ts->touch_num = touch_num;
+    // Читаем координаты первой точки
+    uint8_t data[5];
+    uint8_t base = 0x03; // P1_XH = 0x03
 
-    // Читаем координаты для каждой точки
-    for (int i = 0; i < touch_num && i < 5; i++) {
-        uint8_t data[5];
-        uint8_t base = 0x03 + i * 6; // P1_XH = 0x03, P2_XH = 0x09, и т.д.
-
-        if (!FT6336U_ReadRegs(ts, base, data, 5)) continue;
-
-        uint16_t x = ((data[0] & 0x0F) << 8) | data[1];
-        uint16_t y = ((data[2] & 0x0F) << 8) | data[3];
-        uint8_t id = data[4] & 0x0F;
-
-        ts->x[i] = x;
-        ts->y[i] = y;
-        ts->touch_id[i] = id;
+    if (!FT6336U_ReadRegs(ts, base, data, 5)) {
+        // Ошибка I2C — сбрасываем данные
+        ts->has_touch = false;
+        ts->touch_num = 0;
+        return false;
     }
 
-    uint8_t gest = FT6336U_GetGesture(ts);
-    if (gest != FT6336U_GESTURE_NONE) {
-        ts->last_gesture = gest;
-        ts->has_gesture = true;
+    uint16_t x = ((data[0] & 0x0F) << 8) | data[1];
+    uint16_t y = ((data[2] & 0x0F) << 8) | data[3];
+    uint8_t id = data[4] & 0x0F;
+
+    // ВАЛИДАЦИЯ: координаты должны быть в пределах экрана
+    // Для 320x480 экрана допустимые значения: 0-319 по X, 0-479 по Y
+    if (x > 320 || y > 480) {
+        // Неверные координаты — это мусор, игнорируем
+        ts->has_touch = false;
+        ts->touch_num = 0;
+        return false;
+    }
+
+    ts->has_touch = true;
+    ts->touch_num = 1;
+    ts->x[0] = x;
+    ts->y[0] = y;
+    ts->touch_id[0] = id;
+
+    // Очищаем остальные точки
+    for (int i = 1; i < 5; i++) {
+        ts->x[i] = 0;
+        ts->y[i] = 0;
+        ts->touch_id[i] = 0;
     }
 
     return true;

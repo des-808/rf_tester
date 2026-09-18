@@ -246,14 +246,10 @@ extern FT6336U_HandleTypeDef ft6336u;
 void EXTI4_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI4_IRQn 0 */
-
-  /* USER CODE END EXTI4_IRQn 0 */
-  //HAL_GPIO_EXTI_IRQHandler(CTP_INT_Pin);
-  /* USER CODE BEGIN EXTI4_IRQn 0 */
-if (__HAL_GPIO_EXTI_GET_IT(CTP_INT_Pin) != RESET) {
+  /* INT пин тача — обрабатываем только для сброса флага, чтение через polling */
+  if (__HAL_GPIO_EXTI_GET_IT(CTP_INT_Pin) != RESET) {
       __HAL_GPIO_EXTI_CLEAR_IT(CTP_INT_Pin);
-      FT6336U_ReadData(&ft6336u);
-      //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); // ← мигнём LED при касании
+      //FT6336U_ReadData(&ft6336u);  // ← чтение отключено, данные читаются в lvgl_touch_update()
   }
   /* USER CODE END EXTI4_IRQn 0 */
   /* USER CODE BEGIN EXTI4_IRQn 1 */
