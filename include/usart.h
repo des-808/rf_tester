@@ -48,6 +48,10 @@ void MX_UART8_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
+/* Debug UART (UART5) wrapper macros */
+#define DEBUG_UART_TRANSMIT(data) HAL_UART_Transmit(&huart4, (uint8_t*)(data), strlen(data), 10)
+#define DEBUG_UART_RECEIVE(data, len) HAL_UART_Receive(&huart4, (uint8_t*)(data), (len), 10)
+
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

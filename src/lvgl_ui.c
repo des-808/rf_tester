@@ -5,8 +5,10 @@
 #include "st7796.h"
 #include "ft6336u.h"
 #include "buzzer.h"
+#include "usart.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 extern SPI_HandleTypeDef hspi4;
 extern FT6336U_HandleTypeDef ft6336u;
@@ -114,7 +116,7 @@ void lvgl_touch_update(void)
         int len = snprintf(dbg_buf, sizeof(dbg_buf), 
             "[TOUCH] num=%d pressed=%d x=%d y=%d\r\n",
             ft6336u.touch_num, touch_pressed, touch_x, touch_y);
-        HAL_UART_Transmit(&huart4, (uint8_t*)dbg_buf, len, 10);
+        DEBUG_UART_TRANSMIT(dbg_buf);
     }
 #endif
 
@@ -159,7 +161,7 @@ void lvgl_touch_update(void)
                         char dbg_buf[128];
                         int len = snprintf(dbg_buf, sizeof(dbg_buf), 
                         "[TOUCH] STABLE x=%d y=%d\r\n", touch_x, touch_y);
-                        HAL_UART_Transmit(&huart4, (uint8_t*)dbg_buf, len, 10);
+                        DEBUG_UART_TRANSMIT(dbg_buf);
                         touch_buzzer_triggered = true;
                     }
 #endif
