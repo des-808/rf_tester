@@ -6,11 +6,13 @@ static volatile uint16_t vibro_duration   = 0;
 static volatile bool     vibro_active     = false;
 
 void Vibrator_On(void) {
-    HAL_GPIO_WritePin(VIBRATOR_GPIO_Port, VIBRATOR_Pin, GPIO_PIN_SET);
+    /* 74LVC1G04 инвертор: RESET(низкий) → HIGH на транзистор → мотор ВКЛ */
+    HAL_GPIO_WritePin(VIBRATOR_GPIO_Port, VIBRATOR_Pin, GPIO_PIN_RESET);
 }
 
 void Vibrator_Off(void) {
-    HAL_GPIO_WritePin(VIBRATOR_GPIO_Port, VIBRATOR_Pin, GPIO_PIN_RESET);
+    /* SET(высокий) → LOW на транзистор → мотор ВЫКЛ */
+    HAL_GPIO_WritePin(VIBRATOR_GPIO_Port, VIBRATOR_Pin, GPIO_PIN_SET);
     __disable_irq();
     vibro_active = false;
     __enable_irq();
