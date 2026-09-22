@@ -373,6 +373,14 @@ uint8_t TouchGestures_GetPointCount(void) {
     return g_state.point_count;
 }
 
+/**
+ * @brief Получить указатель на точку по индексу
+ */
+TouchPoint_t* TouchGestures_GetPoint(uint8_t index) {
+    if (index >= TOUCH_MAX_POINTS) return NULL;
+    return &g_state.points[index];
+}
+
 /* ========================================================================
  *  ПОЛУЧЕНИЕ СОБЫТИЯ И СБРОС
  * ======================================================================== */

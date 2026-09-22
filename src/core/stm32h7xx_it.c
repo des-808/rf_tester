@@ -24,6 +24,9 @@
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
 
+/* External touch gesture flag */
+extern volatile uint8_t touch_irq_pending;
+
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
 #include "pcf8574.h"
@@ -240,16 +243,19 @@ void EXTI3_IRQHandler(void)
   * @brief This function handles EXTI line4 interrupt.
   */
 extern FT6336U_HandleTypeDef ft6336u;
+volatile uint8_t touch_irq_pending = 0;
+
 void EXTI4_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI4_IRQn 0 */
 
   /* USER CODE END EXTI4_IRQn 0 */
-  //HAL_GPIO_EXTI_IRQHandler(CTP_INT_Pin);
   if (__HAL_GPIO_EXTI_GET_IT(CTP_INT_Pin) != RESET) {
       __HAL_GPIO_EXTI_CLEAR_IT(CTP_INT_Pin);
+      // EXTI сработал — ставим флаг для main loop
+      touch_irq_pending = 1;
+      // Читаем данные тачскрина (неблокирующе, быстро)
       FT6336U_ReadData(&ft6336u);
-      //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); // ← мигнём LED при касании
   }
   /* USER CODE BEGIN EXTI4_IRQn 1 */
 

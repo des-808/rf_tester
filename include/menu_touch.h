@@ -2,21 +2,15 @@
 #define MENU_TOUCH_H
 
 #include <stdint.h>
+#include "touch_gesture.h"
 
 /**
- * @brief Обработка касания экрана в меню
- * @param tx  преобразованная координата X
- * @param ty  преобразованная координата Y
+ * @brief Обработка жеста из touch_gesture системы
+ * @param event указатель на событие жеста
  * 
- * Вызывается из main.c после чтения координат с FT6336U.
+ * Вызывается из main.c после распознавания жеста.
+ * Физические кнопки обрабатываются отдельно через Menu_ProcessInput().
  */
-void Menu_ProcessTouch(uint16_t tx, uint16_t ty);
-
-/**
- * @brief Обработка отпускания пальца с экрана
- * 
- * Вызывается из main.c когда has_touch становится false.
- */
-void Menu_ProcessTouchRelease(void);
+void Menu_ProcessGesture(TouchGesture_Event_t* event);
 
 #endif

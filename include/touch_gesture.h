@@ -165,6 +165,13 @@ TouchPoint_t* TouchGestures_PointFind(uint16_t x, uint16_t y);
 uint8_t TouchGestures_GetPointCount(void);
 
 /**
+ * @brief Получить указатель на точку по индексу
+ * @param index индекс точки (0..TOUCH_MAX_POINTS-1)
+ * @return указатель на точку или NULL
+ */
+TouchPoint_t* TouchGestures_GetPoint(uint8_t index);
+
+/**
  * @brief Получить готовое событие жеста
  * @param event указатель на структуру для заполнения
  * @return true если событие готово

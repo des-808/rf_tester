@@ -58,6 +58,7 @@
 #include "settings_manager.h"
 #include "rssi_plotter_screen.h"
 #include "page.h"
+#include "touch_gesture.h"
 
 extern uint8_t rs485BaudIndex;
 #include <string.h>
@@ -108,6 +109,11 @@ extern int buzzerOnOff, vibroOnOff;
 
 uint16_t last_touch_x = 0;              // Координата X для логики меню
 uint16_t last_touch_y = 0;              // Координата Y для логики меню
+
+/* External gesture functions */
+extern TouchPoint_t* TouchGestures_GetPoint(uint8_t index);
+extern void Menu_ProcessGesture(TouchGesture_Event_t* event);
+extern volatile uint8_t touch_irq_pending;
 
 
 char debug_str[64] = "BMI160: Wait interrupt..."; // Строка для вывода на экран
@@ -303,7 +309,8 @@ int main(void)
 // Вывод на TFT (вызывайте после очистки экрана)
 //lcd_clear_screen(0x0000);  // чёрный фон
 //I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); 
-  Menu_Init();
+   Menu_Init();
+   TouchGestures_Init();
   
   /* Инициализация Page System */
   Page_Init();
@@ -443,71 +450,106 @@ int main(void)
            }
        }
 
-      // ====================================================================
-      // 2. ОБРАБОТКА ТАЧСКРИНА (Polling Mode — G_MODE = 0x00)
-      // EXTI4 (FALLING): INT→LOW = палец на экране → вызывает FT6336U_ReadData()
-      // Фоллбэк: периодический опрос I2C, если EXTI не сработал
-      // ====================================================================
-      if (!screen_locked) {
-          static uint32_t last_touch_tick = 0;
-          static uint32_t last_i2c_poll_tick = 0;
-          
-          // Периодический опрос I2C — фоллбэк если EXTI не сработал
-          // Когда палец на экране — каждые 20 мс (обновление координат)
-          // Когда нет касания — каждые 100 мс (экономия I2C)
-          if (HAL_GetTick() - last_i2c_poll_tick > (ft6336u.has_touch ? 20 : 100)) {
-              last_i2c_poll_tick = HAL_GetTick();
-              FT6336U_ReadData(&ft6336u);
-          }
-          
-           if (ft6336u.has_touch) {
-               uint16_t raw_x, raw_y;
-               FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
-               Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-                 ft6336u.has_touch = false;
-                if (buzzerOnOff) Buzzer_Short();
-                if (vibroOnOff) Vibrator_Pulse(30);
-                
-                // Сначала проверяем тач по нижней панели кнопок
-                int8_t bottom_btn = GUI_GetBottomBarTouch(last_touch_x, last_touch_y);
-                if (bottom_btn >= 0) {
-                    //Нажата кнопка нижней панели: 0=Cancel, 1=Up, 2=Down, 3=Enter 
-                    MenuKey key = (bottom_btn == 0) ? KEY_CANCEL :
-                                  (bottom_btn == 1) ? KEY_UP :
-                                  (bottom_btn == 2) ? KEY_DOWN : KEY_ENTER;
-                    Menu_ProcessInput(key);
-                } else {
-                    //Не по кнопкам нижней панели — обрабатываем как обычный тач 
-                    Menu_ProcessTouch(last_touch_x, last_touch_y);
-                } 
-              /* Сброс таймаута: палец всё ещё на экране */
-              last_touch_tick = HAL_GetTick();
-           } else {
-               /* Нет событий тача > 150мс — считаем что палец отпущен */
-               if (last_touch_tick != 0) {
-                   uint32_t elapsed = HAL_GetTick() - last_touch_tick;
-                   if (elapsed > 150) {
-                       last_touch_tick = 0;
-                       /* Сброс drag-состояния во всех ListBox */
-                       extern UIElement_t* current_menu_listbox;
-                       if (current_menu_listbox) {
-                           current_menu_listbox->touch_state.drag_active = false;
-                           current_menu_listbox->touch_state.drag_last_y = -1;
-                       }
-                       /* Обработка отпускания пальца */
-                       Menu_ProcessTouchRelease();
+       // ====================================================================
+       // 2. ОБРАБОТКА ТАЧСКРИНА (TouchGestures — gesture recognition system)
+       // EXTI4 (FALLING): INT→LOW = палец на экране → FT6336U_ReadData()
+       // Main loop: PointDown → PointMove → PointUp с распознаванием жестов
+       // ====================================================================
+       if (!screen_locked) {
+           static uint32_t last_i2c_poll_tick = 0;
+           static uint8_t prev_touch_state = 0;
+           
+           // EXTI4 IRQ ставит touch_irq_pending = 1 при касании
+           // Main loop опрашивает I2C как фоллбэк если EXTI не сработал
+           if (touch_irq_pending || HAL_GetTick() - last_i2c_poll_tick > 20) {
+               last_i2c_poll_tick = HAL_GetTick();
+               FT6336U_ReadData(&ft6336u);
+               touch_irq_pending = 0; // Сбрасываем флаг EXTI
+           }
+           
+           uint8_t has_touch_now = ft6336u.has_touch;
+           
+           if (has_touch_now) {
+               // Читаем все активные точки
+               uint8_t touch_num = FT6336U_GetTouchNum(&ft6336u);
+               
+               for (uint8_t i = 0; i < touch_num && i < TOUCH_MAX_POINTS; i++) {
+                   uint16_t raw_x, raw_y;
+                   FT6336U_GetTouchPoint(&ft6336u, i, &raw_x, &raw_y);
+                   
+                   uint16_t screen_x, screen_y;
+                   Convert_Touch_Coordinates(raw_x, raw_y, &screen_x, &screen_y);
+                   uint8_t touch_id = i; // ID точки от FT6336U
+                   
+                   // Проверяем: это новая точка или движение?
+                   TouchPoint_t* existing = TouchGestures_PointFind(screen_x, screen_y);
+                   
+                   if (existing && existing->is_active && !existing->is_new) {
+                       // Движение по существующей точке
+                       TouchGestures_PointMove(existing, screen_x, screen_y);
+                   } else {
+                       // Новая точка — PointDown
+                       TouchGestures_PointDown(screen_x, screen_y, touch_id);
                    }
                }
+               
+               // Сбрасываем has_touch чтобы не читать каждый цикл
+               ft6336u.has_touch = false;
+               
+               // Вибрация при первом касании
+               if (!prev_touch_state && touch_num > 0) {
+                   if (buzzerOnOff) Buzzer_Short();
+                   if (vibroOnOff) Vibrator_Pulse(30);
+               }
            }
-      } else {
-          /* В режиме блокировки — очищаем тач чтобы не было случайных срабатываний */
-          if (ft6336u.has_touch) {
-              ft6336u.has_touch = false;
-          }
-      }
+           
+               // Проверяем PointUp для всех точек (если палец убран)
+           if (prev_touch_state && !has_touch_now) {
+               // Палец отпущен — обрабатываем PointUp для всех точек
+               for (uint8_t i = 0; i < TOUCH_MAX_POINTS; i++) {
+                   TouchPoint_t* pt = TouchGestures_GetPoint(i);
+                   if (pt && pt->is_active) {
+                       TouchGesture_t gesture = TouchGestures_PointUp(pt);
+                       
+                       // Обработка распознанного жеста
+                       if (gesture != TOUCH_GESTURE_NONE) {
+                           TouchGesture_Event_t event;
+                           if (TouchGestures_GetEvent(&event)) {
+                               // Сначала проверяем нижнюю панель
+                               int8_t bottom_btn = GUI_GetBottomBarTouch(event.x, event.y);
+                               if (bottom_btn >= 0) {
+                                   MenuKey key = (bottom_btn == 0) ? KEY_CANCEL :
+                                                 (bottom_btn == 1) ? KEY_UP :
+                                                 (bottom_btn == 2) ? KEY_DOWN : KEY_ENTER;
+                                   Menu_ProcessInput(key);
+                                } else {
+                                    // Передаём жест в menu_touch для обработки
+                                    Menu_ProcessGesture(&event);
+                                }
+                               TouchGestures_ClearEvent();
+                           }
+                       }
+                   }
+               }
+               
+               // Сброс drag-состояния
+               extern UIElement_t* current_menu_listbox;
+               if (current_menu_listbox) {
+                   current_menu_listbox->touch_state.drag_active = false;
+                   current_menu_listbox->touch_state.drag_last_y = -1;
+               }
+           }
+           
+           prev_touch_state = has_touch_now;
+       } else {
+           /* В режиме блокировки — очищаем тач */
+           if (ft6336u.has_touch) {
+               ft6336u.has_touch = false;
+           }
+        }
 
-      // ====================================================================
-      // 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ИЗ DS3231 (по прерыванию 1 Гц)
+       // ====================================================================
+       // 3. ОБНОВЛЕНИЕ ВРЕМЕНИ ИЗ DS3231 (по прерыванию 1 Гц)
       // ====================================================================
      if (ds3231_irq_received) {
       ds3231_irq_received = 0;
