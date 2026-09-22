@@ -906,11 +906,12 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
    
       // ШАГ 4: Математика ListBox (с учетом скролла и резерва под скроллбар)
      if (element->type == UI_TYPE_LIST_BOX) {
-         // ИСПОЛЬЗУЕМ element->font, а НЕ current_font — иначе item_h не совпадёт
-         // с тем, что считается в UI_ListBox_ProcessTouch / Menu_ProcessTouch
+         // ЕДИНЫЙ РАСЧЁТ item_h — используем element->font (должен совпадать с ProcessTouch/Render)
+         // Это гарантирует консистентность с UI_RenderListBox, UI_ListBox_ProcessTouch, UI_FindElementRecursive
          uint16_t font_h = (element->font != NULL) ? element->font->char_height : 16;
          uint8_t pad = (element->props.list_box.item_padding > 0) ? element->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
          uint16_t item_h = font_h + pad;
+        
         uint16_t parent_h = element->h;
 
         // Высота ListBox должна быть привязана к высоте, которую выделил родитель.
@@ -968,9 +969,9 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
             }
         }
 
-        // 🔥 ДОБАВЛЕНО: явно фиксируем размер ListBox по высоте контейнера (но не больше, чем доступно)
+        // Явно фиксируем размер ListBox по высоте контейнера (но не больше, чем доступно)
         element->h = list_h;
-        element->w = element->w; // оставляем ширину как есть
+        // element->w уже корректен — не меняем
     }
     
     // ЕСЛИ ЭТО GRID
@@ -2906,6 +2907,19 @@ void Draw_Icon_NTP_Callback(UIElement_t* el) {
 }
 
 // ==========================================
+// НИЖНЯЯ ПАНЕЛЬ (Bottom Bar) — статические переменные файла
+// ==========================================
+
+// Спрайты кнопок нижней панели (отдельные буферы для каждой кнопки)
+static Sprite_t bottom_btn_cancel_sprite;
+static Sprite_t bottom_btn_up_sprite;
+static Sprite_t bottom_btn_down_sprite;
+static Sprite_t bottom_btn_enter_sprite;
+
+// Контейнер Grid нижней панели
+static UIElement_t bottom_bar_grid;
+
+// ==========================================
 // ИКОНКА SD-КАРТЫ
 // ==========================================
 
@@ -3287,15 +3301,14 @@ static UIElement_t* s_bottom_btn[BOTTOM_BAR_COLS] = {NULL, NULL, NULL, NULL};
 void GUI_BuildModularBottomBar(UIElement_t* parent_grid) {
 
 // --- НИЖНЯЯ НАВИГАЦИОННАЯ ПАНЕЛЬ (Grid 4 колонки: Cancel | Up | Down | Enter) ---
-    static UIElement_t bottom_bar_grid;
     
-    // Отдельные спрайты для каждой кнопки (не делят один буфер!)
-    static Sprite_t bottom_btn_cancel_sprite;
-    static Sprite_t bottom_btn_up_sprite;
-    static Sprite_t bottom_btn_down_sprite;
-    static Sprite_t bottom_btn_enter_sprite;
+    // === ПОЛНЫЙ СБРОС при каждом вызове ===
+    // Освобождаем старые буферы спрайтов
+    GUI_FreeSpriteBuffer(&bottom_btn_cancel_sprite);
+    GUI_FreeSpriteBuffer(&bottom_btn_up_sprite);
+    GUI_FreeSpriteBuffer(&bottom_btn_down_sprite);
+    GUI_FreeSpriteBuffer(&bottom_btn_enter_sprite);
     
-    // === ПОЛНЫЙ СБРОС при каждом вызове (критично для static переменных) ===
     bottom_bar_grid.children_count = 0;
     
     // Сброс глобальных указателей на кнопки

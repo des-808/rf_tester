@@ -464,10 +464,22 @@ int main(void)
                uint16_t raw_x, raw_y;
                FT6336U_GetTouchPoint(&ft6336u, 0, &raw_x, &raw_y);
                Convert_Touch_Coordinates(raw_x, raw_y, &last_touch_x, &last_touch_y);
-               ft6336u.has_touch = false;
-               if (buzzerOnOff) Buzzer_Short();
-               if (vibroOnOff) Vibrator_Pulse(30);
-               Menu_ProcessTouch(last_touch_x, last_touch_y);
+                 ft6336u.has_touch = false;
+                if (buzzerOnOff) Buzzer_Short();
+                if (vibroOnOff) Vibrator_Pulse(30);
+                
+                // Сначала проверяем тач по нижней панели кнопок
+                int8_t bottom_btn = GUI_GetBottomBarTouch(last_touch_x, last_touch_y);
+                if (bottom_btn >= 0) {
+                    //Нажата кнопка нижней панели: 0=Cancel, 1=Up, 2=Down, 3=Enter 
+                    MenuKey key = (bottom_btn == 0) ? KEY_CANCEL :
+                                  (bottom_btn == 1) ? KEY_UP :
+                                  (bottom_btn == 2) ? KEY_DOWN : KEY_ENTER;
+                    Menu_ProcessInput(key);
+                } else {
+                    //Не по кнопкам нижней панели — обрабатываем как обычный тач 
+                    Menu_ProcessTouch(last_touch_x, last_touch_y);
+                } 
               /* Сброс таймаута: палец всё ещё на экране */
               last_touch_tick = HAL_GetTick();
            } else {
