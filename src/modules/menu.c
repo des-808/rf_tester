@@ -15,6 +15,7 @@
 // === ВНЕШНИЕ ПЕРЕМЕННЫЕ (Ваш код) ===
 extern uint16_t Display_Width;
 extern uint16_t Display_Height;
+extern Sprite_t ui_screen_sprite;
 // Предполагаем, что эти переменные объявлены где-то в main.c или globals.h
 extern uint16_t sys, room, btn;
 extern void transmit(uint16_t sys, uint16_t room, uint16_t btn, uint8_t type);
@@ -92,8 +93,8 @@ bool Menu_Collapse(void) {
     lb->props.list_box.collapsed = 1;
     
     /* Инвалидируем спрайт для перерисовки */
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
-        main_screen_sprite.needs_render = true;
+    if (ui_screen_sprite.is_allocated && ui_screen_sprite.data) {
+        ui_screen_sprite.needs_render = true;
     }
     
     return true;
@@ -131,8 +132,8 @@ void Menu_Expand(void) {
     }
     
     /* Инвалидируем спрайт для перерисовки */
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
-        main_screen_sprite.needs_render = true;
+    if (ui_screen_sprite.is_allocated && ui_screen_sprite.data) {
+        ui_screen_sprite.needs_render = true;
     }
 }
 

@@ -97,9 +97,8 @@ uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b);
 extern DMA_HandleTypeDef hdma_spi4_tx;
 extern DMA2D_HandleTypeDef hdma2d;
 //extern void drawStatusBar(Sprite_t *sprite);
-/* extern Sprite_t* status_bar_sprite;
-extern Sprite_t* main_screen_sprite;
-extern Sprite_t* graph_sprite; // если нужен доступ к графику из main.c */
+/* extern Sprite_t* status_bar_sprite;*/
+extern Sprite_t* ui_screen_sprite;
 
 extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
 extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c
@@ -214,10 +213,9 @@ bool screen_locked = false;
  extern void ST7796_FillScreen(uint16_t color);
  extern Buttons_HandleTypeDef btn_s;
  I2C_Scanner_HandleTypeDef i2c_scanner;
- extern UIElement_t root_grid;
- extern UIElement_t digits_node;
- extern UIElement_t graph_node;
- uint8_t lastButtonState[8] = {0};
+  extern UIElement_t root_grid;
+  extern UIElement_t digits_node;
+  uint8_t lastButtonState[8] = {0};
  void INIT_FT6336U(void);
 int main(void)
 {
@@ -308,7 +306,7 @@ int main(void)
 //I2C_Scanner_Run(&i2c_scanner);
 // Вывод на TFT (вызывайте после очистки экрана)
 //lcd_clear_screen(0x0000);  // чёрный фон
-//I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); 
+//I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&ui_screen_sprite); 
    Menu_Init();
    TouchGestures_Init();
    MenuTouch_Init();

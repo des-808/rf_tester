@@ -350,7 +350,7 @@ void RfRssiPlotter_ResetStats(RfRssiPlotter_t* plotter) {
 void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen) {
     /* Внешние переменные */
     extern Sprite_t graph_sprite;
-    extern Sprite_t main_screen_sprite;
+    extern Sprite_t ui_screen_sprite;
     extern UIElement_t* current_menu_listbox;
     extern bool ui_debug_draw;
     

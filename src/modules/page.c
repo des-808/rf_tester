@@ -10,6 +10,7 @@
 /* ========================================================================
  *  Глобальные переменные
  * ======================================================================== */
+extern Sprite_t ui_screen_sprite;
 
 /* Указатель на родительский контейнер (digits_node) — задаётся при открытии */
 static UIElement_t* g_parent_container = NULL;
@@ -149,7 +150,7 @@ bool Page_OpenStatic(PageDef_t* def, UIElement_t* parent_container)
     
     /* Настраиваем контейнер */
     page_el->type = def->container_type;
-    page_el->sprite = &main_screen_sprite;
+    page_el->sprite = &ui_screen_sprite;
     page_el->background_color = RGB565_BLACK;
     page_el->font = &font_arial_9_struct;
     page_el->children_count = 0;
@@ -176,16 +177,16 @@ bool Page_OpenStatic(PageDef_t* def, UIElement_t* parent_container)
     }
     
     /* Устанавливаем спрайт для всех потомков страницы (page_alloc_element ставит NULL) */
-    page_el->sprite = &main_screen_sprite;
+    page_el->sprite = &ui_screen_sprite;
     for (uint8_t i = 0; i < page_el->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
         UIElement_t* child = (UIElement_t*)page_el->children[i];
         if (child) {
-            child->sprite = &main_screen_sprite;
+            child->sprite = &ui_screen_sprite;
             /* Рекурсивно для вложенных панелей */
             for (uint8_t j = 0; j < child->children_count && j < MAX_ELEMENT_CHILDREN; j++) {
                 UIElement_t* grandchild = (UIElement_t*)child->children[j];
                 if (grandchild) {
-                    grandchild->sprite = &main_screen_sprite;
+                    grandchild->sprite = &ui_screen_sprite;
                 }
             }
         }
@@ -233,8 +234,8 @@ bool Page_OpenStatic(PageDef_t* def, UIElement_t* parent_container)
     g_dynamic_page = NULL;
     
     /* Инвалидируем спрайт для перерисовки */
-    main_screen_sprite.needs_render = true;
-    DBG_INFO("[Page] main_screen_sprite.needs_render = true");
+    ui_screen_sprite.needs_render = true;
+    DBG_INFO("[Page] ui_screen_sprite.needs_render = true");
     
     printf("[Page] OpenStatic SUCCESS\n");
     
@@ -343,7 +344,7 @@ bool Page_CloseStatic(void)
     extern uint16_t Display_Width;
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, 240);
     
-    main_screen_sprite.needs_render = true;
+    ui_screen_sprite.needs_render = true;
     
     return true;
 }
@@ -398,7 +399,7 @@ DynamicPage_t* Page_OpenDynamic(PageDef_t* def, UIElement_t* parent_container)
     /* Настраиваем UIElement */
     UIElement_t* page_el = &dpage->element;
     page_el->type = def->container_type;
-    page_el->sprite = &main_screen_sprite;
+    page_el->sprite = &ui_screen_sprite;
     page_el->background_color = RGB565_BLACK;
     page_el->font = &font_arial_9_struct;
     page_el->children_count = 0;
@@ -423,14 +424,14 @@ DynamicPage_t* Page_OpenDynamic(PageDef_t* def, UIElement_t* parent_container)
     }
     
     /* Устанавливаем спрайт для всех потомков */
-    page_el->sprite = &main_screen_sprite;
+    page_el->sprite = &ui_screen_sprite;
     for (uint8_t i = 0; i < page_el->children_count && i < MAX_ELEMENT_CHILDREN; i++) {
         UIElement_t* child = (UIElement_t*)page_el->children[i];
         if (child) {
-            child->sprite = &main_screen_sprite;
+            child->sprite = &ui_screen_sprite;
             for (uint8_t j = 0; j < child->children_count && j < MAX_ELEMENT_CHILDREN; j++) {
                 UIElement_t* gc = (UIElement_t*)child->children[j];
-                if (gc) gc->sprite = &main_screen_sprite;
+                if (gc) gc->sprite = &ui_screen_sprite;
             }
         }
     }
@@ -456,7 +457,7 @@ DynamicPage_t* Page_OpenDynamic(PageDef_t* def, UIElement_t* parent_container)
     g_page_is_dynamic = true;
     g_dynamic_page = dpage;
     
-    main_screen_sprite.needs_render = true;
+    ui_screen_sprite.needs_render = true;
     
     return dpage;
 }
@@ -535,7 +536,7 @@ bool Page_CloseDynamic(DynamicPage_t* page)
     /* Освобождаем память */
     free(page);
     
-    main_screen_sprite.needs_render = true;
+    ui_screen_sprite.needs_render = true;
     
     return true;
 }
@@ -672,7 +673,7 @@ UIElement_t* Page_CreateGrid(UIElement_t* parent, uint8_t rows, uint8_t cols)
     if (!grid) return NULL;
     
     grid->type = UI_TYPE_GRID;
-    grid->sprite = &main_screen_sprite;
+    grid->sprite = &ui_screen_sprite;
     grid->background_color = RGB565_BLACK;
     grid->font = &font_arial_9_struct;
     grid->children_count = 0;
@@ -692,7 +693,7 @@ UIElement_t* Page_CreateStackPanel(UIElement_t* parent, Orientation_t orientatio
     if (!panel) return NULL;
     
     panel->type = UI_TYPE_STACK_PANEL;
-    panel->sprite = &main_screen_sprite;
+    panel->sprite = &ui_screen_sprite;
     panel->background_color = RGB565_BLACK;
     panel->font = &font_arial_9_struct;
     panel->children_count = 0;
@@ -714,7 +715,7 @@ UIElement_t* Page_AddText(UIElement_t* panel, const char* text)
     if (!text_el) return NULL;
     
     text_el->type = UI_TYPE_TEXT_BLOCK;
-    text_el->sprite = &main_screen_sprite;
+    text_el->sprite = &ui_screen_sprite;
     text_el->background_color = RGB565_BLACK;
     text_el->font = &font_arial_9_struct;
     text_el->horizontal_alignment = HORIZONTAL_ALIGN_LEFT;

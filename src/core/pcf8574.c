@@ -92,7 +92,7 @@ void PCF8574_AcknowledgeChanges(PCF8574_HandleTypeDef *pcf) {
     // Здесь флаг уже очищен HAL_GPIO_EXTI_IRQHandler — не нужно больше clear
 } */
 
-//extern Sprite_t main_screen_sprite;
+//extern Sprite_t ui_screen_sprite;
 void PCF8574_IRQHandler(PCF8574_HandleTypeDef *pcf) {
     uint8_t current = PCF8574_Read8(pcf);
     // Логика

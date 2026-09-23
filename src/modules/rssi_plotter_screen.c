@@ -15,7 +15,7 @@
 /* ========================================================================
  *  Глобальное состояние экрана
  * ======================================================================== */
-
+extern Sprite_t ui_screen_sprite;
 /* Экземпляр экрана RSSI Plotter */
 static RssiPlotterScreen_t s_rssi_screen;
 
@@ -57,6 +57,8 @@ void RssiPlotterScreen_Enter(void) {
     ui_debug_draw = false;
     
     /* Инвалидируем спрайты для перерисовки (extern из gui.h) */
+    extern Sprite_t graph_sprite;
+    extern Sprite_t ui_screen_sprite;
     
     /* Инвалидируем graph_sprite — отрисовка произойдёт через render_callback */
     if (graph_sprite.is_allocated && graph_sprite.data) {
@@ -65,11 +67,11 @@ void RssiPlotterScreen_Enter(void) {
         graph_sprite.dirty_x2 = graph_sprite.w - 1; graph_sprite.dirty_y2 = graph_sprite.h - 1;
     }
     
-    /* Также инвалидируем main_screen_sprite для обновления меню */
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
-        main_screen_sprite.needs_render = true;
-        main_screen_sprite.dirty_x1 = 0; main_screen_sprite.dirty_y1 = 0;
-        main_screen_sprite.dirty_x2 = main_screen_sprite.w - 1; main_screen_sprite.dirty_y2 = main_screen_sprite.h - 1;
+    /* Также инвалидируем ui_screen_sprite для обновления меню */
+    if (ui_screen_sprite.is_allocated && ui_screen_sprite.data) {
+        ui_screen_sprite.needs_render = true;
+        ui_screen_sprite.dirty_x1 = 0; ui_screen_sprite.dirty_y1 = 0;
+        ui_screen_sprite.dirty_x2 = ui_screen_sprite.w - 1; ui_screen_sprite.dirty_y2 = ui_screen_sprite.h - 1;
     }
     
     rssi_plotter_active = true;
@@ -88,8 +90,8 @@ void RssiPlotterScreen_ExitGlobal(void) {
     ui_debug_draw = true;
     
     /* Инвалидируем спрайты для перерисовки (extern из gui.h) */
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
-        main_screen_sprite.needs_render = true;
+    if (ui_screen_sprite.is_allocated && ui_screen_sprite.data) {
+        ui_screen_sprite.needs_render = true;
     }
     
     if (graph_sprite.is_allocated && graph_sprite.data) {

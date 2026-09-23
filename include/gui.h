@@ -287,7 +287,6 @@ extern Sprite_t graph_sprite;
 extern Sprite_t status_bar_sprite;
 extern Sprite_t bottom_bar_sprite;
 extern UIElement_t digits_node;
-extern UIElement_t main_work_grid;
 extern UIElement_t ui_bands_listbox;
 
 /* Шрифт по умолчанию (определён в gui.c или font.h) */

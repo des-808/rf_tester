@@ -552,35 +552,21 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     // Создаем статус-бар и добавляем его в root_grid
      GUI_BuildModularStatusBar(&root_grid);
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // --- ВЛОЖЕННАЯ СЕТКА (График + Панель) ---
-    main_work_grid.type = UI_TYPE_GRID;
-    main_work_grid.children_count = 0;
-    main_work_grid.grid_row = 1;
-    main_work_grid.grid_col = 0;
-    main_work_grid.props.grid.rows_count = 1;
-    main_work_grid.props.grid.cols_count = 1;
-    
-    
-    UI_SetGridColPercent(&main_work_grid, 0, 100);
-    root_grid.children[root_grid.children_count++] = &main_work_grid;
 
-    // --- НИЖНЯЯ ПАНЕЛЬ (добавляем ПОСЛЕ main_work_grid) ---
-    GUI_BuildModularBottomBar(&root_grid);
-
-    
-
-    // --- ПРАВАЯ ПАНЕЛЬ (STACK) ---
+    // --- ОСНОВНОЙ КОНТЕНТ (digits_node — StackPanel, занимает всё пространство между status и bottom) ---
     digits_node.type = UI_TYPE_STACK_PANEL;
     digits_node.sprite = &main_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
     digits_node.props.stack.spacing = 2; 
-    digits_node.grid_row = 0; 
+    digits_node.grid_row = 1; // строка root_grid между status и bottom
     digits_node.grid_col = 0; 
     digits_node.children_count = 0; 
     digits_node.background_color = RGB565_BLACK;
-    // Устанавливаем шрифт по умолчанию для всей панели (опционально, если он наследуется)
     digits_node.font = &font_arial_9_struct; 
-    main_work_grid.children[main_work_grid.children_count++] = &digits_node;
+    root_grid.children[root_grid.children_count++] = &digits_node;
+
+    // --- НИЖНЯЯ ПАНЕЛЬ ---
+    GUI_BuildModularBottomBar(&root_grid);
 
     // ПЕРВЫЙ ОБМЕР: Определение доступного пространства
     UI_MeasureAndArrange(&root_grid, 0, 0, Display_Width, Display_Height);
