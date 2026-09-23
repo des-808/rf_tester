@@ -86,8 +86,7 @@ static UIElement_t status_sd_node;       // Узел статуса SD
 
 /* Глобальные объекты спрайтов для экранов интерфейса */
 Sprite_t status_bar_sprite;
-Sprite_t graph_sprite;
-Sprite_t main_screen_sprite;
+Sprite_t ui_screen_sprite;
 Sprite_t bottom_bar_sprite;
 
 // Пул элементов для строк (выделяем память статически — общий пул для всех модулей)
@@ -145,11 +144,8 @@ void Buzzer_On_Off_(void) {
     status_bar_sprite.data = NULL;
     status_bar_sprite.is_allocated = false;
     
-    graph_sprite.data = NULL;
-    graph_sprite.is_allocated = false;
-    
-    main_screen_sprite.data = NULL;
-    main_screen_sprite.is_allocated = false;
+    ui_screen_sprite.data = NULL;
+    ui_screen_sprite.is_allocated = false;
 
     // !!! ДОБАВЬТЕ ЭТО: Сброс состояния иконок статус-бара !!!
     // Это заставит MeasureAndArrange пересоздать их память при повороте
@@ -232,14 +228,14 @@ void Buzzer_On_Off_(void) {
     graph_node.type = UI_TYPE_TEXT_BLOCK;
     graph_node.grid_row = 0;
     graph_node.grid_col = 0;
-    graph_node.sprite = &graph_sprite;
+    graph_node.sprite = &ui_screen_sprite;
     graph_node.render_callback = Draw_Graph_Content;
     graph_node.background_color = RGB565_BLACK;
     main_work_grid.children[main_work_grid.children_count++] = &graph_node;
 
     // --- ПРАВАЯ ПАНЕЛЬ (STACK) ---
     digits_node.type = UI_TYPE_STACK_PANEL;
-    digits_node.sprite = &main_screen_sprite; 
+    digits_node.sprite = &ui_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
     digits_node.props.stack.spacing = 2; 
     digits_node.grid_row = 0; 
@@ -285,7 +281,7 @@ void Buzzer_On_Off_(void) {
 
 
     // --- LISTBOX ---
-    UI_InitListBox(&ui_bands_listbox, &main_screen_sprite);
+    UI_InitListBox(&ui_bands_listbox, &ui_screen_sprite);
     ui_bands_listbox.type = UI_TYPE_LIST_BOX;
      // Жесткая высота для расчетной фазы
     //ui_bands_listbox.h = 192; 
@@ -315,7 +311,7 @@ void Buzzer_On_Off_(void) {
         UIElement_t* up_btn = &panel_rows[panel_rows_count++];
         memset(up_btn, 0, sizeof(UIElement_t)); // Чистим память
         up_btn->type = UI_TYPE_BUTTON;
-        up_btn->sprite = &main_screen_sprite;
+        up_btn->sprite = &ui_screen_sprite;
         up_btn->h = 20;
         up_btn->render_callback = NULL;
         up_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
@@ -335,7 +331,7 @@ void Buzzer_On_Off_(void) {
         UIElement_t* down_btn = &panel_rows[panel_rows_count++];
         memset(down_btn, 0, sizeof(UIElement_t)); // Чистим память
         down_btn->type = UI_TYPE_BUTTON;
-        down_btn->sprite = &main_screen_sprite;
+        down_btn->sprite = &ui_screen_sprite;
         down_btn->h = 20;
         down_btn->render_callback = NULL;
         down_btn->horizontal_alignment = HORIZONTAL_ALIGN_CENTER;
@@ -373,7 +369,7 @@ void Buzzer_On_Off_(void) {
         
         // Инициализируем как ListBox
         menu_lb->type = UI_TYPE_LIST_BOX;
-        menu_lb->sprite = &main_screen_sprite; // Общий спрайт панели
+        menu_lb->sprite = &ui_screen_sprite; // Общий спрайт панели
         menu_lb->font = &font_arial_9_struct;
         
         // Настройки высоты: можно сделать фиксированной или авто
@@ -406,14 +402,14 @@ void Buzzer_On_Off_(void) {
     // Проставляем спрайты элементам перед обмером
     //  for (uint8_t i = 0; i < digits_node.children_count; i++) {
     //     if (digits_node.children[i]) {
-    //         digits_node.children[i]->sprite = &main_screen_sprite;//= NULL;
+    //         digits_node.children[i]->sprite = &ui_screen_sprite;//= NULL;
     //         //digits_node.children[i]->sprite = NULL;
     //     }
     // }
-    // ui_bands_listbox.sprite = &main_screen_sprite;
+    // ui_bands_listbox.sprite = &ui_screen_sprite;
     // for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
     //     if (ui_bands_listbox.children[i]) {
-    //         ui_bands_listbox.children[i]->sprite = &main_screen_sprite;//= NULL;
+    //         ui_bands_listbox.children[i]->sprite = &ui_screen_sprite;//= NULL;
     //         //ui_bands_listbox.children[i]->sprite = NULL;
     //     }
     // }
@@ -429,14 +425,14 @@ void Buzzer_On_Off_(void) {
     // Возвращаем спрайты
      for (uint8_t i = 0; i < digits_node.children_count; i++) {
         if(digits_node.children[i]) {
-            digits_node.children[i]->sprite = &main_screen_sprite;
+            digits_node.children[i]->sprite = &ui_screen_sprite;
         }
     }
     
-    ui_bands_listbox.sprite = &main_screen_sprite;
+    ui_bands_listbox.sprite = &ui_screen_sprite;
     for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
         if(ui_bands_listbox.children[i]) {
-            ui_bands_listbox.children[i]->sprite = &main_screen_sprite;
+            ui_bands_listbox.children[i]->sprite = &ui_screen_sprite;
         }
     } 
 
@@ -444,9 +440,9 @@ void Buzzer_On_Off_(void) {
     // ФИКС 1: ОЧИСТКА ФОНА STACKPANEL
     // Используем memset для скорости, так как это бинарный паттерн (0 = Black)
     // ------------------------------------------------------------------
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
-        uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
-        memset(main_screen_sprite.data, 0x00, total_pixels * 2); // 0x0000 = Black in RGB565
+    if (ui_screen_sprite.is_allocated && ui_screen_sprite.data) {
+        uint32_t total_pixels = (uint32_t)ui_screen_sprite.w * ui_screen_sprite.h;
+        memset(ui_screen_sprite.data, 0x00, total_pixels * 2); // 0x0000 = Black in RGB565
     }
 
     // ------------------------------------------------------------------
@@ -465,8 +461,7 @@ void Buzzer_On_Off_(void) {
 
     // Активируем флаги рендеринга для всех основных блоков
     status_bar_sprite.needs_render = true;
-    graph_sprite.needs_render = true;
-    main_screen_sprite.needs_render = true;
+    ui_screen_sprite.needs_render = true;
 
     // --- ВАЖНО: Принудительно помечаем правую панель (digits_node) грязной целиком ---
     // Это гарантирует, что MeasureAndArrange перерисует ListBox и другие элементы
@@ -504,8 +499,8 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     status_bar_sprite.data = NULL;
     status_bar_sprite.is_allocated = false;
 
-    main_screen_sprite.data = NULL;
-    main_screen_sprite.is_allocated = false;
+    ui_screen_sprite.data = NULL;
+    ui_screen_sprite.is_allocated = false;
 
     bottom_bar_sprite.data = NULL;
     bottom_bar_sprite.is_allocated = false;
@@ -555,7 +550,7 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
 
     // --- ОСНОВНОЙ КОНТЕНТ (digits_node — StackPanel, занимает всё пространство между status и bottom) ---
     digits_node.type = UI_TYPE_STACK_PANEL;
-    digits_node.sprite = &main_screen_sprite; 
+    digits_node.sprite = &ui_screen_sprite; 
     digits_node.props.stack.orientation = ORIENTATION_VERTICAL;
     digits_node.props.stack.spacing = 2; 
     digits_node.grid_row = 1; // строка root_grid между status и bottom
@@ -585,7 +580,7 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
         
         // Инициализируем как ListBox
         menu_lb->type = UI_TYPE_LIST_BOX;
-        menu_lb->sprite = &main_screen_sprite; // Общий спрайт панели
+        menu_lb->sprite = &ui_screen_sprite; // Общий спрайт панели
         menu_lb->font = &font_arial_9_struct;
         
         // Настройки высоты: можно сделать фиксированной или авто
@@ -652,22 +647,22 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
         Menu_Draw(current_menu_listbox, current_menu_items, current_menu_count);
     }
     
-    // Возвращаем спрайты для main_screen_sprite элементов
+    // Возвращаем спрайты для ui_screen_sprite элементов
     for (uint8_t i = 0; i < digits_node.children_count; i++) {
         if(digits_node.children[i]) {
             /* Если полноэкранный режим активен — не восстанавливаем спрайт для menu_lb */
             if (fullscreen_mode_active && digits_node.children[i] == current_menu_listbox) {
                 digits_node.children[i]->sprite = NULL;
             } else {
-                digits_node.children[i]->sprite = &main_screen_sprite;
+                digits_node.children[i]->sprite = &ui_screen_sprite;
             }
         }
     }
     
-    ui_bands_listbox.sprite = &main_screen_sprite;
+    ui_bands_listbox.sprite = &ui_screen_sprite;
     for (uint8_t i = 0; i < ui_bands_listbox.children_count; i++) {
         if(ui_bands_listbox.children[i]) {
-            ui_bands_listbox.children[i]->sprite = &main_screen_sprite;
+            ui_bands_listbox.children[i]->sprite = &ui_screen_sprite;
         }
     } 
 
@@ -675,9 +670,9 @@ void GUI_ShowMenuAdvancedMeasurementScreen(uint8_t rotation){
     // ФИКС 1: ОЧИСТКА ФОНА STACKPANEL
     // Используем memset для скорости, так как это бинарный паттерн (0 = Black)
     // ------------------------------------------------------------------
-    if (main_screen_sprite.is_allocated && main_screen_sprite.data) {
-        uint32_t total_pixels = (uint32_t)main_screen_sprite.w * main_screen_sprite.h;
-        memset(main_screen_sprite.data, 0x00, total_pixels * 2); // 0x0000 = Black in RGB565
+    if (ui_screen_sprite.is_allocated && ui_screen_sprite.data) {
+        uint32_t total_pixels = (uint32_t)ui_screen_sprite.w * ui_screen_sprite.h;
+        memset(ui_screen_sprite.data, 0x00, total_pixels * 2); // 0x0000 = Black in RGB565
     }
 
 
@@ -766,7 +761,7 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
     // ШАГ 1 & 2: Выделение памяти (Leafs / Containers)
     if (element->children_count == 0 && element->sprite != NULL) {
         Sprite_t* s = element->sprite;
-        bool owns_own_buffer = (s != &main_screen_sprite);
+        bool owns_own_buffer = (s != &ui_screen_sprite);
         if (owns_own_buffer) {
             uint16_t old_w = s->w;
             uint16_t old_h = s->h;
@@ -800,7 +795,7 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
             // ListBox и кнопки/текст используют общий спрайт панели digits_node.
             // Поэтому ListBox не должен менять размеры этого спрайта под себя — иначе
             // весь стек элементов начинает рисоваться с неверной геометрией в альбомной ориентации.
-            bool should_resize_shared_sprite = (s != &main_screen_sprite) || (element->type == UI_TYPE_STACK_PANEL);
+            bool should_resize_shared_sprite = (s != &ui_screen_sprite) || (element->type == UI_TYPE_STACK_PANEL);
             if (should_resize_shared_sprite) {
                 uint16_t old_w = s->w;
                 uint16_t old_h = s->h;
@@ -1091,7 +1086,7 @@ void UI_SetGridColWeight(UIElement_t* grid_elem, uint8_t col_idx, uint8_t weight
     element->h = available_h;
 
     // --- ЛОГИКА ДЛЯ КОНТЕЙНЕРОВ С ОБЩИМ СПРАЙТОМ ---
-    // Если это StackPanel или ListBox, которые используют общий спрайт (например, main_screen_sprite),
+    // Если это StackPanel или ListBox, которые используют общий спрайт (например, ui_screen_sprite),
     // нам нужно убедиться, что размеры спрайта соответствуют элементам, если это первый проход или размер изменился.
     
     if (element->children_count > 0) {
@@ -1479,17 +1474,9 @@ void UI_DrawTree(UIElement_t* element) {
     // ШАГ 1: Отрисовка физического окна (Спрайт или контейнер со спрайтом)
     if (element->sprite != NULL) {
         Sprite_t* s = element->sprite;
-        bool force_render = false;
-        
-        /* Если RSSI Plotter активен и это graph_sprite — всегда рисуем */
-        extern bool rssi_plotter_active;
-        extern Sprite_t graph_sprite;
-        if (rssi_plotter_active && s == &graph_sprite) {
-            force_render = true;
-        }
         
         // ВОЗВРАЩАЕМ ОПТИМИЗАЦИЮ: шлем данные, только если спрайт "загрязнен"
-        if (s->is_allocated && s->data != NULL && (s->needs_render || force_render)) {
+        if (s->is_allocated && s->data != NULL && s->needs_render) {
             
             // Если координаты грязной зоны схлопнулись — раскрываем на весь размер (защита)
             if (s->dirty_x2 == 0 && s->dirty_y2 == 0) {
@@ -1647,7 +1634,6 @@ uint16_t HUE_to_RGB565(uint16_t hue_deg) {
 void Draw_Graph_Content(UIElement_t* el) {
     /* Если активен RSSI Plotter — рисуем его */
     extern bool rssi_plotter_active;
-    extern Sprite_t graph_sprite;
     if (rssi_plotter_active) {
         DBG_DEBUG("[Graph] RSSI active, drawing...");
         RssiPlotterScreen_t* screen = RssiPlotterScreen_GetState();
@@ -1660,22 +1646,22 @@ void Draw_Graph_Content(UIElement_t* el) {
         return;
     }
     
-    if ( !graph_sprite.data) return;
+    if ( !ui_screen_sprite.data) return;
 
     // Заливаем фон графика черным (используем динамические размеры)
-    uint32_t total_pixels = (uint32_t)graph_sprite.w * graph_sprite.h;
-    memset(graph_sprite.data, 0, total_pixels * 2);
+    uint32_t total_pixels = (uint32_t)ui_screen_sprite.w * ui_screen_sprite.h;
+    memset(ui_screen_sprite.data, 0, total_pixels * 2);
 
     // Рисуем сетку графика. 
-    // Вместо жестких макросов используем graph_sprite.w и graph_sprite.h!
+    // Вместо жестких макросов используем ui_screen_sprite.w и ui_screen_sprite.h!
     // Движок сам адаптирует сетку и под 224px (портрет), и под 336px (альбом)
     uint16_t grid_color = 0x31A6;
 
     // 2. Рисуем сетку графика (горизонтальные линии шкал)
     // Рисуем 3 горизонтальные линии через каждые 50 пикселей внутри спрайта
-    for (uint16_t y = 40; y < graph_sprite.h; y += 50) {
-        for (uint16_t x = 10; x < graph_sprite.w - 10; x++) {
-            graph_sprite.data[y * graph_sprite.w + x] = grid_color; // Тускло-серый цвет сетки
+    for (uint16_t y = 40; y < ui_screen_sprite.h; y += 50) {
+        for (uint16_t x = 10; x < ui_screen_sprite.w - 10; x++) {
+            ui_screen_sprite.data[y * ui_screen_sprite.w + x] = grid_color; // Тускло-серый цвет сетки
         }
     }
 
@@ -1686,28 +1672,28 @@ void Draw_Graph_Content(UIElement_t* el) {
     // 3. РИСУЕМ ЖИВУЮ КРИВУЮ ИЗМЕРЕНИЙ (Пример: синусоида или массив точек КСВ)
     // Пробегаем по всей ширине окна графика шаг за шагом
     int16_t prev_x = 10;
-    int16_t prev_y = graph_sprite.h / 2; // Стартовая точка по центру
+    int16_t prev_y = ui_screen_sprite.h / 2; // Стартовая точка по центру
 
-    for (int16_t x = 10; x < graph_sprite.w - 10; x++) {
+    for (int16_t x = 10; x < ui_screen_sprite.w - 10; x++) {
         // Имитируем график: вычисляем Y (в реальном коде тут будет значение из массива SWR_Array[x])
         // Переводим значение КСВ в пиксели высоты спрайта
-        int16_t y = (graph_sprite.h / 2) + (int16_t)(cosf(x * frequency) * (uint16_t)period_length); 
+        int16_t y = (ui_screen_sprite.h / 2) + (int16_t)(cosf(x * frequency) * (uint16_t)period_length); 
         uint16_t color = RGB565_RED;
         // Соединяем прошлую точку с текущей быстрой линией Брезенхема!
-        Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, color);
+        Draw_Line_To_Sprite(&ui_screen_sprite, prev_x, prev_y, x, y, color);
 
         prev_x = x;
         prev_y = y;
     }
    // Параметры квадратной волны
     const uint16_t period_x = 40;          // Длина одного периода в пикселях (ширина «блока»)
-    const int16_t max_amplitude = (graph_sprite.h / 4) - 10; // Амплитуда (отступ от центра до края)
-    const int16_t center_y = graph_sprite.h / 2;             // Центр графика по вертикали
+    const int16_t max_amplitude = (ui_screen_sprite.h / 4) - 10; // Амплитуда (отступ от центра до края)
+    const int16_t center_y = ui_screen_sprite.h / 2;             // Центр графика по вертикали
 
     prev_x = 10;
     prev_y = center_y; // Начинаем с центра или с нижней точки
 
-    for (int16_t x = 10; x < graph_sprite.w - 10; x++) {
+    for (int16_t x = 10; x < ui_screen_sprite.w - 10; x++) {
         // Логика квадратной волны:
         // 1. Определяем, в какой части периода мы находимся (0..period_x)
         // 2. Если половина периода — сигнал высокий, иначе низкий (или наоборот)
@@ -1725,24 +1711,24 @@ void Draw_Graph_Content(UIElement_t* el) {
         uint16_t color = RGB565_GREEN; // Можно сделать цвет линии другим
         
         // Соединяем точки линией (она будет диагональной при переходе фаз, но визуально это будет "квадрат")
-        Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, color);
+        Draw_Line_To_Sprite(&ui_screen_sprite, prev_x, prev_y, x, y, color);
 
         prev_x = x;
         prev_y = y;
     }
 
     // Подпись
-    lcd_print_to_buffer(15, 10, RGB565_WHITE, "SWR SCANNER", RGB565_BLACK, &graph_sprite);
+    lcd_print_to_buffer(15, 10, RGB565_WHITE, "SWR SCANNER", RGB565_BLACK, &ui_screen_sprite);
 
     // Рисуем рамку вокруг графика с отступом 5 пикселей от краев спрайта.
     // Верхняя линия
-    for (uint16_t x = 5; x < graph_sprite.w - 5; x++) graph_sprite.data[25 * graph_sprite.w + x] = 0x7BEF; // Серый цвет
+    for (uint16_t x = 5; x < ui_screen_sprite.w - 5; x++) ui_screen_sprite.data[25 * ui_screen_sprite.w + x] = 0x7BEF; // Серый цвет
     // Нижня линия
-    for (uint16_t x = 5; x < graph_sprite.w - 5; x++) graph_sprite.data[(graph_sprite.h - 5) * graph_sprite.w + x] = 0x7BEF;
+    for (uint16_t x = 5; x < ui_screen_sprite.w - 5; x++) ui_screen_sprite.data[(ui_screen_sprite.h - 5) * ui_screen_sprite.w + x] = 0x7BEF;
     // Левая линия
-    for (uint16_t y = 25; y < graph_sprite.h - 5; y++) graph_sprite.data[y * graph_sprite.w + 5] = 0x7BEF;
+    for (uint16_t y = 25; y < ui_screen_sprite.h - 5; y++) ui_screen_sprite.data[y * ui_screen_sprite.w + 5] = 0x7BEF;
     // Правая линия
-    for (uint16_t y = 25; y < graph_sprite.h - 5; y++) graph_sprite.data[y * graph_sprite.w + (graph_sprite.w - 5)] = 0x7BEF;
+    for (uint16_t y = 25; y < ui_screen_sprite.h - 5; y++) ui_screen_sprite.data[y * ui_screen_sprite.w + (ui_screen_sprite.w - 5)] = 0x7BEF;
 }
 
 extern uint8_t screen_rotation; // Берем текущий поворот из st7796.c

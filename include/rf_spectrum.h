@@ -212,7 +212,7 @@ bool RssiPlotterScreen_IsActive(RssiPlotterScreen_t* screen);
 bool RssiPlotterScreen_ProcessKey(RssiPlotterScreen_t* screen, uint8_t key);
 
 /**
- * @brief Отрисовка RSSI Plotter на graph_sprite
+ * @brief Отрисовка RSSI Plotter на ui_screen_sprite
  * @param screen Указатель на структуру состояния
  */
 void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen);

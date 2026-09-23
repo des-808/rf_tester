@@ -344,29 +344,28 @@ void RfRssiPlotter_ResetStats(RfRssiPlotter_t* plotter) {
  * ======================================================================== */
 
 /**
- * @brief Отрисовка RSSI Plotter на graph_sprite
+ * @brief Отрисовка RSSI Plotter на ui_screen_sprite
  * Вызывается как render_callback для graph_node
  */
 void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen) {
     /* Внешние переменные */
-    extern Sprite_t graph_sprite;
     extern Sprite_t ui_screen_sprite;
     extern UIElement_t* current_menu_listbox;
     extern bool ui_debug_draw;
     
     if (!screen || !screen->enabled) return;
-    if (!screen || !screen->enabled || !graph_sprite.data) return;
+    if (!screen || !screen->enabled || !ui_screen_sprite.data) return;
     
     /* Проверяем размеры */
-    if (graph_sprite.w == 0 || graph_sprite.h == 0) return;
+    if (ui_screen_sprite.w == 0 || ui_screen_sprite.h == 0) return;
     
     RfRssiPlotter_t* plotter = &screen->plotter;
-    uint16_t w = graph_sprite.w;
-    uint16_t h = graph_sprite.h;
+    uint16_t w = ui_screen_sprite.w;
+    uint16_t h = ui_screen_sprite.h;
     
     /* Очищаем фон */
     uint32_t total_pixels = (uint32_t)w * h;
-    memset(graph_sprite.data, 0, total_pixels * 2);
+    memset(ui_screen_sprite.data, 0, total_pixels * 2);
     
     /* Область графика с отступами */
     int16_t margin_left = 40;   /* Место для подписей dBm */
@@ -382,12 +381,12 @@ void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen) {
     /* Рисуем рамку */
     uint16_t border_color = RGB565_WHITE;
     for (int16_t x = graph_x; x < graph_x + graph_w; x++) {
-        graph_sprite.data[graph_y * w + x] = border_color;           /* Верх */
-        graph_sprite.data[(graph_y + graph_h - 1) * w + x] = border_color; /* Низ */
+        ui_screen_sprite.data[graph_y * w + x] = border_color;           /* Верх */
+        ui_screen_sprite.data[(graph_y + graph_h - 1) * w + x] = border_color; /* Низ */
     }
     for (int16_t y = graph_y; y < graph_y + graph_h; y++) {
-        graph_sprite.data[y * w + graph_x] = border_color;           /* Лево */
-        graph_sprite.data[y * w + (graph_x + graph_w - 1)] = border_color; /* Право */
+        ui_screen_sprite.data[y * w + graph_x] = border_color;           /* Лево */
+        ui_screen_sprite.data[y * w + (graph_x + graph_w - 1)] = border_color; /* Право */
     }
     
     /* Рисуем сетку (каждые 10 dB) */
@@ -398,17 +397,17 @@ void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen) {
         
         /* Горизонтальная линия */
         for (int16_t x = graph_x + 1; x < graph_x + graph_w - 1; x++) {
-            graph_sprite.data[line_y * w + x] = grid_color;
+            ui_screen_sprite.data[line_y * w + x] = grid_color;
         }
         
         /* Подпись слева */
         char rssi_str[8];
         snprintf(rssi_str, sizeof(rssi_str), "%ddB", rssi);
-        lcd_print_to_buffer(graph_x - 38, line_y - 4, RGB565_YELLOW, rssi_str, RGB565_BLACK, &graph_sprite);
+        lcd_print_to_buffer(graph_x - 38, line_y - 4, RGB565_YELLOW, rssi_str, RGB565_BLACK, &ui_screen_sprite);
     }
     
     /* Заголовок */
-    lcd_print_to_buffer(graph_x + 5, graph_y + 2, RGB565_WHITE, "RSSI PLOTTER", RGB565_BLACK, &graph_sprite);
+    lcd_print_to_buffer(graph_x + 5, graph_y + 2, RGB565_WHITE, "RSSI PLOTTER", RGB565_BLACK, &ui_screen_sprite);
     
     /* Рисуем график RSSI */
     uint16_t len = plotter->history_len;
@@ -446,7 +445,7 @@ void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen) {
             }
             
             /* Рисуем линию */
-            Draw_Line_To_Sprite(&graph_sprite, prev_x, prev_y, x, y, color);
+            Draw_Line_To_Sprite(&ui_screen_sprite, prev_x, prev_y, x, y, color);
             
             prev_x = x;
             prev_y = y;
@@ -461,13 +460,13 @@ void RssiPlotter_DrawGraph(RssiPlotterScreen_t* screen) {
              (plotter->history_len > 0) ? plotter->rssi_history[plotter->history_len - 1] : SPECTRUM_RSSI_MIN,
              plotter->min_rssi,
              (unsigned long)plotter->sample_count);
-    lcd_print_to_buffer(graph_x + 5, graph_y + graph_h + 2, RGB565_YELLOW, info_buf, RGB565_BLACK, &graph_sprite);
+    lcd_print_to_buffer(graph_x + 5, graph_y + graph_h + 2, RGB565_YELLOW, info_buf, RGB565_BLACK, &ui_screen_sprite);
     
     /* Подсказка выхода */
-    lcd_print_to_buffer(graph_x + graph_w - 60, graph_y + graph_h + 2, RGB565_GRAY, "[CANCEL]", RGB565_BLACK, &graph_sprite);
+    lcd_print_to_buffer(graph_x + graph_w - 60, graph_y + graph_h + 2, RGB565_GRAY, "[CANCEL]", RGB565_BLACK, &ui_screen_sprite);
     
-    /* Инвалидируем graph_sprite для отправки на экран */
-    graph_sprite.needs_render = true;
-    graph_sprite.dirty_x1 = 0; graph_sprite.dirty_y1 = 0;
-    graph_sprite.dirty_x2 = graph_sprite.w - 1; graph_sprite.dirty_y2 = graph_sprite.h - 1;
+    /* Инвалидируем ui_screen_sprite для отправки на экран */
+    ui_screen_sprite.needs_render = true;
+    ui_screen_sprite.dirty_x1 = 0; ui_screen_sprite.dirty_y1 = 0;
+    ui_screen_sprite.dirty_x2 = ui_screen_sprite.w - 1; ui_screen_sprite.dirty_y2 = ui_screen_sprite.h - 1;
 }

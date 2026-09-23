@@ -98,7 +98,7 @@ extern DMA_HandleTypeDef hdma_spi4_tx;
 extern DMA2D_HandleTypeDef hdma2d;
 //extern void drawStatusBar(Sprite_t *sprite);
 /* extern Sprite_t* status_bar_sprite;*/
-extern Sprite_t* ui_screen_sprite;
+extern Sprite_t ui_screen_sprite;
 
 extern UIElement_t* ui_btn_row;   // Указатель на элемент кнопки из gui.c
 extern UIElement_t* ui_touch_row; // Указатель на элемент тачскрина из gui.c

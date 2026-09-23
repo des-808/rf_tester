@@ -282,8 +282,7 @@ extern UIElement_t panel_rows[MAX_PANEL_ROWS];
 extern uint8_t panel_rows_count;
 
 /* Глобальные спрайты и узлы (определены в gui.c) */
-extern Sprite_t main_screen_sprite;
-extern Sprite_t graph_sprite;
+extern Sprite_t ui_screen_sprite;
 extern Sprite_t status_bar_sprite;
 extern Sprite_t bottom_bar_sprite;
 extern UIElement_t digits_node;

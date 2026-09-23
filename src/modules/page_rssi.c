@@ -2,13 +2,13 @@
  * @file page_rssi.c
  * @brief RSSI Plotter как страница Page System
  * 
- * RSSI Plotter рисуется на graph_sprite (левая половина экрана),
- * а меню справа скрыто через Menu_Collapse().
+ * RSSI Plotter рисуется на ui_screen_sprite (основная область экрана),
+ * а меню скрыто через Menu_Collapse().
  * 
  * При открытии: Menu_Collapse() → RssiPlotterScreen_Enter()
  * При закрытии: RssiPlotterScreen_ExitGlobal() → Menu_Expand()
  * При обновлении: on_update → RssiPlotterScreen_UpdateGlobal()
- * При отрисовке: on_draw → рисует на graph_sprite через render_callback
+ * При отрисовке: on_draw → рисует на ui_screen_sprite через render_callback
  */
 
 #include "page.h"
@@ -48,12 +48,12 @@ static bool RssiPage_Init(UIElement_t* page, UIElement_t* parent)
     /* Запускаем RSSI Plotter (сворачивает меню) */
     RssiPlotterScreen_Enter();
     
-    /* Принудительно инвалидируем graph_sprite */
-    extern Sprite_t graph_sprite;
-    if (graph_sprite.is_allocated && graph_sprite.data) {
-        graph_sprite.needs_render = true;
-        graph_sprite.dirty_x1 = 0; graph_sprite.dirty_y1 = 0;
-        graph_sprite.dirty_x2 = graph_sprite.w - 1; graph_sprite.dirty_y2 = graph_sprite.h - 1;
+    /* Принудительно инвалидируем ui_screen_sprite */
+    extern Sprite_t ui_screen_sprite;
+    if (ui_screen_sprite.is_allocated && ui_screen_sprite.data) {
+        ui_screen_sprite.needs_render = true;
+        ui_screen_sprite.dirty_x1 = 0; ui_screen_sprite.dirty_y1 = 0;
+        ui_screen_sprite.dirty_x2 = ui_screen_sprite.w - 1; ui_screen_sprite.dirty_y2 = ui_screen_sprite.h - 1;
     }
     
     return true;
@@ -73,7 +73,7 @@ static void RssiPage_Update(UIElement_t* page)
 /**
  * @brief Отрисовка RSSI (вызывается через render_callback UI_DrawTree)
  * 
- * RSSI рисуется на graph_sprite, а не на main_screen_sprite.
+ * RSSI рисуется на ui_screen_sprite.
  * graph_node.render_callback = Draw_Graph_Content, который внутри
  * проверяет rssi_plotter_active и рисует график.
  * 
@@ -90,7 +90,7 @@ static void RssiPage_Draw(UIElement_t* page)
         }
     }
     
-    /* graph_sprite рисуется автоматически через Draw_Graph_Content
+    /* ui_screen_sprite рисуется автоматически через Draw_Graph_Content
      * при rssi_plotter_active == true */
 }
 

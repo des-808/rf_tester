@@ -44,7 +44,7 @@ bool RssiPlotterScreen_IsActiveGlobal(void);
 bool RssiPlotterScreen_ProcessKeyGlobal(uint8_t key);
 
 /**
- * @brief Отрисовка RSSI Plotter на graph_sprite
+ * @brief Отрисовка RSSI Plotter на ui_screen_sprite
  */
 void RssiPlotterScreen_Draw(void);
 
