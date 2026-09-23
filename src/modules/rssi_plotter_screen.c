@@ -77,10 +77,12 @@ void RssiPlotterScreen_Enter(void) {
 
 /**
  * @brief Выйти из экрана RSSI Plotter (восстанавливает меню)
+ * 
+ * @note Menu_Expand() и восстановление меню вызывается Page_CloseStatic().
+ *       Этот API очищает состояние RSSI и инвалидирует спрайты.
  */
 void RssiPlotterScreen_ExitGlobal(void) {
-    /* Восстанавливаем меню */
-    Menu_Expand();
+    /* Очищаем состояние RSSI — меню восстановит Page_CloseStatic() */
     
     /* Включаем отладочную отрисовку обратно */
     ui_debug_draw = true;

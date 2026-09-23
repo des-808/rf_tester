@@ -1,3 +1,4 @@
+#include "usart.h"
 #include "gui.h"
 #include "menu.h"
 #include "sd_card.h"
@@ -1660,10 +1661,15 @@ uint16_t HUE_to_RGB565(uint16_t hue_deg) {
 void Draw_Graph_Content(UIElement_t* el) {
     /* Если активен RSSI Plotter — рисуем его */
     extern bool rssi_plotter_active;
+    extern Sprite_t graph_sprite;
     if (rssi_plotter_active) {
+        DBG_DEBUG("[Graph] RSSI active, drawing...");
         RssiPlotterScreen_t* screen = RssiPlotterScreen_GetState();
         if (screen && screen->enabled) {
+            DBG_DEBUG("[Graph] Screen enabled, calling RssiPlotter_DrawGraph");
             RssiPlotter_DrawGraph(screen);
+        } else {
+            DBG_WARN("[Graph] Screen NOT enabled!");
         }
         return;
     }

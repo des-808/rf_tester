@@ -8,6 +8,7 @@
 
 #include "page.h"
 #include "buttons.h"
+#include "usart.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -149,7 +150,7 @@ static void FreqAnalyzer_Deinit(UIElement_t* page)
 {
     FreqAnalyzerData_t* data = (FreqAnalyzerData_t*)page->user_data;
     if (data) {
-        heap_caps_free(data);
+        free(data);
         page->user_data = NULL;
     }
     s_freq_label = NULL;
@@ -184,9 +185,16 @@ static PageDef_t page_freq_analyzer_def = {
 
 bool Page_OpenFreqAnalyzer(uint32_t freq_mhz, uint32_t bitrate, uint8_t rxbw_index)
 {
+    DBG_INFO("[Page] FreqAnalyzer: freq=%lu.%02lu MHz, bitrate=%lu.%02lu kbps, rxbw=%d",
+             (unsigned long)freq_mhz / 100, (unsigned long)freq_mhz % 100,
+             (unsigned long)bitrate / 100, (unsigned long)bitrate % 100, rxbw_index);
+    
     /* Создаём данные страницы */
-    FreqAnalyzerData_t* data = (FreqAnalyzerData_t*)heap_caps_malloc(sizeof(FreqAnalyzerData_t), 0);
-    if (!data) return false;
+    FreqAnalyzerData_t* data = (FreqAnalyzerData_t*)malloc(sizeof(FreqAnalyzerData_t));
+    if (!data) {
+        DBG_ERROR("[Page] FreqAnalyzer malloc failed");
+        return false;
+    }
     
     data->freq_mhz = freq_mhz;
     data->bitrate = bitrate;
@@ -195,10 +203,9 @@ bool Page_OpenFreqAnalyzer(uint32_t freq_mhz, uint32_t bitrate, uint8_t rxbw_ind
     /* Копируем определение */
     PageDef_t def = page_freq_analyzer_def;
     def.user_data = data;
-    extern UIElement_t main_work_grid;
+    
     /* Открываем динамически */
     Page_OpenDynamic(&def, &digits_node);
-    
     
     return true;
 }

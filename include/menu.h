@@ -40,6 +40,30 @@ typedef struct {
     uint8_t  height;
 } Icon_t;
 
+/* ========================================================================
+ *  TOUCH ACTION FLAGS — управление поведением касания для каждого пункта
+ * ======================================================================== */
+
+/**
+ * @brief Флаги обработки касания для пунктов меню
+ * Определяют как пункт меню реагирует на касания и удержания
+ */
+typedef struct {
+    uint8_t tap_on_release : 1;   // Выполнять действие только при отпускании пальца
+    uint8_t hold_increment : 1;   // Удержание = инкремент/декремент значения
+    uint8_t hold_edit : 1;        // Удержание = вход в режим редактирования
+    uint8_t double_tap_reset : 1; // Двойной тап = сброс к min
+    uint8_t swipe_select : 1;     // Свайп = навигация (не выбор)
+    uint8_t reserved : 2;
+} MenuItemTouchFlags_t;
+
+/* Предопределённые наборы флагов */
+#define MENU_TOUCH_FLAGS_DEFAULT    {0, 0, 0, 0, 0}  // Обычный пункт — tap on release
+#define MENU_TOUCH_FLAGS_VALUE      {1, 1, 1, 1, 0}  // Значение — тап на release, удержание = edit
+#define MENU_TOUCH_FLAGS_ACTION     {1, 0, 0, 0, 0}  // Кнопка — тап на release
+#define MENU_TOUCH_FLAGS_SUBMENU    {1, 0, 0, 0, 0}  // Подменю — тап на release
+#define MENU_TOUCH_FLAGS_IMMEDIATE  {0, 0, 0, 0, 0}  // Мгновенное выполнение (без задержки)
+
 // Структура пункта меню
 typedef struct MenuItem {
     const char* text;
@@ -65,6 +89,9 @@ typedef struct MenuItem {
     
     // Размер значения в байтах (1 = uint8_t, 2 = uint16_t) — 0 = auto-detect по типу памяти
     uint8_t value_size;
+    
+    /* Флаги обработки касания */
+    MenuItemTouchFlags_t touch_flags;
     
 } MenuItem_t;
 

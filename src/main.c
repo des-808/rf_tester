@@ -311,6 +311,7 @@ int main(void)
 //I2C_Scanner_PrintOnTFT(&i2c_scanner, 10, 20, RGB565_GREEN, RGB565_BLACK,&main_screen_sprite); 
    Menu_Init();
    TouchGestures_Init();
+   MenuTouch_Init();
   
   /* Инициализация Page System */
   Page_Init();
@@ -396,58 +397,47 @@ int main(void)
           }
       }
       
-       // ====================================================================
-       // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
-       // ====================================================================
-       if (!screen_locked) {
-           Buttons_Update(&btn_s);
-           uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
-           static uint8_t btn_last_state = 0xFF;
-           if (btn_raw != btn_last_state && btn_raw != 0xFF) {
-               /* Сработала кнопка (edge detection) */
-               if (buzzerOnOff) Buzzer_Short();
-               if (vibroOnOff) Vibrator_Pulse(30);
-           }
-           btn_last_state = btn_raw;
-           PCF8574_AcknowledgeChanges(&pcf_handle);
+        // ====================================================================
+        // 1. ОБРАБОТКА ФИЗИЧЕСКИХ КНОПОК (PCF8574)
+        // ====================================================================
+        if (!screen_locked) {
+            Buttons_Update(&btn_s);
+            uint8_t btn_raw = PCF8574_Read8(&pcf_handle);
+            static uint8_t btn_last_state = 0xFF;
+            if (btn_raw != btn_last_state && btn_raw != 0xFF) {
+                /* Сработала кнопка (edge detection) */
+                if (buzzerOnOff) Buzzer_Short();
+                if (vibroOnOff) Vibrator_Pulse(30);
+            }
+            btn_last_state = btn_raw;
+            PCF8574_AcknowledgeChanges(&pcf_handle);
 
-           /* Обрабатываем кнопки */
-           MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
-           if (key_short != KEY_NONE) {
-               /* Сначала проверяем Cancel для RSSI Plotter */
-               if (key_short == KEY_CANCEL && rssi_plotter_active) {
-                   RssiPlotterScreen_ExitGlobal();
-               } else if (!rssi_plotter_active) {
-                   /* Обрабатываем остальные кнопки только если RSSI Plotter не активен */
-                   menu_long_press_active = 0;
-                   menu_hold_multiplier = 1;
-                   Menu_ProcessInput(key_short);
-               }
-           }
-           
-           MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
-           if (key_hold != KEY_NONE) {
-               /* Если RSSI Plotter активен — игнорируем удержания */
-               if (!rssi_plotter_active) {
-                   menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_hold);
-                   menu_long_press_active = 1;
-                   Menu_ProcessInput(key_hold);
-                   menu_long_press_active = 0;
-                   menu_hold_multiplier = 1;
-               }
-           }
-           
-           MenuKey key_repeat = Buttons_GetKeyRepeat(&btn_s);
-           if (key_repeat != KEY_NONE) {
-               /* Если RSSI Plotter активен — игнорируем повторы */
-               if (!rssi_plotter_active) {
-                   menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_repeat);
-                   menu_long_press_active = 1;
-                   Menu_ProcessInput(key_repeat);
-                   menu_long_press_active = 0;
-                   menu_hold_multiplier = 1;
-               }
-           }
+            /* Обрабатываем кнопки — все ключи проходят через Menu_ProcessInput */
+            /* Страницы (RSSI Plotter, About и др.) обрабатывают свой ввод через Page_ProcessInput */
+            MenuKey key_short = Buttons_GetKeyShortPress(&btn_s);
+            if (key_short != KEY_NONE) {
+                menu_long_press_active = 0;
+                menu_hold_multiplier = 1;
+                Menu_ProcessInput(key_short);
+            }
+            
+            MenuKey key_hold = Buttons_GetKeyHold(&btn_s);
+            if (key_hold != KEY_NONE) {
+                menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_hold);
+                menu_long_press_active = 1;
+                Menu_ProcessInput(key_hold);
+                menu_long_press_active = 0;
+                menu_hold_multiplier = 1;
+            }
+            
+            MenuKey key_repeat = Buttons_GetKeyRepeat(&btn_s);
+            if (key_repeat != KEY_NONE) {
+                menu_hold_multiplier = Buttons_GetHoldMultiplier(&btn_s, key_repeat);
+                menu_long_press_active = 1;
+                Menu_ProcessInput(key_repeat);
+                menu_long_press_active = 0;
+                menu_hold_multiplier = 1;
+            }
        }
 
        // ====================================================================
@@ -467,78 +457,133 @@ int main(void)
                touch_irq_pending = 0; // Сбрасываем флаг EXTI
            }
            
-           uint8_t has_touch_now = ft6336u.has_touch;
-           
-           if (has_touch_now) {
-               // Читаем все активные точки
-               uint8_t touch_num = FT6336U_GetTouchNum(&ft6336u);
-               
-               for (uint8_t i = 0; i < touch_num && i < TOUCH_MAX_POINTS; i++) {
-                   uint16_t raw_x, raw_y;
-                   FT6336U_GetTouchPoint(&ft6336u, i, &raw_x, &raw_y);
-                   
-                   uint16_t screen_x, screen_y;
-                   Convert_Touch_Coordinates(raw_x, raw_y, &screen_x, &screen_y);
-                   uint8_t touch_id = i; // ID точки от FT6336U
-                   
-                   // Проверяем: это новая точка или движение?
-                   TouchPoint_t* existing = TouchGestures_PointFind(screen_x, screen_y);
-                   
-                   if (existing && existing->is_active && !existing->is_new) {
-                       // Движение по существующей точке
-                       TouchGestures_PointMove(existing, screen_x, screen_y);
-                   } else {
-                       // Новая точка — PointDown
-                       TouchGestures_PointDown(screen_x, screen_y, touch_id);
-                   }
-               }
-               
-               // Сбрасываем has_touch чтобы не читать каждый цикл
-               ft6336u.has_touch = false;
-               
-               // Вибрация при первом касании
-               if (!prev_touch_state && touch_num > 0) {
-                   if (buzzerOnOff) Buzzer_Short();
-                   if (vibroOnOff) Vibrator_Pulse(30);
-               }
-           }
-           
-               // Проверяем PointUp для всех точек (если палец убран)
-           if (prev_touch_state && !has_touch_now) {
-               // Палец отпущен — обрабатываем PointUp для всех точек
-               for (uint8_t i = 0; i < TOUCH_MAX_POINTS; i++) {
-                   TouchPoint_t* pt = TouchGestures_GetPoint(i);
-                   if (pt && pt->is_active) {
-                       TouchGesture_t gesture = TouchGestures_PointUp(pt);
-                       
-                       // Обработка распознанного жеста
-                       if (gesture != TOUCH_GESTURE_NONE) {
-                           TouchGesture_Event_t event;
-                           if (TouchGestures_GetEvent(&event)) {
-                               // Сначала проверяем нижнюю панель
-                               int8_t bottom_btn = GUI_GetBottomBarTouch(event.x, event.y);
-                               if (bottom_btn >= 0) {
-                                   MenuKey key = (bottom_btn == 0) ? KEY_CANCEL :
-                                                 (bottom_btn == 1) ? KEY_UP :
-                                                 (bottom_btn == 2) ? KEY_DOWN : KEY_ENTER;
-                                   Menu_ProcessInput(key);
-                                } else {
-                                    // Передаём жест в menu_touch для обработки
-                                    Menu_ProcessGesture(&event);
-                                }
-                               TouchGestures_ClearEvent();
-                           }
-                       }
-                   }
-               }
-               
-               // Сброс drag-состояния
-               extern UIElement_t* current_menu_listbox;
-               if (current_menu_listbox) {
-                   current_menu_listbox->touch_state.drag_active = false;
-                   current_menu_listbox->touch_state.drag_last_y = -1;
-               }
-           }
+            uint8_t has_touch_now = ft6336u.has_touch;
+            
+            if (has_touch_now) {
+                // Читаем все активные точки
+                uint8_t touch_num = FT6336U_GetTouchNum(&ft6336u);
+                
+                for (uint8_t i = 0; i < touch_num && i < TOUCH_MAX_POINTS; i++) {
+                    uint16_t raw_x, raw_y;
+                    FT6336U_GetTouchPoint(&ft6336u, i, &raw_x, &raw_y);
+                    
+                    uint16_t screen_x, screen_y;
+                    Convert_Touch_Coordinates(raw_x, raw_y, &screen_x, &screen_y);
+                    uint8_t touch_id = i; // ID точки от FT6336U
+                    
+                    // Определяем пункт меню под пальцем
+                    extern UIElement_t* current_menu_listbox;
+                    extern MenuItem_t* current_menu_items;
+                    extern uint8_t current_menu_count;
+                    int8_t menu_item_index = -1;
+                    
+                    if (current_menu_listbox && current_menu_items) {
+                        int16_t local_y = screen_y - current_menu_listbox->y;
+                        uint16_t font_h = (current_menu_listbox->font != NULL) ? 
+                                          current_menu_listbox->font->char_height : font_arial_9_struct.char_height;
+                        uint8_t pad = (current_menu_listbox->props.list_box.item_padding > 0) ? 
+                                      current_menu_listbox->props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
+                        uint16_t item_h = font_h + pad;
+                        menu_item_index = current_menu_listbox->props.list_box.scroll_offset + 
+                                         (int8_t)(local_y / item_h);
+                        
+                        if (menu_item_index < 0 || (uint8_t)menu_item_index >= current_menu_count) {
+                            menu_item_index = -1;
+                        }
+                    }
+                    
+                    // Проверяем: это новая точка или движение?
+                    TouchPoint_t* existing = TouchGestures_PointFind(screen_x, screen_y);
+                    
+                    if (existing && existing->is_active && !existing->is_new) {
+                        // Движение по существующей точке
+                        TouchGestures_PointMove(existing, screen_x, screen_y);
+                        
+                        // Обновляем состояние касания пункта меню
+                        if (menu_item_index >= 0) {
+                            extern void MenuTouch_UpdatePosition(int8_t index, uint16_t x, uint16_t y);
+                            MenuTouch_UpdatePosition(menu_item_index, screen_x, screen_y);
+                        }
+                    } else {
+                        // Новая точка — PointDown
+                        TouchGestures_PointDown(screen_x, screen_y, touch_id);
+                        
+                        // Инициализируем состояние касания пункта меню
+                        if (menu_item_index >= 0) {
+                            extern MenuItemTouchState_t* MenuTouch_GetItemState(int8_t index);
+                            MenuItemTouchState_t* state = MenuTouch_GetItemState(menu_item_index);
+                            if (state) {
+                                state->is_active = 1;
+                                state->is_pressed = 1;
+                                state->hold_triggered = 0;
+                                state->tap_confirmed = 0;
+                                state->press_tick = HAL_GetTick();
+                                state->item_index = menu_item_index;
+                                g_active_touch_index = menu_item_index;
+                            }
+                        }
+                    }
+                }
+                
+                // Сбрасываем has_touch чтобы не читать каждый цикл
+                ft6336u.has_touch = false;
+                
+                // Вибрация при первом касании
+                if (!prev_touch_state && touch_num > 0) {
+                    if (buzzerOnOff) Buzzer_Short();
+                    if (vibroOnOff) Vibrator_Pulse(30);
+                }
+            }
+            
+                // Проверяем PointUp для всех точек (если палец убран)
+            if (prev_touch_state && !has_touch_now) {
+                // Палец отпущен — обрабатываем PointUp для всех точек
+                for (uint8_t i = 0; i < TOUCH_MAX_POINTS; i++) {
+                    TouchPoint_t* pt = TouchGestures_GetPoint(i);
+                    if (pt && pt->is_active) {
+                        TouchGesture_t gesture = TouchGestures_PointUp(pt);
+                        
+                        // Обработка распознанного жеста
+                        if (gesture != TOUCH_GESTURE_NONE) {
+                            TouchGesture_Event_t event;
+                            if (TouchGestures_GetEvent(&event)) {
+                                // Сначала проверяем нижнюю панель
+                                int8_t bottom_btn = GUI_GetBottomBarTouch(event.x, event.y);
+                                if (bottom_btn >= 0) {
+                                    MenuKey key = (bottom_btn == 0) ? KEY_CANCEL :
+                                                  (bottom_btn == 1) ? KEY_UP :
+                                                  (bottom_btn == 2) ? KEY_DOWN : KEY_ENTER;
+                                    Menu_ProcessInput(key);
+                                 } else {
+                                     // Передаём жест в menu_touch для обработки
+                                     Menu_ProcessGesture(&event);
+                                 }
+                                TouchGestures_ClearEvent();
+                            }
+                        }
+                    }
+                }
+                
+                // Сбрасываем состояние касания пункта меню
+                if (g_active_touch_index >= 0) {
+                    extern MenuItemTouchState_t* MenuTouch_GetItemState(int8_t index);
+                    MenuItemTouchState_t* state = MenuTouch_GetItemState(g_active_touch_index);
+                    if (state) {
+                        state->is_active = 0;
+                        state->is_pressed = 0;
+                        state->hold_triggered = 0;
+                        state->tap_confirmed = 0;
+                    }
+                    g_active_touch_index = -1;
+                }
+                
+                // Сброс drag-состояния
+                extern UIElement_t* current_menu_listbox;
+                if (current_menu_listbox) {
+                    current_menu_listbox->touch_state.drag_active = false;
+                    current_menu_listbox->touch_state.drag_last_y = -1;
+                }
+            }
            
            prev_touch_state = has_touch_now;
        } else {
@@ -616,39 +661,6 @@ int main(void)
 }
 
 
-
-static void Scroll_ListBox(int8_t direction) {
-    uint16_t font_h = (current_font != NULL) ? current_font->char_height : font_arial_9_struct.char_height;
-    uint8_t pad = (ui_bands_listbox.props.list_box.item_padding > 0) ? ui_bands_listbox.props.list_box.item_padding : MENU_LISTBOX_ITEM_PADDING;
-    uint16_t item_h = font_h + pad;
-    uint8_t visible = (ui_bands_listbox.h + item_h - 1) / item_h;
-    if (visible == 0) visible = 1;
-    
-    uint8_t max_offset = (ui_bands_listbox.children_count > visible) 
-                         ? (uint8_t)(ui_bands_listbox.children_count - visible) 
-                         : 0;
-    
-    bool changed = false;
-
-    if (direction == -1) {
-        // Скролл вверх (уменьшаем offset)
-        if (ui_bands_listbox.props.list_box.scroll_offset > 0) {
-            ui_bands_listbox.props.list_box.scroll_offset--;
-            changed = true;
-        }
-    } else if (direction == 1) {
-        // Скролл вниз (увеличиваем offset)
-        if (ui_bands_listbox.props.list_box.scroll_offset < max_offset) {
-            ui_bands_listbox.props.list_box.scroll_offset++;
-            changed = true;
-        }
-    }
-
-    // Инвалидируем спрайт только если позиция реально изменилась
-    if (changed) {
-        GUI_InvalidateSprite(digits_node.sprite);
-    }
-}
 
 void INIT_FT6336U(void){
     // 1. Сброс FT6336U

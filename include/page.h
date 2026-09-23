@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "touch_gesture.h"
 #include "gui.h"
 
 /* ========================================================================
@@ -115,6 +116,7 @@ typedef struct {
  */
 typedef struct {
     UIElement_t*  saved_container;  // Сохранённый контейнер (ListBox или Page)
+    PageDef_t*    saved_def;        // Сохранённое описание страницы
     bool          was_listbox;      // true если это было меню (ListBox)
     uint8_t       list_scroll;      // Scroll offset ListBox (если was_listbox)
     int16_t       list_selected;    // Selected index (если was_listbox)
@@ -228,6 +230,15 @@ void Page_SetMenuExpandCalled(void);
  * @return true если ввод обработан страницей
  */
 bool Page_ProcessInput(uint8_t key);
+
+/**
+ * @brief Передать жест (swipe, tap и т.п.) текущей странице
+ * @param gesture_type TOUCH_GESTURE_SWIPE, TOUCH_GESTURE_TAP и т.д.
+ * @param direction TOUCH_DIR_UP, TOUCH_DIR_DOWN и т.д.
+ * @param x, y координаты события
+ * @return true если жест обработан страницей
+ */
+bool Page_ProcessGesture(TouchGesture_t gesture_type, TouchDirection_t direction, uint16_t x, uint16_t y);
 
 /* ========================================================================
  *  Хелперы для построения UI внутри страниц

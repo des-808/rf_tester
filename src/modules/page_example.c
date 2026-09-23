@@ -7,6 +7,7 @@
 
 #include "page.h"
 #include "menu.h"
+#include "usart.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -204,10 +205,10 @@ static void Page_Confirm_Deinit(UIElement_t* page)
     /* Освобождаем данные если они динамические */
     ConfirmData_t* data = (ConfirmData_t*)page->user_data;
     if (data && data->message) {
-        /* data->message = heap_caps_free(data->message); */
+        /* data->message = free(data->message); */
     }
     if (data) {
-        heap_caps_free(data);
+        free(data);
     }
     page->user_data = NULL;
 }
@@ -230,9 +231,14 @@ static PageDef_t page_confirm_def = {
 
 void Page_ShowConfirm(const char* message, void (*on_confirm)(void), void (*on_cancel)(void))
 {
+    DBG_INFO("[Page] ShowConfirm: '%s'", message ? message : "(null)");
+    
     /* Создаём данные для диалога */
-    ConfirmData_t* data = (ConfirmData_t*)heap_caps_malloc(sizeof(ConfirmData_t), 0);
-    if (!data) return;
+    ConfirmData_t* data = (ConfirmData_t*)malloc(sizeof(ConfirmData_t));
+    if (!data) {
+        DBG_ERROR("[Page] ShowConfirm malloc failed");
+        return;
+    }
     
     data->message = message;
     data->on_confirm = on_confirm;
@@ -253,19 +259,19 @@ void Page_ShowConfirm(const char* message, void (*on_confirm)(void), void (*on_c
 /* Возвращает указатель на определение страницы по имени */
 PageDef_t* Page_FindByName(const char* name)
 {
-    printf("[PageFind] name=%s\n", name ? name : "NULL");
+    DBG_DEBUG("[PageFind] name=%s", name ? name : "NULL");
     if (!name) return NULL;
     
     if (strcmp(name, "Settings") == 0) {
-        printf("[PageFind] returning page_settings_def\n");
+        DBG_DEBUG("[PageFind] returning page_settings_def");
         return &page_settings_def;
     }
     if (strcmp(name, "About") == 0) {
-        printf("[PageFind] returning page_about_def\n");
+        DBG_DEBUG("[PageFind] returning page_about_def");
         return &page_about_def;
     }
     
-    printf("[PageFind] NOT FOUND\n");
+    DBG_WARN("[PageFind] NOT FOUND: '%s'", name);
     return NULL;
 }
 

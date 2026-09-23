@@ -7,6 +7,7 @@
 #include "i2c.h"
 #include "esp32_ToWiFiandBluetooth.h"
 #include "rssi_plotter_screen.h"
+#include "usart.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -453,119 +454,119 @@ static void Btn_ValueChanged(void) {
 
 // --- Подменю передачи ---
 static MenuItem_t buttonSubMenu[] = {
-    { "Sys:", 0, ITEM_TYPE_VALUE, 0, Sys_ValueChanged, { .ptr_value = &sys }, SYS_MIN, SYS_MAX, 1, 0 },
-    { "Room:", 0, ITEM_TYPE_VALUE, 0, Room_ValueChanged, { .ptr_value = &room }, ROOM_MIN, ROOM_MAX, 1, 0 },
-    { "Btn:", 0, ITEM_TYPE_VALUE, 0, Btn_ValueChanged, { .ptr_value = &btn }, BTN_MIN, BTN_MAX, 1, 0 },
-    { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Key } },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, Sys_ValueChanged, { .ptr_value = &sys }, SYS_MIN, SYS_MAX, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, Room_ValueChanged, { .ptr_value = &room }, ROOM_MIN, ROOM_MAX, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, Btn_ValueChanged, { .ptr_value = &btn }, BTN_MIN, BTN_MAX, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Key }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 static MenuItem_t pagerSubMenu[] = {
-    { "Sys:", 0, ITEM_TYPE_VALUE, 0, Sys_ValueChanged, { .ptr_value = &sys }, SYS_MIN, SYS_MAX, 1, 0 },
-    { "Room:", 0, ITEM_TYPE_VALUE, 0, Room_ValueChanged, { .ptr_value = &room }, ROOM_MIN, ROOM_MAX, 1, 0 },
-    { "Btn:", 0, ITEM_TYPE_VALUE, 0, Btn_ValueChanged, { .ptr_value = &btn }, BTN_MIN, BTN_MAX, 1, 0 },
-    { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Pager } },
+    { "Sys:", 0, ITEM_TYPE_VALUE, 0, Sys_ValueChanged, { .ptr_value = &sys }, SYS_MIN, SYS_MAX, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { "Room:", 0, ITEM_TYPE_VALUE, 0, Room_ValueChanged, { .ptr_value = &room }, ROOM_MIN, ROOM_MAX, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { "Btn:", 0, ITEM_TYPE_VALUE, 0, Btn_ValueChanged, { .ptr_value = &btn }, BTN_MIN, BTN_MAX, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { "Send", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Action_Send_Pager }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 static MenuItem_t transmitterSubMenu[] = {
-    { "Buttons", 0, ITEM_TYPE_SUBMENU, sizeof(buttonSubMenu)/sizeof(buttonSubMenu[0]), NULL, { .submenu_items = buttonSubMenu } },
-    { "Pager", 0, ITEM_TYPE_SUBMENU, sizeof(pagerSubMenu)/sizeof(pagerSubMenu[0]), NULL, { .submenu_items = pagerSubMenu } },
+    { "Buttons", 0, ITEM_TYPE_SUBMENU, sizeof(buttonSubMenu)/sizeof(buttonSubMenu[0]), NULL, { .submenu_items = buttonSubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "Pager", 0, ITEM_TYPE_SUBMENU, sizeof(pagerSubMenu)/sizeof(pagerSubMenu[0]), NULL, { .submenu_items = pagerSubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
 };
 
 // --- Главное меню ---
 static MenuItem_t getCallMenu[] = {
-    { "1.Transmitter", 0, ITEM_TYPE_SUBMENU, sizeof(transmitterSubMenu)/sizeof(transmitterSubMenu[0]), NULL, { .submenu_items = transmitterSubMenu } },
-    { "2.Receiver", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = enterReceiverMode } },
+    { "1.Transmitter", 0, ITEM_TYPE_SUBMENU, sizeof(transmitterSubMenu)/sizeof(transmitterSubMenu[0]), NULL, { .submenu_items = transmitterSubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "2.Receiver", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = enterReceiverMode }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 // --- Подменю CC1101 ---
 static MenuItem_t cc1101SubMenu[] = {
-    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyFreq, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyBitrate, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
-    { "RxBw", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyRxBw, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyMod, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
-    { "Power", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyPower, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
-    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyFreq, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4, MENU_TOUCH_FLAGS_VALUE },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyBitrate, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2, MENU_TOUCH_FLAGS_VALUE },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyRxBw, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyMod, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, Cc1101_AutoApplyPower, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 // --- Меню CC1101 ---
 static MenuItem_t cc1101Menu[] = {
-    { "1. GetCall", 0, ITEM_TYPE_SUBMENU, sizeof(getCallMenu)/sizeof(getCallMenu[0]), NULL, { .submenu_items = getCallMenu } },
-    { "2. RSSI Plotter", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_Rssi_Action } },
-    { "3. Settings CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]), NULL, { .submenu_items = cc1101SubMenu }, },
+    { "1. GetCall", 0, ITEM_TYPE_SUBMENU, sizeof(getCallMenu)/sizeof(getCallMenu[0]), NULL, { .submenu_items = getCallMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "2. RSSI Plotter", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_Rssi_Action }, MENU_TOUCH_FLAGS_ACTION },
+    { "3. Settings CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101SubMenu)/sizeof(cc1101SubMenu[0]), NULL, { .submenu_items = cc1101SubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
 };
 
 static MenuItem_t nrf24l01SubMenu[] = {
-    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
-    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
-    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
-    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } }
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4, MENU_TOUCH_FLAGS_VALUE },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2, MENU_TOUCH_FLAGS_VALUE },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu }, MENU_TOUCH_FLAGS_ACTION }
 };
 
 static MenuItem_t sx1262SubMenu[] = {
-    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
-    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
-    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
-    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
+    { "Freq MHz", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4, MENU_TOUCH_FLAGS_VALUE },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2, MENU_TOUCH_FLAGS_VALUE },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 
 static MenuItem_t irda_SubMenu[] = {
-    { "Freq", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4 },
-    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2 },
-    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1 },
-    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1 },
-    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1 },
-    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu } },
+    { "Freq", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101FreqFixed }, 30000, 92800, CC1101_FREQ_FINE_STEP, 4, MENU_TOUCH_FLAGS_VALUE },
+    { "BitRate", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101BitRateFixed }, 120, 60000, CC1101_BITRATE_FINE_STEP, 2, MENU_TOUCH_FLAGS_VALUE },
+    { "RxBw", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101RxBwIndex }, 0, 15, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Mod", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101Modulation }, 0, 6, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Power", 0, ITEM_TYPE_VALUE, 0, NULL, { .ptr_value = &cc1101PowerIndex }, 0, 7, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { "Apply", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = cc1101ApplySettingsFromMenu }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 static MenuItem_t irda_Menu[] = {
-    { "1. IR RX", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, },
-    { "2. R TX", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, },
-    { "3. IR Settings", 0, ITEM_TYPE_SUBMENU, sizeof(irda_SubMenu)/sizeof(irda_SubMenu[0]), NULL, { .submenu_items = irda_SubMenu }, },
+    { "1. IR RX", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "2. R TX", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "3. IR Settings", 0, ITEM_TYPE_SUBMENU, sizeof(irda_SubMenu)/sizeof(irda_SubMenu[0]), NULL, { .submenu_items = irda_SubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
 };
 
 static MenuItem_t clockSubMenu[] = {
-    { " Date", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_date }, 1, 31, 1, 1 },
-    { " Month", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_month }, 1, 12, 1, 1 },
-    { " Day", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_day }, 1, 7, 1, 1 },
-    { " Hour", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_hour }, 0, 23, 1, 1 },
-    { " Minute", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_minute }, 0, 59, 1, 1 },
-    { " Second", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_second }, 0, 59, 1, 1 },
-    { " Year", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_year }, 0, 99, 1, 1 },
-    { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, Clock_NTP_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0 },
-    { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Clock_SyncNow_Callback } },
+    { " Date", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_date }, 1, 31, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Month", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_month }, 1, 12, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Day", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_day }, 1, 7, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Hour", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_hour }, 0, 23, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Minute", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_minute }, 0, 59, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Second", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_second }, 0, 59, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Year", 0, ITEM_TYPE_VALUE, 0, Clock_ValueChanged_Callback, { .ptr_value = &clock_year }, 0, 99, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " NTP Auto Sync", 0, ITEM_TYPE_VALUE, 0, Clock_NTP_Update_Callback, { .ptr_value = &ntpSyncEnabled }, 0, 1, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { " Sync Now", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Clock_SyncNow_Callback }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 // --- Подменю настроек RS485/USART4 ---
 static MenuItem_t rs485SubMenu[] = {
-    { " BaudRate", 0, ITEM_TYPE_VALUE, 0, RS485_Baud_Update_Callback, { .ptr_value = &rs485BaudIndex }, 0, RS485_BAUD_MAX, 1, 1 },
-    { " DataBits", 0, ITEM_TYPE_VALUE, 0, RS485_DataBits_Update_Callback, { .ptr_value = &rs485DataBits }, 0, 3, 1, 1 },  // 0=5, 1=6, 2=7, 3=8
-    { " Parity", 0, ITEM_TYPE_VALUE, 0, RS485_Parity_Update_Callback, { .ptr_value = &rs485Parity }, 0, 2, 1, 1 },    // 0=NONE, 1=EVEN, 2=ODD
-    { " StopBits", 0, ITEM_TYPE_VALUE, 0, RS485_StopBits_Update_Callback, { .ptr_value = &rs485StopBits }, 0, 1, 1, 1 }, // 0=1, 1=2
-    { " FlowCtrl", 0, ITEM_TYPE_VALUE, 0, RS485_FlowControl_Update_Callback, { .ptr_value = &rs485FlowControl }, 0, 3, 1, 1 }, // 0=NONE, 1=RTS, 2=CTS, 3=RTS+CTS
-    { " RS485_To_Bt", 0, ITEM_TYPE_VALUE, 0, RS485ToBt_Update_Callback, { .ptr_value = &rs485toBt }, 0, 1, 1, 1 },
+    { " BaudRate", 0, ITEM_TYPE_VALUE, 0, RS485_Baud_Update_Callback, { .ptr_value = &rs485BaudIndex }, 0, RS485_BAUD_MAX, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " DataBits", 0, ITEM_TYPE_VALUE, 0, RS485_DataBits_Update_Callback, { .ptr_value = &rs485DataBits }, 0, 3, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Parity", 0, ITEM_TYPE_VALUE, 0, RS485_Parity_Update_Callback, { .ptr_value = &rs485Parity }, 0, 2, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " StopBits", 0, ITEM_TYPE_VALUE, 0, RS485_StopBits_Update_Callback, { .ptr_value = &rs485StopBits }, 0, 1, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " FlowCtrl", 0, ITEM_TYPE_VALUE, 0, RS485_FlowControl_Update_Callback, { .ptr_value = &rs485FlowControl }, 0, 3, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " RS485_To_Bt", 0, ITEM_TYPE_VALUE, 0, RS485ToBt_Update_Callback, { .ptr_value = &rs485toBt }, 0, 1, 1, 1, MENU_TOUCH_FLAGS_VALUE },
 };
 
 // --- Подменю настроек ---
 static MenuItem_t settingsSubMenu[] = {
-    { " Clock", 0, ITEM_TYPE_SUBMENU, sizeof(clockSubMenu)/sizeof(clockSubMenu[0]), NULL, { .submenu_items = clockSubMenu } },
-    { " RS485", 0, ITEM_TYPE_SUBMENU, sizeof(rs485SubMenu)/sizeof(rs485SubMenu[0]), NULL, { .submenu_items = rs485SubMenu } },
-    { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, Bluetooth_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0 },
-    { " WiFi", 0, ITEM_TYPE_VALUE, 0, WiFi_Update_Callback, { .ptr_value = &wifiEnabled }, 0, 1, 1, 0 },
-    { " Buzzer", 0, ITEM_TYPE_VALUE, 0, Buzzer_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0 },
-    { " Vibro", 0, ITEM_TYPE_VALUE, 0, Vibro_Update_Callback, { .ptr_value = &vibroOnOff }, 0, 1, 1, 0 },
-    { " LED Backlight", 0, ITEM_TYPE_VALUE, 0, Backlight_Update_Callback, { .ptr_value = &lcd_backlight_level }, 1, 10, 1, 1 },
-    { " Forget WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL } },
+    { " Clock", 0, ITEM_TYPE_SUBMENU, sizeof(clockSubMenu)/sizeof(clockSubMenu[0]), NULL, { .submenu_items = clockSubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { " RS485", 0, ITEM_TYPE_SUBMENU, sizeof(rs485SubMenu)/sizeof(rs485SubMenu[0]), NULL, { .submenu_items = rs485SubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { " Bluetooth", 0, ITEM_TYPE_VALUE, 0, Bluetooth_Update_Callback, { .ptr_value = &bluetoothEnabled }, 0, 1, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { " WiFi", 0, ITEM_TYPE_VALUE, 0, WiFi_Update_Callback, { .ptr_value = &wifiEnabled }, 0, 1, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { " Buzzer", 0, ITEM_TYPE_VALUE, 0, Buzzer_Update_Callback, { .ptr_value = &buzzerOnOff }, 0, 1, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { " Vibro", 0, ITEM_TYPE_VALUE, 0, Vibro_Update_Callback, { .ptr_value = &vibroOnOff }, 0, 1, 1, 0, MENU_TOUCH_FLAGS_VALUE },
+    { " LED Backlight", 0, ITEM_TYPE_VALUE, 0, Backlight_Update_Callback, { .ptr_value = &lcd_backlight_level }, 1, 10, 1, 1, MENU_TOUCH_FLAGS_VALUE },
+    { " Forget WiFi", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = NULL }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 static MenuItem_t radioMenu[] = {
-    { "1. CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101Menu)/sizeof(cc1101Menu[0]), NULL, { .submenu_items = cc1101Menu }, },
-    { "2. NRF24l01", 0, ITEM_TYPE_SUBMENU, sizeof(nrf24l01SubMenu)/sizeof(nrf24l01SubMenu[0]), NULL, { .submenu_items = nrf24l01SubMenu }, },
-    { "3. SX1262", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, },
+    { "1. CC1101", 0, ITEM_TYPE_SUBMENU, sizeof(cc1101Menu)/sizeof(cc1101Menu[0]), NULL, { .submenu_items = cc1101Menu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "2. NRF24l01", 0, ITEM_TYPE_SUBMENU, sizeof(nrf24l01SubMenu)/sizeof(nrf24l01SubMenu[0]), NULL, { .submenu_items = nrf24l01SubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "3. SX1262", 0, ITEM_TYPE_SUBMENU, sizeof(sx1262SubMenu)/sizeof(sx1262SubMenu[0]), NULL, { .submenu_items = sx1262SubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
 };
 
 /* Forward declaration for spectrum analyzer */
@@ -607,25 +608,24 @@ static void Menu_Rssi_Action(void)
 {
     printf("[Menu] RSSI action called\n");
     PageDef_t* def = Page_GetRssiPageDef();
-    printf("[Menu] Page_GetRssiPageDef result: %p\n", (void*)def);
+    DBG_DEBUG("[Menu] Page_GetRssiPageDef result: %p", (void*)def);
     if (def) {
         current_menu_listbox->touch_state.drag_last_y = -1;
         current_menu_listbox->touch_state.drag_active = false;
         bool result = Page_OpenStatic(def, &digits_node);
-        printf("[Menu] Page_OpenStatic result: %d\n", result);
+        DBG_INFO("[Menu] Page_OpenStatic RSSI result: %d", result);
         touch_lock_tick = HAL_GetTick();
     }
 }
 
 static MenuItem_t mainMenu[] = {
-    { "1. Radio", 0, ITEM_TYPE_SUBMENU, sizeof(radioMenu)/sizeof(radioMenu[0]), NULL, { .submenu_items = radioMenu } },
-    { "2. IR", 0, ITEM_TYPE_SUBMENU, sizeof(irda_Menu)/sizeof(irda_Menu[0]), NULL, { .submenu_items = irda_Menu } },
-    { "3. Spectrum", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_SpectrumAnalyzer } },
+    { "1. Radio", 0, ITEM_TYPE_SUBMENU, sizeof(radioMenu)/sizeof(radioMenu[0]), NULL, { .submenu_items = radioMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "2. IR", 0, ITEM_TYPE_SUBMENU, sizeof(irda_Menu)/sizeof(irda_Menu[0]), NULL, { .submenu_items = irda_Menu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "3. Spectrum", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_SpectrumAnalyzer }, MENU_TOUCH_FLAGS_ACTION },
     { "4. NC", 2, ITEM_TYPE_INFO },
-    { "5. Settings", 1, ITEM_TYPE_SUBMENU, sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]), NULL, { .submenu_items = settingsSubMenu } },
-    { "6. About", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_About_Action } },
-    { "7. Freq Analyzer", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_FreqAnalyzer_Action } },
-    
+    { "5. Settings", 1, ITEM_TYPE_SUBMENU, sizeof(settingsSubMenu)/sizeof(settingsSubMenu[0]), NULL, { .submenu_items = settingsSubMenu }, MENU_TOUCH_FLAGS_SUBMENU },
+    { "6. About", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_About_Action }, MENU_TOUCH_FLAGS_ACTION },
+    { "7. Freq Analyzer", 0, ITEM_TYPE_ACTION, 0, NULL, { .action_func = Menu_FreqAnalyzer_Action }, MENU_TOUCH_FLAGS_ACTION },
 };
 
 // Глобальная переменная для размера
@@ -1119,12 +1119,12 @@ void Menu_ProcessInput(uint8_t key) {
 
     /* ===== ОБРАБОТКА ВВОДА ДЛЯ АКТИВНОЙ СТРАНИЦЫ ===== */
     if (Page_IsActive()) {
-        printf("[Menu] Page active, forwarding key=%d\n", key);
+        DBG_DEBUG("[Menu] Page active, forwarding key=%d", key);
         if (Page_ProcessInput(key)) {
             return; // Страница обработала ввод
         }
     } else {
-        printf("[Menu] Page NOT active, key=%d\n", key);
+        DBG_DEBUG("[Menu] Page NOT active, key=%d", key);
     }
     /* ===== КОНЕЦ ОБРАБОТКИ СТРАНИЦЫ ===== */
 

@@ -22,24 +22,113 @@
 
 /* USER CODE BEGIN 0 */
 
-/* Перенаправление printf на UART4 */
+/* ========================================================================
+ *  DEBUG UART — абстракция над UART4/UART5
+ * ======================================================================== */
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/errno.h>
+#include <stdarg.h>
+#include <stdbool.h>
 
-/* Переопределение syscall _write для redirect stdout на UART4 */
+/* Выбранный UART для отладки */
+#if (DBG_UART_SELECT == 0)
+  #define DBG_UART     (&huart4)
+  #define DBG_UART_NAME "UART4"
+#else
+  #define DBG_UART     (&huart5)
+  #define DBG_UART_NAME "UART5"
+#endif
+
+/* Буфер для отладочных сообщений (макс. длина + метки) */
+#define DBG_BUF_SIZE  256
+
+/* ========================================================================
+ *  DEBUG LOG — форматированная отправка
+ * ======================================================================== */
+
+/* Префиксы по уровням */
+static const char* dbg_prefixes[] = {
+    "",           /* OFF */
+    "[E]",        /* ERROR */
+    "[W]",        /* WARN */
+    "[I]",        /* INFO */
+    "[D]",        /* DEBUG */
+    "[V]"         /* VERBOSE */
+};
+
+void _dbg_log(uint8_t level, const char* fmt, ...)
+{
+    /* Фильтрация по уровню */
+    if (level > DBG_LOG_LEVEL) return;
+    
+    char buf[DBG_BUF_SIZE];
+    int offset = 0;
+    
+    /* Префикс + timestamp */
+    uint32_t tick = HAL_GetTick();
+    uint16_t sec = (tick / 1000) % 60;
+    uint16_t min = (tick / 60000);
+    offset += snprintf(buf + offset, sizeof(buf) - (uint16_t)offset,
+                       "[%02u:%02u.%03lu] %s ", min, sec, (unsigned long)(tick % 1000),
+                       (level < 6) ? dbg_prefixes[level] : "[?]");
+    
+    /* Форматированное сообщение */
+    va_list args;
+    va_start(args, fmt);
+    offset += vsnprintf(buf + offset, sizeof(buf) - (uint16_t)offset, fmt, args);
+    va_end(args);
+    
+    /* Новая строка */
+    if (offset < (int)sizeof(buf) - 2) {
+        buf[offset++] = '\r';
+        buf[offset++] = '\n';
+    }
+    
+    /* Отправка */
+    dbg_uart_tx((uint8_t*)buf, (uint16_t)offset);
+}
+
+void dbg_uart_tx(const uint8_t* data, uint16_t len)
+{
+    HAL_UART_Transmit(DBG_UART, data, len, HAL_MAX_DELAY);
+}
+
+bool dbg_uart_rx(uint8_t* data, uint16_t* len)
+{
+    if (!data || !len) return false;
+    
+    /* Неблокирующий опрос */
+    uint16_t available = DBG_UART->RxXferSize - DBG_UART->RxXferCount;
+    if (available == 0) return false;
+    
+    uint16_t to_read = (*len < available) ? *len : available;
+    HAL_UART_Receive(DBG_UART, data, to_read, 1);  /* 1ms timeout */
+    *len = to_read;
+    return (to_read > 0);
+}
+
+void dbg_uart_init(void)
+{
+    printf("[DBG] Debug UART: %s (level=%d)\n", DBG_UART_NAME, DBG_LOG_LEVEL);
+}
+
+/* Переопределение syscall _write для redirect stdout на Debug UART */
 int _write(int file, char *ptr, int len)
 {
     if (file != 1) {  // Только stdout (fd=1)
         return -1;
     }
     
-    HAL_UART_Transmit(&huart4, (uint8_t*)ptr, len, HAL_MAX_DELAY);
+    HAL_UART_Transmit(DBG_UART, (uint8_t*)ptr, len, HAL_MAX_DELAY);
     return len;
 }
 
-/* Таблица бодрейтов RS485 (дублирует menu.c) */
+/* ========================================================================
+ *  RS485 BAUDRATE REINIT
+ * ======================================================================== */
 static const uint32_t rs485_baud_rates[] = {
     110U, 300U, 600U, 1200U, 2400U, 4800U, 9600U, 14400U,
     19200U, 38400U, 56000U, 57600U, 115200U, 128000U, 256000U
